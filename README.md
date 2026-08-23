@@ -1,175 +1,195 @@
-# 有温度出品｜白板声画工坊
+# AI 文案转动画视频
 
-> 把你的表达，画成一支会说话的白板视频。
+将中文文案和参考声音自动制作成解说视频。目前包含两条互不干扰的制作路径：标准白板手绘，以及按真实旁白时间驱动的动态信息图。
 
-**白板声画工坊**是一个本地运行的 AI 视频制作工作台。上传一段参考音频、粘贴中文文案，选择画面风格或提供人物与风格参考，系统会自动完成音色克隆、分镜、插画、手绘笔迹、字幕和音画合成，并导出 MP4。
+适合把知识讲解、故事口播、课程字幕或短视频文案制作成暖米黄色纸张底的手绘动画。
 
-![白板动画成片示例](examples/scene-01-monkey-mountain-banana-whiteboard.gif)
+## 效果示例
 
-## 为什么做它
+**场景：猴子山抢香蕉** —— 随着字幕的叙事顺序，依次绘制假山与小猴、抢香蕉的大猴，以及围观小朋友。
 
-短视频创作里，真正耗时的往往不是写文案，而是把表达稳定地做成画面。本项目把这条链路收进一台电脑：素材、密钥、任务历史和成片默认都留在本地；同一局域网内的团队也能共用一条生产队列。
+![猴子山抢香蕉：SRT 白板动画演示](examples/scene-01-monkey-mountain-stream.gif)
 
-```text
-参考音频 + 中文文案 +（可选）视觉/人物参考
-                    ↓
-音色克隆 → 文案分镜 → 统一插画 → 流式手绘 → 字幕与音画合成
-                    ↓
-                 MP4 成片
-```
+原始线稿：[查看 PNG](examples/scene-01-monkey-mountain.png)。
 
 ## 核心能力
 
-| 能力 | 你得到什么 |
-| --- | --- |
-| 本地音色克隆 | 接入自己的 IndexTTS Gradio 或 FastAPI 服务，参考音频不离开本机目录。 |
-| 11 种视觉风格 | 从极简白板、国风、手账到赛博霓虹；新增「纸感隐喻拼贴风」。 |
-| 纸感隐喻拼贴 | 根据文案识别流程、因果、对比等结构，从本地 10 张视觉参考中选择 1–3 张辅助构图，而不是机械堆图标。 |
-| 自定义参考 | 上传 1 张风格图，以及最多 5 个角色、每人 1–3 张参考图，让人物与画风贯穿全片。 |
-| 准确中文重点词 | 每个分镜可本地叠加 4–10 字重点短语，避开图片模型生成中文时常见的乱码；可一键关闭。 |
-| 可控成片节奏 | 支持 1–4 个分镜合并为一张图、字幕开关、笔身账号名及 4 档线条绘制量。 |
-| 任务历史与复用 | 可命名任务、查看耗时和历史；成片可基于现有配音与分镜重新渲染，不重复调用模型与 TTS。 |
-| 断点恢复 | 配音、分镜、图片、分段视频与最终合成都有检查点；重启服务或临时失败后可继续。 |
-| 局域网协作 | 多台电脑共用队列、进度和历史；个人制作偏好保存在各自浏览器，不会互相覆盖。 |
+- 解析 SRT 字幕，并按建议的 25–35 秒时长拆分场景
+- 先输出分镜与配图策略，确保每一幕只表达一个核心意思
+- 按字幕事件而非画面坐标，为元素建立语义化的绘制顺序
+- 用 `annotation.json` 管理区域、时序、字幕关联和重叠保护区
+- 每个区域采用连续流式笔迹：先 `ink` 铺线稿，再 `color` 添彩
+- 支持浏览器预览台调整区域、顺序、时间和字幕关联
+- 支持逐幕渲染与多幕合并，输出完整 MP4
 
-## 画面风格
+## 动态信息图模式
 
-选择风格会同时影响配色、线条、材质与构图。预览图展示视觉方向，实际人物和场景仍会随文案生成。
+动态信息图本质上是“旁白驱动的动态 PPT”。它严格按“短语时间表 → 内容结构 → Remotion PPT → PPT 插图”的顺序制作，时间不由 Remotion、语言模型或字数估算。
 
-| 风格 | 预览 | 适合内容 |
-| --- | --- | --- |
-| 极简粗线简笔白板风 | <img src="web/public/styles/minimal-whiteboard.webp" alt="极简粗线简笔白板风" width="120" /> | 知识讲解、个人表达、复盘总结 |
-| 极简商务涂鸦风 | <img src="web/public/styles/business-doodle.webp" alt="极简商务涂鸦风" width="120" /> | 产品介绍、商业分析、项目汇报 |
-| 暖米黄素描白板风 | <img src="web/public/styles/warm-pencil.webp" alt="暖米黄素描白板风" width="120" /> | 人物故事、个人成长、品牌叙事 |
-| 粗线扁平国风卡通 | <img src="web/public/styles/guofeng-flat.webp" alt="粗线扁平国风卡通" width="120" /> | 传统文化、国风品牌、中文创意 |
-| 爆款高热吸睛风 | <img src="web/public/styles/viral-pop.webp" alt="爆款高热吸睛风" width="120" /> | 短视频开场、强观点、热点表达 |
-| 黑金科技发布会风 | <img src="web/public/styles/black-gold-tech.webp" alt="黑金科技发布会风" width="120" /> | AI、科技产品、发布会 |
-| 清新治愈手账风 | <img src="web/public/styles/healing-journal.webp" alt="清新治愈手账风" width="120" /> | 情感、生活方式、自我成长 |
-| 复古报纸拼贴风 | <img src="web/public/styles/retro-collage.webp" alt="复古报纸拼贴风" width="120" /> | 深度观点、文化内容、案例复盘 |
-| **纸感隐喻拼贴风（新增）** | <img src="web/public/styles/paper-metaphor.png" alt="纸感隐喻拼贴风" width="120" /> | 价值观、关系、流程、复杂观点 |
-| 3D 黏土趣味风 | <img src="web/public/styles/clay-3d.webp" alt="3D 黏土趣味风" width="120" /> | 亲子教育、轻量品牌、趣味科普 |
-| 赛博霓虹漫画风 | <img src="web/public/styles/cyber-neon.webp" alt="赛博霓虹漫画风" width="120" /> | AI 趋势、数码科技、年轻化观点 |
+- 完整旁白首先生成独立的 `phrase-timeline.json`，每条短语都有真实音频起止时间
+- 文案分析模型负责每页核心观点、One-Liner、关键词、视觉策略和叙事衔接，只能引用已有短语编号
+- 存在连续编号章节时，总览页直接提取章节名称，避免模型将标题改写成抽象能力词
+- 普通清单默认没有箭头；只有原文明确表达步骤或因果时，Remotion 才能绘制方向关系
+- `deck-spec.json` 在图片生成前完成，图片模型只能填充已确定的插图槽位
+- 元素入场帧使用真实语音起点并向上取整，画面不能抢在旁白前出现
+- 章节切页以新页面原文第一个被识别 token 为准；旁白停顿时保留上一页
+- 总标题和当前章节标题可跨页保留，内容元素出现后一直停留到本页结束
+- 对齐覆盖率或置信度不达标时直接停止，不允许退回按字数、页长或平均间隔估算
+- 底部字幕仍可开关；开启时也使用真实语音时间
 
-## 新版本重点
+完整规则见 [动态信息图语义时间契约](docs/semantic-timing-contract.md)。
 
-这次版本把原先的单任务生成流程，升级为更适合稳定生产的本地工作台：
+## 工作方式
 
-- **三级流水线队列**：最多 2 路独立语音节点、4 路模型调用；本地渲染在模型阶段结束后立即开始。
-- **可靠的继续机制**：模型超时、限流、5xx、空图片或无效分镜会自动重试 3 次；仍失败时可以从断点继续。
-- **重新渲染不重复花钱**：调整笔身文字、重点词、字幕或线条绘制量时，仅执行本地画线与合成。
-- **更适合多人使用**：网页会显示共享任务和队列状态；任务上限为 20 个，避免机器被意外压垮。
+该 Skill 的关键在于“字幕驱动、逐步确认”。每一步完成后都等待确认，避免在分镜、线稿或标注尚未定稿时浪费渲染成本：
 
-## 环境要求
+1. 解析 SRT，输出分镜与配图策略。
+2. 确认后生成统一风格的线稿。
+3. 确认线稿后，结合字幕和原图创建标注，并载入预览台。
+4. 确认标注后，生成分区与方向检查图。
+5. 在预览台调整区域、叙事顺序、时序和字幕关联并保存。
+6. 确认最终标注后，逐幕渲染 MP4。
+7. 多幕项目在确认各幕成片后合并。
 
-- Windows 10/11（当前一键启动与渲染路径面向 Windows）
-- Python 3.11+
-- Node.js 22.13+
-- FFmpeg 与 **FFprobe** 已加入系统 `PATH`
-- 可访问的 IndexTTS 2.5 服务（Gradio 或 FastAPI）
-- OpenLux API Key，且有 GPT-5 与 GPT Image 2 的调用权限
+## 视觉规范
 
-确认音视频依赖可用：
+- 暖米黄色纸张背景：建议 `#F5EBD7`
+- 深灰色素描线条，红、橙、蓝仅作少量概念性点缀
+- 极简手绘、干净背景与充足留白
+- 不使用场景文字、标签、摄影感、3D 效果或复杂纹理
 
-```powershell
-ffmpeg -version
-ffprobe -version
-```
+## 安装与环境
 
-> 当前渲染命令使用 Windows 虚拟环境路径；macOS / Linux 用户可自行适配 Python 路径后运行后端，暂不属于开箱即用支持范围。
+Skill 自带独立的 Python 虚拟环境准备脚本。首次运行时执行：
 
-## 5 分钟启动
-
-在项目根目录执行一次安装：
-
-```powershell
+```bash
+python scripts/prepare_env.py --check
 python scripts/prepare_env.py
-.\.venv\Scripts\python.exe -m pip install -r webapp\requirements.txt
-Push-Location web
-npm ci
-Pop-Location
 ```
 
-然后任选一种方式启动：
+成功后第一条命令会输出 `ENV_PY=<路径>`；后续渲染请使用该解释器，确保依赖隔离。
 
-```powershell
-# 方式一：双击项目根目录的「启动白板工坊.bat」
+网页工作台与动态信息图还需要 Node.js 22。首次使用时分别安装前端和 Remotion 渲染依赖：
 
-# 方式二：PowerShell
-.\start-webapp.ps1
+```bash
+cd web && npm install
+cd ../video_renderer && npm install
 ```
 
-脚本会启动前后端并打开 `http://127.0.0.1:13000/`，同时输出可供同一局域网设备访问的地址。
+动态信息图第一次对齐旁白时会自动下载 Whisper.cpp 1.5.5 和多语言 `medium` 模型，之后复用本地缓存。资源受限时可设置 `INFOGRAPHIC_WHISPER_MODEL=small`，但中文专有词的时间对齐质量会下降。
 
-首次打开后，进入 **API 设置**，填写：
-
-1. OpenLux API Key
-2. 文本模型（默认 `gpt-5`）
-3. 图片模型（默认 `gpt-image-2`）
-4. 语音节点 1 地址与接口类型；如需并发克隆，可再填写语音节点 2
-
-默认 Gradio 语音服务地址为 `http://127.0.0.1:7860`；FastAPI 服务通常使用 `8000` 端口。先点击“测试连接”，再提交任务。
-
-## 使用方式
-
-### 标准制作
-
-1. 上传 10–30 秒、单人且噪声较少的参考音频。
-2. 粘贴至少 10 个字的中文文案。
-3. 选择风格与成片设置，点击“开始生成视频”。
-4. 在制作进度区查看任务；完成后在线预览或下载 MP4。
-
-### 自定义参考
-
-适合固定 IP、故事角色或品牌化视觉：
-
-1. 切换至“自定义参考”。
-2. 上传一张风格参考图（控制配色、线条、材质和构图）。
-3. 添加 1–5 个角色；每人填写名称与可选描述，并上传 1–3 张不同角度的参考图。
-4. 系统会依据文案与角色名称安排每幕人物，不会直接复制风格参考图中的人物。
-
-### 重新渲染与恢复
-
-- **从断点继续**：用于调用失败或服务中断后的原任务恢复。
-- **按当前设置重新渲染**：复用已生成的配音、分镜和原图，适合修改笔身文字、字幕、重点词或线条密度；不会再次请求 GPT-5、GPT Image 2 或 IndexTTS。
-
-## 运行与数据
-
-所有运行时文件都在 `.webapp/`：
+## 项目素材结构
 
 ```text
-.webapp/
-├── config.json          # 本机 API 与语音配置
-├── preferences.json     # 旧版兼容偏好
-└── jobs/<任务 ID>/       # 音频、分镜、图片、检查点、成片与任务元数据
+assets/whiteboard/<项目名>/
+├── scene-01-<名称>.png
+├── scene-01-<名称>.annotation.json
+├── scene-01-<名称>-whiteboard.mp4
+└── scene-01-<名称>-preview.mp4
 ```
 
-密钥、参考音频、图片与成片不应提交到 Git。`.webapp/`、`.env*`、虚拟环境、`node_modules` 和构建产物均已被忽略。若曾误提交 API Key，请立即在服务商后台撤销并重新生成；只删除文件无法清除 Git 历史。
+图片与标注必须同名，例如 `scene-01-demo.png` 对应 `scene-01-demo.annotation.json`。
 
-## 开发验证
+## 标注格式
 
-```powershell
-# 前端构建与页面验证
-Push-Location web
-npm test
-Pop-Location
+每个元素使用原图的整数像素坐标，并通过 `sequence`、`subtitle` 与 `narrativeRole` 关联字幕中的事件。区域应按“场景铺垫 → 关键人物/物体 → 动作或变化 → 反应/结果”排序。
 
-# 后端任务队列与恢复逻辑测试（依赖 ffprobe）
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```json
+{
+  "sceneId": "scene-01",
+  "canvas": { "width": 1672, "height": 941 },
+  "storyBasis": "小猴在猴子山上拿着香蕉，大猴抢走香蕉，孩子们在旁观看。",
+  "sceneDurationMs": 9000,
+  "elements": [
+    {
+      "id": "rockery",
+      "label": "猴子山场景",
+      "sequence": 1,
+      "narrativeRole": "故事的场景铺垫",
+      "subtitle": "小猴子坐在猴子山顶，手里拿着香蕉。",
+      "type": "structure",
+      "region": { "x": 20, "y": 120, "width": 540, "height": 780 },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 300,
+        "durationMs": 2600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": { "start": [290, 130], "end": [290, 890], "easing": "easeInOut" }
+    }
+  ]
+}
 ```
 
-## 项目结构
+`direction` 和 `handPath` 用于预览台的矩形代理；最终成片的真实笔迹由流式绘制器自动生成。对于相互遮挡的对象，在较早元素的 `protectedRegions` 中标出需要延后显示的区域，避免后续内容提前露出。
+
+## 常用命令
+
+解析字幕并生成建议分镜：
+
+```bash
+python scripts/parse_srt.py <字幕.srt> --target-sec 30 --min-sec 25 --max-sec 35
+```
+
+生成区域检查图：
+
+```bash
+python scripts/render_annotation_preview.py <图片路径> <标注路径> <预览图输出路径>
+```
+
+打开 `assets/preview.html`，使用“打开文件夹”载入场景目录，即可编辑区域、顺序、时间与字幕关联。
+
+渲染单幕：
+
+```bash
+<ENV_PY> scripts/render_stream_whiteboard.py <图片路径> <标注路径> <输出.mp4> assets/drawing-hand.png \
+  --ink-path grid --color-fill contour-wipe
+```
+
+合并多幕：
+
+```bash
+<ENV_PY> scripts/merge_scenes.py --inputs 幕1.mp4 幕2.mp4 幕3.mp4 --output final.mp4
+```
+
+## 质量检查
+
+- 首帧是干净的暖米黄纸张底色，没有提前露出的线条
+- `canvas` 与原图尺寸一致，所有区域都是画布内的整数像素坐标
+- `sequence`、`startMs` 与字幕的叙事顺序一致
+- 中段帧中，未开始区域和保护区不会提前出现
+- 笔尖贴近当前流式笔迹；线稿清晰时可选择 `--ink-path skeleton`
+- 每幕结束后至少停留 0.5 秒完整画面；多幕合并顺序与字幕分镜一致
+
+## 仓库内容
 
 ```text
-├── assets/               # 画笔、视觉风格与参考素材
-├── examples/             # 成片与场景示例
-├── scripts/              # 白板渲染、重点文字和维护脚本
-├── tests/                # 后端队列与断点恢复测试
-├── web/                  # React + Vinext 前端
-├── webapp/               # FastAPI 后端
-├── start-webapp.ps1      # Windows 一键启动
-└── SKILL.md              # SRT 白板动画工作流说明
+srt-whiteboard-animation/
+├── SKILL.md                         # 完整工作流与约束
+├── assets/
+│   ├── drawing-hand.png              # 手部素材
+│   ├── preview.html                  # 本地编辑预览台
+├── examples/                         # README 案例素材
+├── scripts/
+│   ├── parse_srt.py                  # 字幕解析与分镜建议
+│   ├── render_annotation_preview.py  # 标注检查图
+│   ├── render_stream_whiteboard.py   # 流式笔迹 MP4 渲染器
+│   ├── merge_scenes.py               # 多幕合并
+│   └── prepare_env.py                # 依赖环境准备
+└── agents/openai.yaml                # Codex 元数据
 ```
+
+## 贡献
+
+欢迎提交 Issue 或 Pull Request。任何涉及绘制逻辑的改动，都应使用真实的字幕、标注和成片检查遮罩保护、时序与最终画面。
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE)。发现安全问题请不要先公开提交 Issue，详见 [SECURITY.md](SECURITY.md)。
+本项目基于 MIT License 开源，详见 [LICENSE](LICENSE)。
+
+## 关于作者
+
+一个爱养鱼的老登 / AI Builder / 用 AI 团队打造一人公司。
+
+抖音、B站、公众号：江哥是老登啊

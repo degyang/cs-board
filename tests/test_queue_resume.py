@@ -195,7 +195,8 @@ class QueueResumeTests(unittest.TestCase):
             output.writeframes(b"\x00\x00" * 16000)
         SERVER.JOBS[job_id] = self.job(job_id)
 
-        SERVER.resume_pending_jobs()
+        with mock.patch.object(SERVER, "valid_media_file", side_effect=lambda path: Path(path).name == "voice.wav"):
+            SERVER.resume_pending_jobs()
 
         self.assertEqual(SERVER.VOICE_QUEUE.qsize(), 0)
         self.assertEqual(SERVER.MODEL_QUEUE.qsize(), 1)

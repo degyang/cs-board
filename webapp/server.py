@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import mimetypes
 import os
 import queue
@@ -27,7 +28,11 @@ JOBS_DIR = STATE_DIR / "jobs"
 CONFIG_PATH = STATE_DIR / "config.json"
 PREFERENCES_PATH = STATE_DIR / "preferences.json"
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
+NODE = shutil.which("node") or "node"
+REMOTION_RENDERER = ROOT / "video_renderer"
 HAND = ROOT / "assets" / "drawing-hand-clean.png"
+PIPELINE_VERSION = "narrated_deck_v8_oil_visual"
+ALIGNMENT_SEGMENTATION = "word-boundary-dtw-audio-v2"
 
 DEFAULT_CONFIG = {
     "api_key": "",
@@ -40,7 +45,13 @@ DEFAULT_CONFIG = {
 }
 
 DEFAULT_STYLE = "极简粗线简笔白板风"
+INFOGRAPHIC_STYLE = "国风动态信息图"
 STYLE_PRESETS = {
+    INFOGRAPHIC_STYLE: (
+        "暖米白宣纸背景，深灰正文与朱红重点，低饱和靛青辅助色；"
+        "固定总标题和章节标题，以知识卡片、关系线、时间轴、层级或对比结构组织观点，"
+        "搭配克制的国风淡彩插画，大量留白，成人知识内容，禁止摄影写实和儿童卡通。"
+    ),
     "极简粗线简笔白板风": (
         "暖白色纯净背景，圆润有亲和力的粗黑马克笔轮廓，人物和物体高度概括，"
         "只使用橙色与钴蓝色做少量平涂点缀；几乎没有阴影、纹理和细碎结构，留白充足，"
@@ -89,6 +100,13 @@ STYLE_PRESETS = {
         "时间或矩阵中的一个主结构，用单一具体隐喻表达观点；留白占 25%–45%，主视觉不超过 3 组，辅助符号不超过 5 类。"
         "禁止摄影写实、光滑塑料 3D、扁平矢量图标、儿童贴纸、霓虹科技 UI、文字、Logo、水印和图标堆砌。"
     ),
+    "漫画墨线解释风": (
+        "暖灰米白纸张背景，使用自信、粗细有变化的黑色漫画墨线；灰面和阴影只用经典圆点半色调，不用柔和渐变。"
+        "黑白灰为主体，固定暖黄色只用于边牧或关键物件，每张图最多再使用两种低饱和语义色：蓝色表示输入或内容，"
+        "橙色表示行动、警告或成本，紫色表示过程，绿色表示成功或完成。关系必须用具体物件、路径、状态变化和重复材料证明，"
+        "不能靠装饰图标凑数。原文需要通用角色时才使用戴细圆框眼镜的圆头极简线人，胖胖的暖黄边牧只作合适的陪伴角色；"
+        "抽象机制页优先画物件和状态，不强塞人物。禁止 3D、摄影写实、光滑渐变、通用卡片网格、仪表盘、杂乱装饰、Logo 和水印。"
+    ),
     "3D黏土趣味风": (
         "可爱的三维黏土动画场景，圆润玩具化比例，可见细微手作指纹，"
         "珊瑚橙、青绿色、亮黄色和奶油色的柔和配色，温暖棚拍光与轻柔投影，"
@@ -106,6 +124,15 @@ def style_recipe(style: str) -> str:
     if style not in STYLE_PRESETS:
         raise RuntimeError(f"后台未加载画面风格：{style}，请重启后台后重新提交任务")
     return STYLE_PRESETS[style]
+
+
+def is_infographic_job(job_id: str) -> bool:
+    item = JOBS.get(job_id, {})
+    return (
+        item.get("reference_mode") == "infographic"
+        or item.get("job_type") == "infographic"
+        or item.get("style") == INFOGRAPHIC_STYLE  # Compatibility with the first preview build.
+    )
 
 
 PAPER_METAPHOR_STYLE = "纸感隐喻拼贴风"
@@ -146,6 +173,45 @@ def paper_metaphor_reference_context(scenes: list[dict[str, Any]]) -> tuple[list
     )
     return paths, instruction
 
+
+OIL_VISUAL_STYLE = "漫画墨线解释风"
+OIL_VISUAL_REFERENCE_DIR = ROOT / "assets" / "style-references" / "oil-visual"
+
+
+def oil_visual_reference_context(scenes: list[dict[str, Any]], infographic: bool = False) -> tuple[list[Path], str]:
+    scene = scenes[0] if scenes else {}
+    layout_type = str(scene.get("layout_type") or scene.get("visual_structure") or "focus")
+    text = " ".join(
+        str(item.get(key, ""))
+        for item in scenes
+        for key in ("title", "concept", "text", "key_text", "visual_strategy", "illustration_elements")
+    )
+    if layout_type == "comparison" or any(word in text for word in ("对比", "差异", "两种", "成本", "取舍")):
+        visual_mode, filename = "对比关系", "explainer-cost-comparison.png"
+    elif layout_type == "cycle" or any(word in text for word in ("循环", "反馈", "闭环")):
+        visual_mode, filename = "机制循环", "feedback-loop.png"
+    elif layout_type in {"path", "flow", "cause", "timeline"} or any(word in text for word in ("机制", "流程", "步骤", "瓶颈", "管线")):
+        visual_mode, filename = "机制流程", "pipeline-bottleneck.png"
+    elif any(word in text for word in ("人物", "角色", "讲解者", "陪伴", "团队", "主人公")):
+        visual_mode, filename = "角色场景", "transparent-illustration.png"
+    else:
+        visual_mode, filename = "概念解释", "from-complex-to-clear.png"
+    path = OIL_VISUAL_REFERENCE_DIR / filename
+    if not valid_image_file(path):
+        raise RuntimeError("漫画墨线解释风的本地参考图缺失")
+    division = (
+        "Remotion 已负责中文标题、标签、线条和关系结构，本图只生成插画证据。"
+        if infographic else
+        "程序会另行添加中文重点文字，本图只生成视觉证据。"
+    )
+    instruction = (
+        f"输入图仅作为漫画墨线视觉语言与“{visual_mode}”表达方式的参考，不提供本页文字或具体故事。"
+        "只迁移粗细墨线、圆点半色调、暖灰纸张、克制语义色和极简角色比例；"
+        "严禁复制参考图中的英文、标签、箭头、流程线、界面、Logo、原场景组合和原观点。"
+        f"{division}"
+    )
+    return [path], instruction
+
 app = FastAPI(title="白板声画工坊", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -166,8 +232,47 @@ VOICE_NODE_LOCK = threading.Lock()
 MODEL_WORKER_THREADS: list[threading.Thread] = []
 RENDER_THREADS: set[threading.Thread] = set()
 RENDER_THREADS_LOCK = threading.Lock()
+RUNNING_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+RUNNING_PROCESSES_LOCK = threading.Lock()
 MODEL_CONCURRENCY = 4
 MAX_ACTIVE_AND_QUEUED = 20
+
+
+class JobCancelled(RuntimeError):
+    """Cooperative stop signal for a task cancelled from the UI."""
+
+
+def is_job_cancelled(job_id: str) -> bool:
+    with LOCK:
+        return JOBS.get(job_id, {}).get("status") == "cancelled"
+
+
+def ensure_job_active(job_id: str) -> None:
+    if is_job_cancelled(job_id):
+        raise JobCancelled("任务已取消")
+
+
+def terminate_running_process(job_id: str) -> None:
+    with RUNNING_PROCESSES_LOCK:
+        process = RUNNING_PROCESSES.get(job_id)
+    if process is None or process.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+        else:
+            process.terminate()
+    except (OSError, subprocess.SubprocessError):
+        try:
+            process.kill()
+        except OSError:
+            pass
 
 
 def _persist_job_locked(job_id: str) -> None:
@@ -298,6 +403,8 @@ def request_client_ip(request: Request) -> str:
 
 def update_job(job_id: str, **values: Any) -> None:
     with LOCK:
+        if JOBS[job_id].get("status") == "cancelled" and values.get("status") != "cancelled":
+            return
         JOBS[job_id].update(values)
         _persist_job_locked(job_id)
 
@@ -306,6 +413,8 @@ def begin_phase(job_id: str, key: str, label: str, stage: str, progress: int) ->
     now = time.time()
     with LOCK:
         job = JOBS[job_id]
+        if job.get("status") == "cancelled":
+            raise JobCancelled("任务已取消")
         previous = job.get("current_phase")
         previous_started = job.get("phase_started_at")
         timings = job.setdefault("timings", {})
@@ -325,6 +434,8 @@ def queue_for_stage(job_id: str, queue_stage: str, stage: str, progress: int) ->
     now = time.time()
     with LOCK:
         job = JOBS[job_id]
+        if job.get("status") == "cancelled":
+            raise JobCancelled("任务已取消")
         current = job.get("current_phase")
         started = job.get("phase_started_at")
         if current and started:
@@ -386,6 +497,19 @@ def job_snapshot(job_id: str) -> dict[str, Any]:
         result = source.copy()
         result["task_name"] = normalized_task_name(source.get("task_name"), str(source.get("copy", "")), job_id)
         result["can_retry"] = source.get("status") == "error"
+        result["can_cancel"] = source.get("status") in {"queued", "running"}
+        result["image_count"] = sum(
+            1
+            for path in (JOBS_DIR / job_id).glob("board-*.png")
+            if re.fullmatch(r"board-\d+\.png", path.name)
+        )
+        if (
+            source.get("status") == "done"
+            and result["image_count"]
+            and (JOBS_DIR / job_id / "voice.wav").is_file()
+            and (JOBS_DIR / job_id / "plan.json").is_file()
+        ):
+            result["can_rerender"] = True
         result.pop("copy", None)
         result.pop("visual_references", None)
         timings = {key: value.copy() for key, value in source.get("timings", {}).items()}
@@ -420,10 +544,48 @@ def job_snapshot(job_id: str) -> dict[str, Any]:
         return result
 
 
-def run(cmd: list[str], cwd: Path = ROOT) -> None:
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if result.returncode:
-        raise RuntimeError((result.stderr or result.stdout)[-3000:])
+def run(cmd: list[str], cwd: Path = ROOT, job_id: str | None = None) -> None:
+    if job_id:
+        ensure_job_active(job_id)
+    popen_options: dict[str, Any] = {
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+    }
+    if os.name == "nt":
+        popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_options["start_new_session"] = True
+    process = subprocess.Popen(cmd, **popen_options)
+    if job_id:
+        with RUNNING_PROCESSES_LOCK:
+            RUNNING_PROCESSES[job_id] = process
+    try:
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=0.25)
+                break
+            except subprocess.TimeoutExpired:
+                if job_id and is_job_cancelled(job_id):
+                    terminate_running_process(job_id)
+                    try:
+                        process.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
+                    raise JobCancelled("任务已取消")
+        if process.returncode:
+            raise RuntimeError((stderr or stdout)[-3000:])
+        if job_id:
+            ensure_job_active(job_id)
+    finally:
+        if job_id:
+            with RUNNING_PROCESSES_LOCK:
+                if RUNNING_PROCESSES.get(job_id) is process:
+                    RUNNING_PROCESSES.pop(job_id, None)
 
 
 def probe_duration(path: Path) -> float:
@@ -522,6 +684,54 @@ def script_units(copy: str) -> list[str]:
     return [x.strip() for x in re.findall(r"[^。！？!?；;\n]+[。！？!?；;]?", copy) if x.strip()]
 
 
+def normalized_semantic_text(value: str) -> str:
+    return "".join(character.lower() for character in str(value) if character.isalnum())
+
+
+def validate_infographic_cues(pages: list[dict[str, Any]], units: list[str]) -> None:
+    """Require every semantic element to have an ordered, exact source anchor."""
+    for page_index, page in enumerate(pages, 1):
+        indexes = [int(value) for value in page.get("source_units") or []]
+        page_source = normalized_semantic_text("".join(units[index - 1] for index in indexes))
+        nodes = page.get("nodes")
+        if not isinstance(nodes, list) or not 1 <= len(nodes) <= 5:
+            raise RuntimeError(f"第 {page_index} 页 nodes 必须包含 1～5 项")
+        if not all(isinstance(node, str) and node.strip() for node in nodes):
+            raise RuntimeError(f"第 {page_index} 页 nodes 必须全部是短文字")
+        required_ids = {"page-title", "illustration", *(f"node-{index + 1}" for index in range(len(nodes)))}
+        if str(page.get("conclusion") or "").strip():
+            required_ids.add("conclusion")
+        cues = page.get("cues")
+        if not isinstance(cues, list) or not 1 <= len(cues) <= 6:
+            raise RuntimeError(f"第 {page_index} 页必须包含 1～6 个语义 Cue")
+        entered: list[str] = []
+        cursor = 0
+        for cue_index, cue in enumerate(cues, 1):
+            if not isinstance(cue, dict):
+                raise RuntimeError(f"第 {page_index} 页第 {cue_index} 个 Cue 结构无效")
+            anchor = normalized_semantic_text(str(cue.get("anchor_text") or ""))
+            if len(anchor) < 2:
+                raise RuntimeError(f"第 {page_index} 页第 {cue_index} 个 Cue 缺少至少两个字的原文锚点")
+            position = page_source.find(anchor, cursor)
+            if position < 0:
+                raise RuntimeError(f"第 {page_index} 页 Cue 锚点不是按顺序摘录的本页原文：{cue.get('anchor_text', '')}")
+            cursor = position + len(anchor)
+            enter_ids = [str(value) for value in cue.get("enter_ids") or []]
+            unknown = set(enter_ids) - required_ids
+            if unknown:
+                raise RuntimeError(f"第 {page_index} 页 Cue 引用了未知元素：{', '.join(sorted(unknown))}")
+            focus_id = str(cue.get("focus_id") or "")
+            if focus_id not in required_ids:
+                raise RuntimeError(f"第 {page_index} 页 Cue 的 focus_id 无效：{focus_id}")
+            entered.extend(enter_ids)
+        missing = required_ids - set(entered)
+        duplicate = sorted({value for value in entered if entered.count(value) > 1})
+        if missing:
+            raise RuntimeError(f"第 {page_index} 页以下元素没有绑定 Cue：{', '.join(sorted(missing))}")
+        if duplicate:
+            raise RuntimeError(f"第 {page_index} 页以下元素重复绑定 Cue：{', '.join(duplicate)}")
+
+
 def split_script(copy: str, target_count: int) -> list[str]:
     # Prefer complete sentences and paragraphs so a scene follows the copy.
     units = script_units(copy)
@@ -559,16 +769,208 @@ def scene_limit_for_duration(duration: float) -> int:
     return max(1, int(max(0.0, duration) * 8 / 60))
 
 
-def make_plan(config: dict[str, Any], copy: str, duration: float, style: str, character_context: str = "", job_id: str | None = None) -> list[dict[str, Any]]:
+def numbered_section_topics(copy: str) -> list[str]:
+    matches = re.finditer(r"(?:^|[“”\"'\s])([1-9])\s*[.．、]\s*([^：:\n。！？!?]{2,18})\s*[：:]", copy)
+    topics: list[str] = []
+    expected = 1
+    for match in matches:
+        number = int(match.group(1))
+        if number != expected:
+            continue
+        topic = re.sub(r"^[\s“”\"']+|[\s“”\"']+$", "", match.group(2)).strip()
+        if topic:
+            topics.append(topic)
+            expected += 1
+    return topics if 3 <= len(topics) <= 8 else []
+
+
+def _allows_directional_relation(text: str, relation_type: str) -> bool:
+    if relation_type == "sequence":
+        return bool(re.search(r"首先|然后|接着|随后|最后|第[一二三四五六七八九]步|步骤", text))
+    if relation_type == "cause":
+        return bool(re.search(r"因为|所以|导致|因此|从而|结果是|原因", text))
+    return False
+
+
+DECK_LAYOUTS = {
+    "overview", "question", "focus", "principle", "comparison", "evidence",
+    "layers", "case", "path", "flow", "cause", "cycle", "timeline", "summary",
+}
+DECK_COMPOSITIONS = {"split-right", "split-left", "center-stage", "top-bottom", "full-width"}
+
+
+def _fallback_layout(page_text: str, role: str, relation_type: str, key_count: int, page_index: int) -> str:
+    if role == "overview":
+        return "overview"
+    if role == "summary" or re.search(r"总结|归纳|记住|最后|总之", page_text):
+        return "summary"
+    if "？" in page_text or "?" in page_text:
+        return "question"
+    if relation_type == "comparison" or re.search(r"相比|对比|而不是|一边|另一边|彼|己", page_text):
+        return "comparison"
+    if relation_type == "cause":
+        return "cause"
+    if relation_type == "sequence":
+        return "path"
+    if re.search(r"案例|例如|比如|数据|证据|调查|研究", page_text):
+        return "case" if page_index % 2 else "evidence"
+    if re.search(r"本质|原则|核心|关键|定义|意味着", page_text):
+        return "principle"
+    if key_count >= 4:
+        return "layers"
+    return ("focus", "evidence", "case")[page_index % 3]
+
+
+def _default_composition(layout_type: str, page_index: int) -> str:
+    if layout_type in {"question", "principle", "cycle"}:
+        return "center-stage"
+    if layout_type in {"path", "flow", "cause", "timeline", "layers"}:
+        return "full-width" if page_index % 2 else "top-bottom"
+    if layout_type in {"comparison", "case"}:
+        return "top-bottom" if page_index % 2 else "full-width"
+    return "split-left" if page_index % 2 == 0 else "split-right"
+
+
+def normalize_deck_pages(candidate: list[dict[str, Any]], copy: str, phrase_timeline: dict[str, Any]) -> list[dict[str, Any]]:
+    phrases = phrase_timeline.get("phrases")
+    if not isinstance(phrases, list) or not phrases:
+        raise RuntimeError("生成 PPT 结构前必须先有完整短语时间表")
+    phrase_by_id = {str(item.get("id")): item for item in phrases if isinstance(item, dict) and item.get("id")}
+    all_phrase_ids = [str(item.get("id")) for item in phrases if isinstance(item, dict) and item.get("id")]
+    order = {phrase_id: index for index, phrase_id in enumerate(all_phrase_ids)}
+    pages: list[dict[str, Any]] = []
+    used_phrase_ids: list[str] = []
+    series_title = ""
+    previous_layout = ""
+    previous_composition = ""
+    for page_index, raw in enumerate(candidate, 1):
+        source_ids = [str(value) for value in raw.get("source_phrase_ids") or []]
+        if not source_ids or any(value not in phrase_by_id for value in source_ids):
+            raise RuntimeError(f"第 {page_index} 页缺少有效 source_phrase_ids")
+        positions = [order[value] for value in source_ids]
+        if positions != list(range(positions[0], positions[-1] + 1)):
+            raise RuntimeError(f"第 {page_index} 页必须引用连续的短语编号")
+        used_phrase_ids.extend(source_ids)
+        page_text = "".join(str(phrase_by_id[value].get("text") or "") for value in source_ids)
+        role = str(raw.get("role") or "detail")
+        role = role if role in {"overview", "detail", "transition", "summary"} else "detail"
+        layout_type = str(raw.get("layout_type") or "")
+        relation_type = str(raw.get("relationship_type") or "none")
+        relation_type = relation_type if relation_type in {"none", "sequence", "cause", "comparison", "hierarchy"} else "none"
+        if role == "overview" or relation_type in {"sequence", "cause"} and not _allows_directional_relation(page_text, relation_type):
+            relation_type = "none"
+
+        raw_items = raw.get("key_items") or raw.get("nodes") or []
+        key_items: list[dict[str, str]] = []
+        for item in raw_items[:6] if isinstance(raw_items, list) else []:
+            label = str(item.get("label") or item.get("text") or "") if isinstance(item, dict) else str(item)
+            trigger = str(item.get("trigger_phrase_id") or source_ids[0]) if isinstance(item, dict) else source_ids[0]
+            label = label.strip()[:16]
+            if label:
+                key_items.append({"label": label, "trigger_phrase_id": trigger})
+        if not key_items:
+            raise RuntimeError(f"第 {page_index} 页没有可显示的关键词")
+        fallback_layout = _fallback_layout(page_text, role, relation_type, len(key_items), page_index)
+        if layout_type not in DECK_LAYOUTS:
+            layout_type = fallback_layout
+        if layout_type == previous_layout and role == "detail" and fallback_layout != previous_layout:
+            layout_type = fallback_layout
+        composition = str(raw.get("composition") or "")
+        if composition not in DECK_COMPOSITIONS:
+            composition = _default_composition(layout_type, page_index)
+        if composition == previous_composition and layout_type not in {"question", "principle", "cycle"}:
+            composition = _default_composition(layout_type, page_index + 1)
+        trigger_fields = {
+            "page_title_trigger_phrase_id": str(raw.get("page_title_trigger_phrase_id") or source_ids[0]),
+            "illustration_trigger_phrase_id": str(raw.get("illustration_trigger_phrase_id") or source_ids[0]),
+            "conclusion_trigger_phrase_id": str(raw.get("conclusion_trigger_phrase_id") or source_ids[-1]),
+        }
+        for item in key_items:
+            if item["trigger_phrase_id"] not in source_ids:
+                raise RuntimeError(f"第 {page_index} 页关键词“{item['label']}”引用了本页之外的短语")
+        if any(value not in source_ids for value in trigger_fields.values()):
+            raise RuntimeError(f"第 {page_index} 页存在跨页元素时间绑定")
+
+        series_title = series_title or str(raw.get("series_title") or copy[:30]).strip()[:30]
+        illustration = raw.get("illustration_elements") or []
+        illustration = [str(value.get("label") or "") if isinstance(value, dict) else str(value) for value in illustration]
+        illustration = [value.strip()[:24] for value in illustration if value.strip()][:3]
+        page = {
+            "source_phrase_ids": source_ids,
+            "series_title": series_title,
+            "chapter_title": str(raw.get("chapter_title") or raw.get("page_title") or "本章要点").strip()[:24],
+            "page_title": str(raw.get("page_title") or raw.get("primary_sentence") or "本页重点").strip()[:24],
+            "key_text": str(raw.get("key_text") or raw.get("page_title") or "本页重点").strip()[:16],
+            "role": role,
+            "layout_type": layout_type,
+            "composition": composition,
+            "relationship_type": relation_type,
+            "key_items": key_items,
+            "nodes": [item["label"] for item in key_items],
+            "conclusion": str(raw.get("conclusion") or "").strip()[:20],
+            "core_idea": str(raw.get("core_idea") or raw.get("concept") or raw.get("page_title") or "").strip()[:80],
+            "concept": str(raw.get("core_idea") or raw.get("concept") or raw.get("page_title") or "").strip()[:80],
+            "visual_strategy": str(raw.get("visual_strategy") or "左侧文字，右侧主题插图").strip()[:80],
+            "narrative_link": str(raw.get("narrative_link") or "承接本页旁白并进入下一部分").strip()[:80],
+            "illustration_elements": illustration or [item["label"] for item in key_items[:2]],
+            "text": page_text,
+            "_plan_mode": "narrated_deck_v4",
+            **trigger_fields,
+        }
+        pages.append(page)
+        previous_layout = layout_type
+        previous_composition = composition
+
+    if used_phrase_ids != all_phrase_ids:
+        raise RuntimeError("PPT 页面没有按顺序完整覆盖全部短语")
+
+    topics = numbered_section_topics(copy)
+    if topics and pages:
+        first_page = pages[0]
+        trigger = next(
+            (
+                phrase_id for phrase_id in first_page["source_phrase_ids"]
+                if re.search(rf"(?:这|以下)?{len(topics)}项", str(phrase_by_id[phrase_id].get("text") or ""))
+            ),
+            first_page["source_phrase_ids"][-1],
+        )
+        first_page["role"] = "overview"
+        first_page["layout_type"] = "overview"
+        first_page["composition"] = "split-right"
+        first_page["relationship_type"] = "none"
+        first_page["key_items"] = [{"label": topic[:16], "trigger_phrase_id": trigger} for topic in topics]
+        first_page["nodes"] = topics
+        first_page["illustration_elements"] = ["儿童大脑侧面轮廓", "被五种训练共同激活的脑区", "柔和发光的神经连接"]
+        first_page["concept"] = f"用一页总览明确列出{len(topics)}项训练，右侧用大脑插图解释整体主题"
+    return pages
+
+
+def make_plan(
+    config: dict[str, Any],
+    copy: str,
+    duration: float,
+    style: str,
+    character_context: str = "",
+    job_id: str | None = None,
+    infographic: bool = False,
+    phrase_timeline: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     # The copy decides how many meaningful scenes exist. Duration only caps
     # their density so short narration never receives too many images.
-    requested_count = min(len(script_units(copy)) or 1, scene_limit_for_duration(duration))
+    source_units = script_units(copy) or [copy.strip()]
+    phrase_items = phrase_timeline.get("phrases") if infographic and isinstance(phrase_timeline, dict) else None
+    if infographic and (not isinstance(phrase_items, list) or not phrase_items):
+        raise RuntimeError("动态 PPT 必须先完成短语与真实旁白时间对齐")
+    requested_count = min(len(phrase_items) if isinstance(phrase_items, list) else len(source_units), scene_limit_for_duration(duration))
     segments = split_script(copy, requested_count)
     scene_count = len(segments)
     fixed_segments = "\n".join(f"第{i + 1}幕原文：{text}" for i, text in enumerate(segments))
     character_rule = (
         f"可用人物如下：{character_context}。根据原文语义选择出场人物，并在 title、concept 和 elements 中写明人物名称；不得改变人物身份与外观。"
         if character_context else
+        "原文指定的人物或动物身份必须优先保持；没有指定身份且确实需要讲解角色时，使用戴细圆框眼镜的圆头极简线人。"
+        "暖黄色边牧只在陪伴、协作或生活化角色场景中出现，抽象机制页不要强塞人物或宠物。同一角色外观保持一致。"
+        if style == OIL_VISUAL_STYLE else
         "主角必须严格来自原文；原文是动物就保持该动物，原文没有指定身份时才使用普通中国青年。所有分镜中的同一角色外观保持一致。"
         if style == PAPER_METAPHOR_STYLE else
         "同一位主角始终是“中国青年男性，短黑发，朴素深色上衣”，人物外观必须保持一致。"
@@ -578,7 +980,47 @@ def make_plan(config: dict[str, Any], copy: str, duration: float, style: str, ch
         "metaphor 只写一个可被画出的核心隐喻。不要把文案中的每个名词都转成图标。"
         if style == PAPER_METAPHOR_STYLE else ""
     )
-    prompt = f"""你是中文白板动画分镜导演。下面已经把文案固定拆成 {scene_count} 幕。
+    if infographic:
+        oil_visual_rule = (
+            "13. 当前风格的插图证据从四类中择一：概念解释用具体隐喻呈现从复杂到清晰；机制流程用物件、通道和状态变化；"
+            "对比关系用左右两组可比对象；角色场景用动作和环境物件。每页只选最匹配的一类并写进 visual_strategy，"
+            "不要把四类混在一页，也不要为了出现固定角色而改变原意。\n"
+            if style == OIL_VISUAL_STYLE else ""
+        )
+        numbered_phrases = "\n".join(
+            f"[{item['id']}｜{item['spoken_start_ms']}–{item['spoken_end_ms']}ms] {item['text']}"
+            for item in phrase_items
+        )
+        prompt = f"""你是中文口播动态 PPT 的内容编辑。短语与真实音频时间已经在上一步确定；你只梳理页面结构，不得重新估算时间。
+总口播时长约 {duration:.1f} 秒，最多 {requested_count} 页。画面风格和插图在后续步骤处理。
+
+分页原则：
+1. 一般用本页第一条短语作为中心句的依据，浓缩为 page_title；关键词只辅助中心句，不得抢成另一套观点。
+2. 如果开头提到“以下N项/这N项”，且全文随后存在 1、2、3…编号章节，必须单独生成 role=overview 的总览页；key_items 必须使用后文各编号章节名称，不能改写为能力、效果或抽象概念。
+3. source_phrase_ids 必须将下方短语按顺序连续分组，每个短语编号恰好使用一次。
+4. key_items 为 1～6 个短词条，每项包含 label 和 trigger_phrase_id。label 是 PPT 上真正显示的文字；trigger_phrase_id 必须属于本页，表示该词条何时出现。
+5. page_title_trigger_phrase_id、illustration_trigger_phrase_id、conclusion_trigger_phrase_id 也必须属于本页。只选择短语编号，不输出毫秒或帧号。
+6. relationship_type 默认且优先使用 none。只有原文明说“首先→然后→最后”才能用 sequence，明确说“因为→所以/导致”才能用 cause；普通并列清单、训练名称、能力解释一律 none，不得画箭头。
+7. role 只能是 overview、detail、transition、summary。layout_type 必须按语义选择：
+   - overview：明确列出全文大纲；question：问题、悬念或反问；focus：单一强观点；principle：定义、原则或中心法则；
+   - comparison：两方对照；evidence：论点加证据条；layers：多层递进；case：案例或数据；
+   - path/flow/timeline：原文明示的步骤、阶段或时间过程；cause：明确因果；cycle：明确循环；summary：编号总结。
+   普通 detail 页不能连续三页使用同一 layout_type。
+8. series_title 全片一致；同一章节的 chapter_title 连续保持，真正换章节才改变。
+9. illustration_elements 只写 1～3 个具体可画主体。插图不负责排版、文字、箭头、连接线或流程关系。
+
+10. 每页遵循“核心观点 → 一句清晰的 page_title → visual_strategy → narrative_link”四步。core_idea 说明本页唯一信息；visual_strategy 说明 PPT 如何呈现；narrative_link 说明它在全文中承上启下的作用。
+11. composition 决定页面空间：split-right（文字左、插图右）、split-left（插图左、文字右）、center-stage（中心舞台）、top-bottom（上下结构）、full-width（横向通栏）。相邻页面尽量改变 composition；不得为了变化而违背语义。
+12. 同一页不是静态海报：把 key_items 分别绑定到真正说到它们的短语，让标题、插图、关键词、证据和结论逐层累积出现。
+{oil_visual_rule}
+
+每页输出：source_phrase_ids、series_title、chapter_title、core_idea、page_title、page_title_trigger_phrase_id、key_text、role、layout_type、composition、relationship_type、key_items、conclusion、conclusion_trigger_phrase_id、visual_strategy、narrative_link、illustration_elements、illustration_trigger_phrase_id。
+只返回 JSON 数组，不要解释。
+
+完整短语时间表：
+{numbered_phrases}"""
+    else:
+        prompt = f"""你是中文白板动画分镜导演。下面已经把文案固定拆成 {scene_count} 幕。
 总口播时长约 {duration:.1f} 秒。风格：{style}。
 严格按幕输出 title、key_text、concept、elements，不要输出或改写原文。
 key_text 是给观众看的中文重点短语，必须准确概括本幕原文，只写 4～10 个汉字，不加标点，不得编造原文没有的观点。
@@ -597,10 +1039,14 @@ elements 必须是恰好 3 个具体可画的中文短语，按叙事顺序排�
             candidate = parse_json_block(extract_response_text(payload))
             if not isinstance(candidate, list) or not candidate:
                 raise RuntimeError("分镜模型未返回有效场景")
-            if len(candidate) != scene_count:
+            if not infographic and len(candidate) != scene_count:
                 raise RuntimeError(f"分镜模型返回 {len(candidate)} 幕，预期 {scene_count} 幕")
             if not all(isinstance(scene, dict) for scene in candidate):
                 raise RuntimeError("分镜模型返回的数据结构无效")
+            if infographic:
+                if len(candidate) > requested_count:
+                    raise RuntimeError(f"信息图页面超过上限 {requested_count}")
+                candidate = normalize_deck_pages(candidate, copy, phrase_timeline or {})
             scenes = candidate
             break
         except (json.JSONDecodeError, RuntimeError, TypeError, ValueError) as exc:
@@ -613,11 +1059,16 @@ elements 必须是恰好 3 个具体可画的中文短语，按叙事顺序排�
     if not scenes:
         raise RuntimeError(f"分镜模型连续 3 次返回无效结果：{last_plan_error}")
     from scripts.add_key_text import clean_key_text
+    series_title = ""
     for i, scene in enumerate(scenes):
-        scene["text"] = segments[i]
-        key_text = clean_key_text(str(scene.get("key_text") or scene.get("title") or segments[i]), 10)
-        scene["key_text"] = key_text or clean_key_text(segments[i], 10) or "本幕重点"
-    fit_scene_durations(scenes, duration)
+        if infographic:
+            scene["key_text"] = clean_key_text(str(scene.get("key_text") or scene.get("page_title") or "本页重点"), 16)
+        else:
+            scene["text"] = segments[i]
+            key_text = clean_key_text(str(scene.get("key_text") or scene.get("title") or segments[i]), 10)
+            scene["key_text"] = key_text or clean_key_text(segments[i], 10) or "本幕重点"
+    if not infographic:
+        fit_scene_durations(scenes, duration)
     for scene in scenes:
         raw_elements = scene.get("elements") or []
         labels = [str(x.get("label", "")) if isinstance(x, dict) else str(x) for x in raw_elements]
@@ -632,6 +1083,11 @@ def build_image_prompt(scene: dict[str, Any], style: str) -> str:
     labels = scene.get("elements") or [scene.get("title", "场景主体")]
     count = len(labels)
     lanes = "；".join(f"第{i + 1}区：{label}" for i, label in enumerate(labels))
+    character_instruction = (
+        "原文指定的人物或动物身份优先；没有指定身份且确实需要通用讲解角色时，才使用戴细圆框眼镜的圆头极简线人。暖黄边牧仅在语义合适时陪伴，不强制出现。"
+        if style == OIL_VISUAL_STYLE else
+        "同一主角固定为：中国青年男性，短黑发，朴素深色上衣，普通人形象；不要改变年龄与外貌。"
+    )
     return f"""生成一张用于中文口播的 16:9 白板动画分镜原画。
 风格名称：{style}。
 视觉配方：{style_recipe(style)}
@@ -640,14 +1096,27 @@ def build_image_prompt(scene: dict[str, Any], style: str) -> str:
 本幕叙事：{scene.get('concept', '')}
 本幕原文：{scene.get('text', '')}
 必须严格表现本幕叙事，不得生成童年成长、旅行、花鸟、山水、宠物等无关意象。
-同一主角固定为：中国青年男性，短黑发，朴素深色上衣，普通人形象；不要改变年龄与外貌。
+{character_instruction}
 构图必须从左到右平均分成 {count} 个互不重叠的独立小场景，每区主体居中，区间有明显留白：{lanes}。
 必须把上述每个元素都画出来，顺序不得改变；任何人物或物体不得跨越相邻区域。
 主体整体垂直居中并略微靠上，主要人物和物体中心位于画面高度 42%～48%，顶部不得出现大面积无意义空白。
 禁止任何文字、字母、数字、Logo、水印、边框、对话框和装饰性填充。画面底部保留约 16% 空白作为字幕安全区。"""
 
 
-def build_board_prompt(scenes: list[dict[str, Any]], style: str, reference_instruction: str = "", use_character_references: bool = False) -> str:
+def build_board_prompt(scenes: list[dict[str, Any]], style: str, reference_instruction: str = "", use_character_references: bool = False, infographic: bool = False) -> str:
+    if infographic:
+        scene = scenes[0]
+        elements = "、".join(scene.get("illustration_elements") or scene.get("nodes") or [])
+        reference_block = f"视觉参考使用规则：{reference_instruction}\n" if reference_instruction else ""
+        return f"""生成一张 16:9 中文知识解说视频的独立插画素材。
+所选画面风格：{style}。视觉配方：{style_recipe(style)}
+{reference_block}必须让画面在 3 秒内认出主体、10 秒内看懂观点证据；不是装饰性配图。
+画面只画以下具象内容：{elements}。对应观点：{scene.get('concept', '')}。
+PPT 已确定的视觉策略：{scene.get('visual_strategy', '左侧文字，右侧主题插图')}。
+插图槽位类型：{scene.get('layout_type', 'focus')} / {scene.get('composition', 'split-right')}。主体比例应适应该槽位；横向通栏可画并列主体，中心舞台突出单一隐喻，分栏槽位保持竖向紧凑。
+插画必须是独立、自然融入背景的视觉证据，不画圆角卡片、照片框、界面面板；不要强制添加讲解者或青年男性。
+这张图只填入 Remotion PPT 已经确定的插图区域，不负责表达页面结构。禁止箭头、连接线、流程线、项目符号和图表关系。
+画面四周保留充足留白，主体不要贴边。禁止任何文字、字母、数字、Logo、水印、边框、字幕和 UI；只有原文确实需要人物时才画人物。"""
     panels: list[str] = []
     for i, scene in enumerate(scenes, 1):
         elements = "、".join(scene.get("elements") or [])
@@ -658,6 +1127,8 @@ def build_board_prompt(scenes: list[dict[str, Any]], style: str, reference_instr
         )
     panel_text = "\n".join(panels)
     style_instruction = (
+        f"视觉配方：{style_recipe(style)}\n{reference_instruction}"
+        if style == OIL_VISUAL_STYLE and reference_instruction else
         "严格复现输入风格参考图的配色、线条粗细、材质、造型比例与构图语言；不要复制风格图里原有的人物或事件。"
         if reference_instruction else
         f"视觉配方：{style_recipe(style)}\n必须严格执行这套视觉配方，不得自动改回其他白板风格；人物、物体和配色都要让所选风格一眼可辨。"
@@ -665,6 +1136,8 @@ def build_board_prompt(scenes: list[dict[str, Any]], style: str, reference_instr
     character_instruction = (
         "只使用人物参考组中定义的角色；人物出现时必须保持对应参考图的脸型、发型、年龄、服装和标志性特征一致。"
         if use_character_references else
+        "原文指定的人物或动物身份优先；未指定身份且确实需要通用角色时才使用戴细圆框眼镜的圆头极简线人，暖黄边牧仅在语义合适时作为陪伴角色。"
+        if style == OIL_VISUAL_STYLE else
         "主角必须严格来自原文；动物、人物身份与年龄不得被替换，同一角色在所有分镜中保持一致。"
         if style == PAPER_METAPHOR_STYLE else
         "同一主角固定为：中国青年男性，短黑发，朴素深色上衣，普通人形象；所有分镜中的年龄与外貌保持一致。"
@@ -975,6 +1448,23 @@ def _srt_time(ms: int) -> str:
 
 
 def write_subtitles(scenes: list[dict[str, Any]], target: Path) -> None:
+    aligned_cues = [
+        cue
+        for scene in scenes
+        for cue in (scene.get("subtitle_cues") or [])
+        if isinstance(cue, dict)
+    ]
+    if aligned_cues and all(scene.get("subtitle_cues") for scene in scenes):
+        lines: list[str] = []
+        for index, cue in enumerate(aligned_cues, 1):
+            lines.extend([
+                str(index),
+                f"{_srt_time(int(cue['start_ms']))} --> {_srt_time(int(cue['end_ms']))}",
+                str(cue["text"]),
+                "",
+            ])
+        target.write_text("\n".join(lines), encoding="utf-8")
+        return
     cues: list[tuple[int, int, str]] = []
     offset = 0
     for scene in scenes:
@@ -993,7 +1483,60 @@ def write_subtitles(scenes: list[dict[str, Any]], target: Path) -> None:
     target.write_text("\n".join(lines), encoding="utf-8")
 
 
+def remotion_infographic_props(scenes: list[dict[str, Any]], style: str, duration_ms: int, subtitles_enabled: bool = False) -> dict[str, Any]:
+    pages: list[dict[str, Any]] = []
+    for index, scene in enumerate(scenes, 1):
+        timed_cues = scene.get("timed_cues")
+        if not isinstance(timed_cues, list) or not timed_cues:
+            raise RuntimeError(f"第 {index} 页没有通过真实语音对齐，禁止进入 Remotion 渲染")
+        layout_type = str(scene.get("layout_type") or "focus")
+        pages.append({
+            "id": f"page-{index}",
+            "image": f"board-{index:02d}.png",
+            "startFrame": int(scene["start_frame"]),
+            "endFrame": int(scene["end_frame"]),
+            "seriesTitle": str(scene.get("series_title") or "动态知识解说"),
+            "chapterTitle": str(scene.get("chapter_title") or "本章要点"),
+            "pageTitle": str(scene.get("page_title") or scene.get("key_text") or "核心观点"),
+            "layoutType": layout_type,
+            "composition": str(scene.get("composition") or _default_composition(layout_type, index)),
+            "slideRole": str(scene.get("role") or "detail"),
+            "relationshipType": str(scene.get("relationship_type") or "none"),
+            "coreIdea": str(scene.get("core_idea") or scene.get("concept") or ""),
+            "visualStrategy": str(scene.get("visual_strategy") or ""),
+            "narrativeLink": str(scene.get("narrative_link") or ""),
+            "nodes": [str(value) for value in scene.get("nodes") or []],
+            "conclusion": str(scene.get("conclusion") or ""),
+            "seriesPersistent": bool(scene.get("series_persistent")),
+            "chapterPersistent": bool(scene.get("chapter_persistent")),
+            "cues": [{
+                "id": str(cue["id"]),
+                "anchorText": str(cue["anchor_text"]),
+                "startFrame": int(cue["start_frame"]),
+                "endFrame": int(cue["end_frame"]),
+                "spokenStartMs": int(cue["spoken_start_ms"]),
+                "spokenEndMs": int(cue["spoken_end_ms"]),
+                "enterIds": [str(value) for value in cue["enter_ids"]],
+                "focusId": str(cue["focus_id"]),
+                "alignmentCoverage": float(cue["alignment_coverage"]),
+                "alignmentConfidence": float(cue["alignment_confidence"]),
+            } for cue in timed_cues],
+        })
+    return {
+        "fps": 30,
+        "width": 1920,
+        "height": 1080,
+        "totalDurationMs": duration_ms,
+        "totalDurationFrames": max(1, math.ceil(duration_ms * 30 / 1000)),
+        "style": style,
+        "subtitlesEnabled": subtitles_enabled,
+        "pages": pages,
+    }
+
+
 def fail_job(job_id: str, stage: str, exc: Exception) -> None:
+    if isinstance(exc, JobCancelled) or is_job_cancelled(job_id):
+        return
     finish_timing(job_id)
     update_job(job_id, status="error", stage=stage, error=str(exc))
 
@@ -1010,6 +1553,7 @@ def voice_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
             partial_voice = job_dir / "voice.partial.wav"
             partial_voice.unlink(missing_ok=True)
             synthesize_voice(config, reference, copy, partial_voice)
+            ensure_job_active(job_id)
             if not valid_media_file(partial_voice):
                 raise RuntimeError("语音服务返回的音频文件无效")
             partial_voice.replace(voice)
@@ -1029,23 +1573,90 @@ def model_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
         voice = job_dir / "voice.wav"
         duration = probe_duration(voice)
         reference_images, reference_instruction, character_context = custom_reference_context(job_id)
+        infographic = is_infographic_job(job_id)
+
+        phrase_timeline: dict[str, Any] | None = None
+        if infographic:
+            begin_phase(job_id, "alignment", "短语时间表", "正在制作完整的短语—真实旁白时间 JSON", 16)
+            alignment_path = job_dir / "alignment.tokens.json"
+            desired_alignment_model = os.environ.get("INFOGRAPHIC_WHISPER_MODEL", "medium")
+            alignment_current = False
+            if alignment_path.exists():
+                try:
+                    saved_alignment = json.loads(alignment_path.read_text(encoding="utf-8"))
+                    alignment_current = (
+                        str(saved_alignment.get("model") or "") == desired_alignment_model
+                        and saved_alignment.get("segmentation") == ALIGNMENT_SEGMENTATION
+                        and bool(saved_alignment.get("speechSegments"))
+                    )
+                except (OSError, json.JSONDecodeError):
+                    alignment_current = False
+            if not alignment_current:
+                run([
+                    str(NODE),
+                    str(REMOTION_RENDERER / "align.mjs"),
+                    str(voice),
+                    str(alignment_path),
+                ], cwd=REMOTION_RENDERER, job_id=job_id)
+            try:
+                alignment_payload = json.loads(alignment_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError("真实旁白 token 时间戳文件损坏，请删除后重试") from exc
+            from scripts.semantic_timeline import build_phrase_timeline
+            phrase_timeline = build_phrase_timeline(copy, alignment_payload, round(duration * 1000), fps=30)
+            atomic_write_json(job_dir / "phrase-timeline.json", phrase_timeline)
+            update_job(job_id, checkpoint="phrase_timeline_done")
 
         plan_path = job_dir / "plan.json"
         scenes: list[dict[str, Any]] = []
         if plan_path.exists():
             try:
                 saved_plan = json.loads(plan_path.read_text(encoding="utf-8"))
-                if isinstance(saved_plan, list) and saved_plan and all(isinstance(scene, dict) for scene in saved_plan):
+                valid_modes = {"narrated_deck_v4", "narrated_deck_v4_timed"}
+                valid_mode = not infographic or all(scene.get("_plan_mode") in valid_modes for scene in saved_plan if isinstance(scene, dict))
+                if isinstance(saved_plan, list) and saved_plan and all(isinstance(scene, dict) for scene in saved_plan) and valid_mode:
                     scenes = saved_plan
             except (OSError, json.JSONDecodeError):
                 scenes = []
         if not scenes:
-            begin_phase(job_id, "planning", "分镜规划", "正在生成分镜", 18)
-            scenes = make_plan(config, copy, duration, style, character_context, job_id)
+            begin_phase(job_id, "planning", "内容结构", "正在浓缩中心句、列出关键词并规划 PPT 页面", 25)
+            scenes = make_plan(config, copy, duration, style, character_context, job_id, infographic, phrase_timeline)
+            ensure_job_active(job_id)
             atomic_write_json(plan_path, scenes)
         else:
-            begin_phase(job_id, "planning", "分镜规划", "已恢复分镜计划", 20)
-        if fit_scene_durations(scenes, duration):
+            begin_phase(job_id, "planning", "内容结构", "已恢复 PPT 内容结构", 27)
+        if infographic:
+            begin_phase(job_id, "deck", "Remotion PPT", "正在把页面结构和关键词绑定到短语时间", 31)
+            from scripts.semantic_timeline import build_deck_timeline
+            scenes, alignment_report = build_deck_timeline(
+                copy,
+                scenes,
+                phrase_timeline or {},
+                round(duration * 1000),
+                fps=30,
+            )
+            atomic_write_json(plan_path, scenes)
+            atomic_write_json(job_dir / "alignment-report.json", alignment_report)
+            deck_spec = remotion_infographic_props(scenes, style, round(duration * 1000), include_subtitles)
+            atomic_write_json(job_dir / "deck-spec.json", deck_spec)
+            atomic_write_json(job_dir / "content-timeline.json", {
+                "schema_version": 1,
+                "slides": [{
+                    "page": index,
+                    "source_phrase_ids": scene.get("source_phrase_ids"),
+                    "core_idea": scene.get("core_idea"),
+                    "page_title": scene.get("page_title"),
+                    "key_items": scene.get("key_items"),
+                    "layout_type": scene.get("layout_type"),
+                    "composition": scene.get("composition"),
+                    "visual_strategy": scene.get("visual_strategy"),
+                    "narrative_link": scene.get("narrative_link"),
+                    "relationship_type": scene.get("relationship_type"),
+                    "timed_cues": scene.get("timed_cues"),
+                } for index, scene in enumerate(scenes, 1)],
+            })
+            scenes_per_image = 1
+        elif fit_scene_durations(scenes, duration):
             atomic_write_json(plan_path, scenes)
         boards = [scenes[i:i + scenes_per_image] for i in range(0, len(scenes), scenes_per_image)]
         board_specs: list[tuple[list[Path], str, str]] = []
@@ -1056,7 +1667,10 @@ def model_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
             if style == PAPER_METAPHOR_STYLE and not board_images:
                 board_images, board_instruction = paper_metaphor_reference_context(board)
                 use_character_references = False
-            board_prompt = build_board_prompt(board, style, board_instruction, use_character_references)
+            elif style == OIL_VISUAL_STYLE and not board_images:
+                board_images, board_instruction = oil_visual_reference_context(board, infographic)
+                use_character_references = False
+            board_prompt = build_board_prompt(board, style, board_instruction, use_character_references, infographic)
             board_specs.append((board_images, board_instruction, board_prompt))
         update_job(job_id, duration=duration, scenes=len(scenes), boards=len(boards), checkpoint="plan_done")
         atomic_write_json(job_dir / "boards.json", [
@@ -1066,8 +1680,8 @@ def model_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
         from scripts.add_key_text import add_key_text
         for i, board in enumerate(boards, 1):
             board_images, _board_instruction, board_prompt = board_specs[i - 1]
-            base_progress = 22 + int((i - 1) / len(boards) * 54)
-            begin_phase(job_id, "images", "图片生成", f"正在生成第 {i}/{len(boards)} 张分镜图", base_progress)
+            base_progress = 36 + int((i - 1) / len(boards) * 40)
+            begin_phase(job_id, "images", "PPT 插图", f"正在按第 {i}/{len(boards)} 页已确定的插图槽位生成插画", base_progress)
             stem = f"board-{i:02d}"
             image = job_dir / f"{stem}.png"
             source_image = job_dir / f"{stem}.source.png"
@@ -1078,9 +1692,12 @@ def model_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
                     partial_image.unlink(missing_ok=True)
                     try:
                         generate_image(config, board_prompt, partial_image, board_images, job_id)
+                        ensure_job_active(job_id)
                         if valid_image_file(partial_image):
                             break
                         raise RuntimeError("模型返回的图片文件无效")
+                    except JobCancelled:
+                        raise
                     except ProviderHTTPError:
                         raise
                     except (RuntimeError, ValueError, OSError) as exc:
@@ -1092,7 +1709,7 @@ def model_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
                 if not valid_image_file(partial_image):
                     raise RuntimeError(f"第 {i} 张分镜图连续 3 次生成无效：{last_image_error}")
                 partial_image.replace(source_image)
-            if include_key_text:
+            if include_key_text and not infographic:
                 add_key_text(source_image, [str(scene.get("key_text", "")) for scene in board], image)
             else:
                 shutil.copy2(source_image, image)
@@ -1100,60 +1717,99 @@ def model_stage(job_id: str, copy: str, style: str, reference: Path, scenes_per_
         queue_for_stage(job_id, "render", "准备本地渲染", 78)
         start_render_task(render_generated_job, job_id, scenes, boards, pen_text, include_subtitles, stroke_detail, duration)
     except Exception as exc:
-        fail_job(job_id, "模型调用失败", exc)
+        current_phase = str(JOBS.get(job_id, {}).get("current_phase") or "")
+        stage = {
+            "alignment": "短语时间表失败",
+            "planning": "内容结构失败",
+            "deck": "Remotion PPT 结构失败",
+            "images": "PPT 插图生成失败",
+        }.get(current_phase, "模型调用失败")
+        fail_job(job_id, stage, exc)
 
 
 def render_generated_job(job_id: str, scenes: list[dict[str, Any]], boards: list[list[dict[str, Any]]], pen_text: str, include_subtitles: bool, stroke_detail: str, duration: float) -> None:
     job_dir = JOBS_DIR / job_id
     try:
-        hand_asset = make_branded_hand(pen_text, job_dir / "hand-branded.png")
-        videos: list[Path] = []
-        for i, board in enumerate(boards, 1):
-            progress = 78 + int((i - 1) / len(boards) * 12)
-            begin_phase(job_id, "drawing", "手绘渲染", f"正在绘制第 {i}/{len(boards)} 张分镜图", progress)
-            stem = f"board-{i:02d}"
-            image = job_dir / f"{stem}.png"
-            annotation = job_dir / f"{stem}.annotation.json"
-            video = job_dir / f"{stem}.mp4"
-            write_board_annotation(board, image, annotation, i)
-            expected_ms = sum(int(scene["duration_ms"]) for scene in board)
-            if not valid_timed_video(video, expected_ms):
-                video.unlink(missing_ok=True)
-                partial_video = job_dir / f"{stem}.partial.mp4"
-                partial_video.unlink(missing_ok=True)
-                run([str(PYTHON), str(ROOT / "scripts" / "render_stream_whiteboard.py"), str(image), str(annotation), str(partial_video), str(hand_asset), "--ink-path", "skeleton", "--stroke-detail", stroke_detail, "--color-fill", "contour-wipe"])
-                if not valid_media_file(partial_video):
-                    raise RuntimeError(f"第 {i} 段手绘视频无效")
-                partial_video.replace(video)
-            videos.append(video)
-            update_job(job_id, checkpoint="render", completed_videos=i)
+        infographic = is_infographic_job(job_id)
+        duration_ms = round(duration * 1000)
+        if infographic:
+            begin_phase(job_id, "drawing", "Remotion 渲染", "正在按真实旁白时间编排动态信息图", 80)
+            silent = job_dir / "silent-remotion-v1.mp4"
+            final = job_dir / "final-remotion-v1.mp4"
+            if not valid_timed_video(silent, duration_ms):
+                partial_silent = job_dir / "silent-remotion-v1.partial.mp4"
+                partial_silent.unlink(missing_ok=True)
+                props_path = job_dir / "remotion-props.json"
+                atomic_write_json(
+                    props_path,
+                    remotion_infographic_props(
+                        scenes,
+                        str(JOBS.get(job_id, {}).get("style") or DEFAULT_STYLE),
+                        duration_ms,
+                        include_subtitles,
+                    ),
+                )
+                run([
+                    str(NODE),
+                    str(REMOTION_RENDERER / "render.mjs"),
+                    str(props_path),
+                    str(partial_silent),
+                    str(job_dir),
+                ], cwd=REMOTION_RENDERER, job_id=job_id)
+                if not valid_timed_video(partial_silent, duration_ms):
+                    raise RuntimeError("Remotion 信息图视频时长与真实旁白不一致")
+                partial_silent.replace(silent)
+            update_job(job_id, checkpoint="render", completed_videos=len(scenes), render_engine="remotion-semantic-v1")
+        else:
+            hand_asset = make_branded_hand(pen_text, job_dir / "hand-branded.png")
+            videos: list[Path] = []
+            for i, board in enumerate(boards, 1):
+                progress = 78 + int((i - 1) / len(boards) * 12)
+                begin_phase(job_id, "drawing", "手绘渲染", f"正在绘制第 {i}/{len(boards)} 张分镜图", progress)
+                stem = f"board-{i:02d}"
+                image = job_dir / f"{stem}.png"
+                annotation = job_dir / f"{stem}.annotation.json"
+                video = job_dir / f"{stem}.mp4"
+                expected_ms = sum(int(scene["duration_ms"]) for scene in board)
+                if not valid_timed_video(video, expected_ms):
+                    video.unlink(missing_ok=True)
+                    partial_video = job_dir / f"{stem}.partial.mp4"
+                    partial_video.unlink(missing_ok=True)
+                    write_board_annotation(board, image, annotation, i)
+                    run([str(PYTHON), str(ROOT / "scripts" / "render_stream_whiteboard.py"), str(image), str(annotation), str(partial_video), str(hand_asset), "--ink-path", "skeleton", "--stroke-detail", stroke_detail, "--color-fill", "contour-wipe"], job_id=job_id)
+                    if not valid_media_file(partial_video):
+                        raise RuntimeError(f"第 {i} 段手绘视频无效")
+                    partial_video.replace(video)
+                videos.append(video)
+                update_job(job_id, checkpoint="render", completed_videos=i)
+
+            silent = job_dir / "silent.mp4"
+            final = job_dir / "final.mp4"
+            if not valid_media_file(silent):
+                partial_silent = job_dir / "silent.partial.mp4"
+                partial_silent.unlink(missing_ok=True)
+                run([str(PYTHON), str(ROOT / "scripts" / "merge_scenes.py"), "--inputs", *map(str, videos), "--output", str(partial_silent)], job_id=job_id)
+                if not valid_media_file(partial_silent):
+                    raise RuntimeError("合并后的无声视频无效")
+                partial_silent.replace(silent)
 
         begin_phase(job_id, "compositing", "音画合成", "正在合成声音和画面", 92)
-        silent = job_dir / "silent.mp4"
-        final = job_dir / "final.mp4"
-        if not valid_media_file(silent):
-            partial_silent = job_dir / "silent.partial.mp4"
-            partial_silent.unlink(missing_ok=True)
-            run([str(PYTHON), str(ROOT / "scripts" / "merge_scenes.py"), "--inputs", *map(str, videos), "--output", str(partial_silent)])
-            if not valid_media_file(partial_silent):
-                raise RuntimeError("合并后的无声视频无效")
-            partial_silent.replace(silent)
         if not valid_media_file(final):
-            partial_final = job_dir / "final.partial.mp4"
+            partial_final = job_dir / f"{final.stem}.partial.mp4"
             partial_final.unlink(missing_ok=True)
-            ffmpeg_command = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", "silent.mp4", "-i", "voice.wav", "-map", "0:v:0", "-map", "1:a:0"]
+            ffmpeg_command = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", silent.name, "-i", "voice.wav", "-map", "0:v:0", "-map", "1:a:0"]
             if include_subtitles:
                 subtitles = job_dir / "subtitles.srt"
                 write_subtitles(scenes, subtitles)
                 subtitle_filter = "subtitles=subtitles.srt:force_style='FontName=Microsoft YaHei,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00202020,BorderStyle=1,Outline=2,Shadow=0,MarginV=28,Alignment=2'"
                 ffmpeg_command.extend(["-vf", subtitle_filter])
             ffmpeg_command.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-shortest", partial_final.name])
-            run(ffmpeg_command, cwd=job_dir)
+            run(ffmpeg_command, cwd=job_dir, job_id=job_id)
             if not valid_media_file(partial_final):
                 raise RuntimeError("最终音画文件无效")
             partial_final.replace(final)
         finish_timing(job_id)
-        update_job(job_id, status="done", stage="制作完成", progress=100, result_url=f"/api/jobs/{job_id}/download", duration=duration, scenes=len(scenes), boards=len(boards), can_rerender=True)
+        update_job(job_id, status="done", stage="制作完成", progress=100, result_url=f"/api/jobs/{job_id}/download", result_file=final.name, duration=duration, scenes=len(scenes), boards=len(boards), can_rerender=True)
     except Exception as exc:
         fail_job(job_id, "本地渲染失败", exc)
 
@@ -1191,7 +1847,7 @@ def rerender_job(job_id: str, scenes_per_image: int, pen_text: str, include_key_
                 video.unlink(missing_ok=True)
                 partial_video = job_dir / f"{stem}.partial.mp4"
                 partial_video.unlink(missing_ok=True)
-                run([str(PYTHON), str(ROOT / "scripts" / "render_stream_whiteboard.py"), str(image), str(annotation), str(partial_video), str(hand_asset), "--ink-path", "skeleton", "--stroke-detail", stroke_detail, "--color-fill", "contour-wipe"])
+                run([str(PYTHON), str(ROOT / "scripts" / "render_stream_whiteboard.py"), str(image), str(annotation), str(partial_video), str(hand_asset), "--ink-path", "skeleton", "--stroke-detail", stroke_detail, "--color-fill", "contour-wipe"], job_id=job_id)
                 if not valid_media_file(partial_video):
                     raise RuntimeError(f"第 {i} 段重新渲染视频无效")
                 partial_video.replace(video)
@@ -1203,7 +1859,7 @@ def rerender_job(job_id: str, scenes_per_image: int, pen_text: str, include_key_
         if not valid_media_file(silent):
             partial_silent = job_dir / "silent.partial.mp4"
             partial_silent.unlink(missing_ok=True)
-            run([str(PYTHON), str(ROOT / "scripts" / "merge_scenes.py"), "--inputs", *map(str, videos), "--output", str(partial_silent)])
+            run([str(PYTHON), str(ROOT / "scripts" / "merge_scenes.py"), "--inputs", *map(str, videos), "--output", str(partial_silent)], job_id=job_id)
             if not valid_media_file(partial_silent):
                 raise RuntimeError("重新合并后的无声视频无效")
             partial_silent.replace(silent)
@@ -1218,7 +1874,7 @@ def rerender_job(job_id: str, scenes_per_image: int, pen_text: str, include_key_
                 subtitle_filter = "subtitles=subtitles.srt:force_style='FontName=Microsoft YaHei,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00202020,BorderStyle=1,Outline=2,Shadow=0,MarginV=28,Alignment=2'"
                 ffmpeg_command.extend(["-vf", subtitle_filter])
             ffmpeg_command.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-shortest", partial_final.name])
-            run(ffmpeg_command, cwd=job_dir)
+            run(ffmpeg_command, cwd=job_dir, job_id=job_id)
             if not valid_media_file(partial_final):
                 raise RuntimeError("重新渲染的最终音画文件无效")
             partial_final.replace(final)
@@ -1236,6 +1892,11 @@ def voice_queue_worker(node_index: int) -> None:
             continue
         task = VOICE_QUEUE.get()
         try:
+            job_id = str(task[0])
+            with LOCK:
+                should_run = JOBS.get(job_id, {}).get("status") in {"queued", "running"}
+            if not should_run:
+                continue
             nodes = configured_tts_nodes()
             if node_index >= len(nodes):
                 VOICE_QUEUE.put(task)
@@ -1254,13 +1915,127 @@ def voice_queue_worker(node_index: int) -> None:
             VOICE_QUEUE.task_done()
 
 
+def regenerate_board_image(job_id: str, page: int, prompt: str) -> None:
+    """Regenerate one existing board while keeping the previous revision recoverable."""
+    job_dir = JOBS_DIR / job_id
+    try:
+        with LOCK:
+            selected = JOBS[job_id].copy()
+            source_id = job_id
+            source = selected
+            visited = {job_id}
+            while source.get("job_type") == "rerender" and source.get("rerender_of"):
+                candidate = str(source["rerender_of"])
+                if candidate in visited or candidate not in JOBS:
+                    break
+                visited.add(candidate)
+                source_id = candidate
+                source = JOBS[candidate].copy()
+        plan_path = job_dir / "plan.json"
+        boards_path = job_dir / "boards.json"
+        scenes = json.loads(plan_path.read_text(encoding="utf-8"))
+        if not isinstance(scenes, list) or not scenes:
+            raise RuntimeError("任务的页面结构文件无效")
+        scenes_per_image = 1 if is_infographic_job(job_id) else max(1, min(4, int(selected.get("scenes_per_image", source.get("scenes_per_image", 1)))))
+        boards = [scenes[index:index + scenes_per_image] for index in range(0, len(scenes), scenes_per_image)]
+        if page < 1 or page > len(boards):
+            raise RuntimeError(f"第 {page} 张图片不存在")
+
+        begin_phase(job_id, "images", "单图重生成", f"正在按修改后的提示词重新生成第 {page} 张图片", 50)
+        config = load_config()
+        board = boards[page - 1]
+        reference_images, _reference_instruction, _character_context = custom_reference_context(source_id)
+        style = str(source.get("style") or DEFAULT_STYLE)
+        if style == PAPER_METAPHOR_STYLE and not reference_images:
+            reference_images, _reference_instruction = paper_metaphor_reference_context(board)
+        elif style == OIL_VISUAL_STYLE and not reference_images:
+            reference_images, _reference_instruction = oil_visual_reference_context(board, is_infographic_job(job_id))
+
+        stem = f"board-{page:02d}"
+        image = job_dir / f"{stem}.png"
+        source_image = job_dir / f"{stem}.source.png"
+        partial_image = job_dir / f"{stem}.source.partial.png"
+        last_error: Exception | None = None
+        for attempt in range(3):
+            partial_image.unlink(missing_ok=True)
+            try:
+                generate_image(config, prompt, partial_image, reference_images, job_id)
+                ensure_job_active(job_id)
+                if valid_image_file(partial_image):
+                    break
+                raise RuntimeError("模型返回的图片文件无效")
+            except JobCancelled:
+                raise
+            except ProviderHTTPError:
+                raise
+            except (RuntimeError, ValueError, OSError) as exc:
+                last_error = exc
+                if attempt == 2:
+                    break
+                update_job(job_id, stage=f"第 {page} 张图片结果异常，正在自动重试 {attempt + 2}/3")
+                time.sleep(provider_retry_delay(attempt))
+        if not valid_image_file(partial_image):
+            raise RuntimeError(f"第 {page} 张图片连续 3 次生成无效：{last_error}")
+
+        revision_dir = job_dir / "revisions" / time.strftime("%Y%m%d-%H%M%S")
+        revision_dir.mkdir(parents=True, exist_ok=True)
+        for previous in (source_image, image, boards_path):
+            if previous.exists():
+                shutil.copy2(previous, revision_dir / previous.name)
+        partial_image.replace(source_image)
+        include_key_text = bool(selected.get("include_key_text", source.get("include_key_text", True)))
+        if include_key_text and not is_infographic_job(job_id):
+            from scripts.add_key_text import add_key_text
+            add_key_text(source_image, [str(scene.get("key_text", "")) for scene in board], image)
+        else:
+            shutil.copy2(source_image, image)
+
+        try:
+            manifest = json.loads(boards_path.read_text(encoding="utf-8")) if boards_path.exists() else []
+        except (OSError, json.JSONDecodeError):
+            manifest = []
+        if not isinstance(manifest, list):
+            manifest = []
+        while len(manifest) < len(boards):
+            index = len(manifest)
+            manifest.append({
+                "scene_numbers": list(range(index * scenes_per_image + 1, index * scenes_per_image + len(boards[index]) + 1)),
+                "image_prompt": "",
+            })
+        manifest[page - 1]["image_prompt"] = prompt
+        atomic_write_json(boards_path, manifest)
+        finish_timing(job_id)
+        update_job(
+            job_id,
+            status="done",
+            stage=f"第 {page} 张图片已重新生成，可重新渲染成片",
+            progress=100,
+            completed_boards=len([path for path in job_dir.glob("board-*.png") if re.fullmatch(r"board-\d+\.png", path.name)]),
+            board_regeneration=None,
+            error=None,
+            can_rerender=True,
+        )
+    except Exception as exc:
+        fail_job(job_id, "单图重新生成失败", exc)
+
+
 def model_queue_worker() -> None:
     while True:
         task = MODEL_QUEUE.get()
         try:
-            model_stage(*task)
+            command = str(task[0])
+            job_id = str(task[1]) if command == "regenerate_board" else command
+            with LOCK:
+                should_run = JOBS.get(job_id, {}).get("status") in {"queued", "running"}
+            if not should_run:
+                continue
+            if command == "regenerate_board":
+                regenerate_board_image(job_id, int(task[2]), str(task[3]))
+            else:
+                model_stage(*task)
         except Exception as exc:
-            job_id = str(task[0])
+            command = str(task[0])
+            job_id = str(task[1]) if command == "regenerate_board" else command
             if job_id in JOBS:
                 fail_job(job_id, "模型队列异常", exc)
         finally:
@@ -1272,6 +2047,10 @@ def start_render_task(target: Any, *args: Any) -> None:
 
     def runner() -> None:
         try:
+            with LOCK:
+                should_run = JOBS.get(job_id, {}).get("status") in {"queued", "running"}
+            if not should_run:
+                return
             target(*args)
         finally:
             with RENDER_THREADS_LOCK:
@@ -1301,9 +2080,29 @@ def ensure_pipeline_workers() -> None:
 
 def enqueue_job_from_checkpoint(job_id: str, item: dict[str, Any]) -> None:
     job_dir = JOBS_DIR / job_id
-    if valid_media_file(job_dir / "final.mp4"):
+    pending_regeneration = item.get("board_regeneration")
+    if isinstance(pending_regeneration, dict):
+        page = int(pending_regeneration.get("page", 0))
+        prompt = str(pending_regeneration.get("prompt") or "").strip()
+        if page < 1 or not prompt:
+            raise RuntimeError("待恢复的单图重生成参数无效")
+        queue_for_stage(job_id, "model", f"正在恢复第 {page} 张图片重生成", max(1, int(item.get("progress", 1))))
+        MODEL_QUEUE.put(("regenerate_board", job_id, page, prompt))
+        return
+    result_name = str(item.get("result_file") or "final.mp4")
+    if result_name not in {"final.mp4", "final-remotion-v1.mp4"}:
+        result_name = "final.mp4"
+    if valid_media_file(job_dir / result_name):
         finish_timing(job_id)
-        update_job(job_id, status="done", stage="已从断点恢复完成", progress=100, result_url=f"/api/jobs/{job_id}/download", can_rerender=True)
+        update_job(
+            job_id,
+            status="done",
+            stage="已从断点恢复完成",
+            progress=100,
+            result_url=f"/api/jobs/{job_id}/download",
+            result_file=result_name,
+            can_rerender=True,
+        )
         return
     scenes_per_image = max(1, min(4, int(item.get("scenes_per_image", 1))))
     pen_text = str(item.get("pen_text", "")).strip()[:12]
@@ -1313,7 +2112,13 @@ def enqueue_job_from_checkpoint(job_id: str, item: dict[str, Any]) -> None:
     stroke_detail = stroke_detail if stroke_detail in {"light", "standard", "detailed", "full"} else "detailed"
     if item.get("job_type") == "rerender":
         queue_for_stage(job_id, "render", "正在恢复本地渲染", max(1, int(item.get("progress", 1))))
-        start_render_task(rerender_job, job_id, scenes_per_image, pen_text, include_key_text, include_subtitles, stroke_detail)
+        if is_infographic_job(job_id):
+            scenes = json.loads((job_dir / "plan.json").read_text(encoding="utf-8"))
+            duration = probe_duration(job_dir / "voice.wav")
+            boards = [[scene] for scene in scenes]
+            start_render_task(render_generated_job, job_id, scenes, boards, pen_text, include_subtitles, stroke_detail, duration)
+        else:
+            start_render_task(rerender_job, job_id, scenes_per_image, pen_text, include_key_text, include_subtitles, stroke_detail)
         return
     copy = str(item.get("copy", "")).strip()
     if not copy:
@@ -1359,7 +2164,7 @@ def health() -> dict[str, Any]:
             for index, url in enumerate(nodes)
         ]
     return {
-        "status": "ok", "renderer": PYTHON.exists(), "tts": nodes,
+        "status": "ok", "pipeline_version": PIPELINE_VERSION, "renderer": PYTHON.exists(), "tts": nodes,
         "queues": {
             "voice": {"concurrency": len(nodes), "waiting": VOICE_QUEUE.qsize(), "nodes": voice_nodes},
             "model": {"concurrency": MODEL_CONCURRENCY, "waiting": MODEL_QUEUE.qsize()},
@@ -1484,7 +2289,7 @@ async def create_job(
     reference_path = job_dir / f"reference{suffix}"
     with reference_path.open("wb") as target:
         shutil.copyfileobj(reference.file, target)
-    reference_mode = "custom" if reference_mode == "custom" else "standard"
+    reference_mode = reference_mode if reference_mode in {"custom", "infographic"} else "standard"
     visual_references: dict[str, Any] = {}
     if reference_mode == "custom":
         uploads = character_references or []
@@ -1555,7 +2360,8 @@ async def create_job(
             "created_at": now, "started_at": now, "timings": {},
             "queue_stage": "voice", "queue_order": time.time_ns(),
             "client_ip": request_client_ip(request),
-            "job_type": "generate", "style": style, "scenes_per_image": scenes_per_image,
+            "job_type": "infographic" if reference_mode == "infographic" else "generate", "style": style, "scenes_per_image": scenes_per_image,
+            "pipeline_version": PIPELINE_VERSION if reference_mode == "infographic" else "standard_v1",
             "reference_mode": reference_mode, "character_count": len(visual_references.get("characters", [])),
             "visual_references": visual_references,
             "task_name": task_name,
@@ -1576,6 +2382,217 @@ def list_jobs(limit: int = 20) -> dict[str, Any]:
     with LOCK:
         ids = sorted(JOBS, key=lambda item: float(JOBS[item].get("created_at", 0)), reverse=True)[:max(1, min(100, limit))]
     return {"items": [job_snapshot(job_id) for job_id in ids]}
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict[str, Any]:
+    now = time.time()
+    with LOCK:
+        if job_id not in JOBS:
+            raise HTTPException(404, "任务不存在")
+        item = JOBS[job_id]
+        if item.get("status") not in {"queued", "running"}:
+            raise HTTPException(400, "该任务当前不需要取消")
+        current = item.get("current_phase")
+        started = item.get("phase_started_at")
+        if current and started:
+            entry = item.setdefault("timings", {}).setdefault(current, {"label": current, "seconds": 0.0})
+            entry["seconds"] = float(entry.get("seconds", 0.0)) + max(0.0, now - float(started))
+        item.update(
+            status="cancelled",
+            stage="任务已取消",
+            error=None,
+            cancel_requested=True,
+            cancelled_at=now,
+            finished_at=now,
+            current_phase=None,
+            phase_started_at=None,
+            total_elapsed=max(0.0, now - float(item.get("started_at", now))),
+        )
+        _persist_job_locked(job_id)
+    terminate_running_process(job_id)
+    return job_snapshot(job_id)
+
+
+def parameter_source(job_id: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    with LOCK:
+        if job_id not in JOBS:
+            raise HTTPException(404, "历史任务不存在")
+        selected = JOBS[job_id].copy()
+        source_id = job_id
+        source = selected
+        visited = {job_id}
+        while source.get("job_type") == "rerender" and source.get("rerender_of"):
+            candidate = str(source["rerender_of"])
+            if candidate in visited or candidate not in JOBS:
+                break
+            visited.add(candidate)
+            source_id = candidate
+            source = JOBS[candidate].copy()
+    return source_id, source, selected
+
+
+def asset_descriptor(job_id: str, filename: str | None) -> dict[str, str] | None:
+    if not filename:
+        return None
+    path = JOBS_DIR / job_id / filename
+    if not path.is_file():
+        return None
+    return {
+        "name": filename,
+        "url": f"/api/jobs/{job_id}/assets/{filename}",
+        "content_type": mimetypes.guess_type(filename)[0] or "application/octet-stream",
+    }
+
+
+@app.get("/api/jobs/{job_id}/parameters")
+def get_job_parameters(job_id: str) -> dict[str, Any]:
+    source_id, source, selected = parameter_source(job_id)
+    source_dir = JOBS_DIR / source_id
+    reference = next(iter(sorted(source_dir.glob("reference.*"))), None)
+    visual_references = source.get("visual_references") if isinstance(source.get("visual_references"), dict) else {}
+    style_filename = str(visual_references.get("style_image") or "")
+    characters: list[dict[str, Any]] = []
+    for index, raw in enumerate(visual_references.get("characters") or [], 1):
+        if not isinstance(raw, dict):
+            continue
+        images = [
+            descriptor
+            for name in raw.get("images") or []
+            if (descriptor := asset_descriptor(source_id, str(name))) is not None
+        ]
+        characters.append({
+            "name": str(raw.get("name") or f"人物 {index}"),
+            "description": str(raw.get("description") or ""),
+            "images": images,
+        })
+    reference_mode = str(source.get("reference_mode") or "standard")
+    if reference_mode not in {"standard", "custom", "infographic"}:
+        reference_mode = "custom" if visual_references else "standard"
+    return {
+        "job_id": job_id,
+        "source_job_id": source_id,
+        "copy": str(source.get("copy") or ""),
+        "reference_mode": reference_mode,
+        "style": str(source.get("style") or DEFAULT_STYLE),
+        "scenes_per_image": max(1, min(4, int(source.get("scenes_per_image", 1)))),
+        "task_name": str(selected.get("task_name") or source.get("task_name") or ""),
+        "pen_text": str(selected.get("pen_text", source.get("pen_text", ""))),
+        "include_key_text": bool(selected.get("include_key_text", source.get("include_key_text", True))),
+        "include_subtitles": bool(selected.get("include_subtitles", source.get("include_subtitles", True))),
+        "stroke_detail": str(selected.get("stroke_detail", source.get("stroke_detail", "detailed"))),
+        "reference": asset_descriptor(source_id, reference.name if reference else None),
+        "style_reference": asset_descriptor(source_id, style_filename),
+        "characters": characters,
+    }
+
+
+@app.get("/api/jobs/{job_id}/assets/{filename}")
+def get_job_input_asset(job_id: str, filename: str) -> FileResponse:
+    if Path(filename).name != filename:
+        raise HTTPException(404, "素材不存在")
+    with LOCK:
+        item = JOBS.get(job_id)
+        if item is None:
+            raise HTTPException(404, "历史任务不存在")
+        visual_references = item.get("visual_references") if isinstance(item.get("visual_references"), dict) else {}
+    allowed = {path.name for path in (JOBS_DIR / job_id).glob("reference.*")}
+    style_filename = str(visual_references.get("style_image") or "")
+    if style_filename:
+        allowed.add(style_filename)
+    for character in visual_references.get("characters") or []:
+        if isinstance(character, dict):
+            allowed.update(str(name) for name in character.get("images") or [])
+    if filename not in allowed:
+        raise HTTPException(404, "素材不存在")
+    path = JOBS_DIR / job_id / filename
+    if not path.is_file():
+        raise HTTPException(404, "素材不存在")
+    return FileResponse(path, media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream", filename=filename)
+
+
+@app.get("/api/jobs/{job_id}/gallery")
+def get_job_gallery(job_id: str) -> dict[str, Any]:
+    if job_id not in JOBS:
+        raise HTTPException(404, "历史任务不存在")
+    job_dir = JOBS_DIR / job_id
+    images = sorted(
+        (path for path in job_dir.glob("board-*.png") if re.fullmatch(r"board-\d+\.png", path.name)),
+        key=lambda path: int(re.search(r"\d+", path.stem).group()) if re.search(r"\d+", path.stem) else 0,
+    )
+    try:
+        manifest = json.loads((job_dir / "boards.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        manifest = []
+    if not isinstance(manifest, list):
+        manifest = []
+    items: list[dict[str, Any]] = []
+    for path in images:
+        match = re.search(r"\d+", path.stem)
+        page = int(match.group()) if match else len(items) + 1
+        board = manifest[page - 1] if page <= len(manifest) and isinstance(manifest[page - 1], dict) else {}
+        items.append({
+            "name": path.name,
+            "page": page,
+            "url": f"/api/jobs/{job_id}/images/{path.name}?v={path.stat().st_mtime_ns}",
+            "size": path.stat().st_size,
+            "prompt": str(board.get("image_prompt") or ""),
+            "scene_numbers": board.get("scene_numbers") if isinstance(board.get("scene_numbers"), list) else [],
+        })
+    return {
+        "job_id": job_id,
+        "items": items,
+    }
+
+
+@app.get("/api/jobs/{job_id}/images/{filename}")
+def get_job_generated_image(job_id: str, filename: str) -> FileResponse:
+    if job_id not in JOBS or not re.fullmatch(r"board-\d+\.png", filename):
+        raise HTTPException(404, "图片不存在")
+    path = JOBS_DIR / job_id / filename
+    if not valid_image_file(path):
+        raise HTTPException(404, "图片不存在或尚未生成")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.post("/api/jobs/{job_id}/boards/{page}/regenerate")
+def regenerate_job_board(job_id: str, page: int, payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    prompt = str(payload.get("prompt") or "").strip()
+    if len(prompt) < 5:
+        raise HTTPException(400, "提示词至少需要 5 个字")
+    if len(prompt) > 6000:
+        raise HTTPException(400, "提示词不能超过 6000 个字")
+    job_dir = JOBS_DIR / job_id
+    with LOCK:
+        if job_id not in JOBS:
+            raise HTTPException(404, "历史任务不存在")
+        source = JOBS[job_id]
+        if source.get("status") in {"queued", "running"}:
+            raise HTTPException(409, "当前任务仍在执行，请完成或取消后再重生成图片")
+        image = job_dir / f"board-{page:02d}.png"
+        if page < 1 or not valid_image_file(image):
+            raise HTTPException(404, "要重生成的图片不存在")
+        pending = sum(1 for item in JOBS.values() if item.get("status") in {"queued", "running"})
+        if pending >= MAX_ACTIVE_AND_QUEUED:
+            raise HTTPException(429, f"当前已有 {pending} 个任务，请稍后再试")
+        source.update(
+            status="queued",
+            stage=f"第 {page} 张图片等待重生成",
+            progress=45,
+            error=None,
+            finished_at=None,
+            current_phase=None,
+            phase_started_at=None,
+            queue_stage="model",
+            queue_order=time.time_ns(),
+            client_ip=request_client_ip(request),
+            can_rerender=False,
+            board_regeneration={"page": page, "prompt": prompt},
+        )
+        _persist_job_locked(job_id)
+    MODEL_QUEUE.put(("regenerate_board", job_id, page, prompt))
+    ensure_pipeline_workers()
+    return job_snapshot(job_id)
 
 
 @app.post("/api/jobs/{job_id}/retry")
@@ -1642,6 +2659,8 @@ def create_rerender(job_id: str, payload: dict[str, Any], request: Request) -> d
             "queue_stage": "render", "queue_order": time.time_ns(),
             "client_ip": request_client_ip(request),
             "job_type": "rerender", "rerender_of": job_id, "style": source.get("style", ""),
+            "reference_mode": source.get("reference_mode", "standard"),
+            "pipeline_version": PIPELINE_VERSION if is_infographic_job(job_id) else source.get("pipeline_version", "standard_v1"),
             "task_name": task_name,
             "scenes_per_image": scenes_per_image, "pen_text": pen_text,
             "include_key_text": include_key_text, "include_subtitles": include_subtitles,
@@ -1649,7 +2668,13 @@ def create_rerender(job_id: str, payload: dict[str, Any], request: Request) -> d
             "current_phase": None, "phase_started_at": None, "total_elapsed": 0.0,
         }
         _persist_job_locked(new_id)
-    start_render_task(rerender_job, new_id, scenes_per_image, pen_text, include_key_text, include_subtitles, detail)
+    if is_infographic_job(new_id):
+        scenes = json.loads((target_dir / "plan.json").read_text(encoding="utf-8"))
+        duration = probe_duration(target_dir / "voice.wav")
+        boards = [[scene] for scene in scenes]
+        start_render_task(render_generated_job, new_id, scenes, boards, pen_text, include_subtitles, detail, duration)
+    else:
+        start_render_task(rerender_job, new_id, scenes_per_image, pen_text, include_key_text, include_subtitles, detail)
     return job_snapshot(new_id)
 
 
@@ -1662,7 +2687,13 @@ def get_job(job_id: str) -> dict[str, Any]:
 
 @app.get("/api/jobs/{job_id}/download")
 def download_job(job_id: str) -> FileResponse:
-    path = JOBS_DIR / job_id / "final.mp4"
+    item = JOBS.get(job_id)
+    if not item:
+        raise HTTPException(404, "任务不存在")
+    result_name = str(item.get("result_file") or "final.mp4")
+    if result_name not in {"final.mp4", "final-remotion-v1.mp4"}:
+        raise HTTPException(404, "视频文件记录无效")
+    path = JOBS_DIR / job_id / result_name
     if not path.exists():
         raise HTTPException(404, "视频尚未生成")
     return FileResponse(path, media_type="video/mp4", filename=f"whiteboard-{job_id}.mp4")

@@ -8,16 +8,45 @@ $backendOutputLog = Join-Path $stateDir "backend-output.log"
 $backendErrorLog = Join-Path $stateDir "backend-error.log"
 $frontendOutputLog = Join-Path $stateDir "frontend-output.log"
 $frontendErrorLog = Join-Path $stateDir "frontend-error.log"
+$expectedPipelineVersion = "narrated_deck_v8_oil_visual"
+$backendUpdateDeferred = $false
 
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 Remove-Item -LiteralPath $launcherErrorLog -Force -ErrorAction SilentlyContinue
 
 function Test-BackendReady {
-    try {
-        Invoke-RestMethod "http://127.0.0.1:18765/api/health" -TimeoutSec 2 | Out-Null
+    if ($script:backendUpdateDeferred) {
         return $true
+    }
+    try {
+        $health = Invoke-RestMethod "http://127.0.0.1:18765/api/health" -TimeoutSec 2
+        return $health.pipeline_version -eq $expectedPipelineVersion
     } catch {
         return $false
+    }
+}
+
+function Stop-StaleBackend {
+    try {
+        $health = Invoke-RestMethod "http://127.0.0.1:18765/api/health" -TimeoutSec 2
+        if ($health.pipeline_version -eq $expectedPipelineVersion) {
+            return
+        }
+        $jobs = Invoke-RestMethod "http://127.0.0.1:18765/api/jobs?limit=100" -TimeoutSec 3
+        $busyJobs = @($jobs.items | Where-Object { $_.status -eq "running" -or $_.status -eq "queued" })
+        if ($busyJobs.Count -gt 0) {
+            $script:backendUpdateDeferred = $true
+            Write-Host "A video is still being generated. The pipeline upgrade is deferred to protect it." -ForegroundColor Yellow
+            return
+        }
+        $listener = Get-NetTCPConnection -LocalPort 18765 -State Listen -ErrorAction Stop
+        if ($listener.OwningProcess) {
+            Write-Host "An older video pipeline is running. Restarting it..." -ForegroundColor Yellow
+            Stop-Process -Id $listener.OwningProcess -Force
+            Start-Sleep -Milliseconds 700
+        }
+    } catch {
+        # No responding stale backend; the normal startup path handles this.
     }
 }
 
@@ -43,8 +72,13 @@ try {
         Write-Host "LAN URL: http://${lanAddress}:13000" -ForegroundColor Green
     }
 
+    Stop-StaleBackend
     if (Test-BackendReady) {
-        Write-Host "Backend is already running." -ForegroundColor DarkGray
+        if ($backendUpdateDeferred) {
+            Write-Host "Backend is busy; run this launcher again after the current task finishes to load the upgrade." -ForegroundColor Yellow
+        } else {
+            Write-Host "Backend is already running." -ForegroundColor DarkGray
+        }
     } else {
         Remove-Item -LiteralPath $backendOutputLog, $backendErrorLog -Force -ErrorAction SilentlyContinue
         Start-Process -FilePath $python -ArgumentList "-m", "uvicorn", "webapp.server:app", "--host", "127.0.0.1", "--port", "18765" -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $backendOutputLog -RedirectStandardError $backendErrorLog

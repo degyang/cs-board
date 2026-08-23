@@ -19,6 +19,14 @@ web/.wrangler/
 web/coverage/
 web/outputs/
 web/work/
+web/*.tsbuildinfo
+
+# Remotion dependencies and downloaded alignment models
+video_renderer/node_modules/
+video_renderer/.cache/
+video_renderer/dist/
+.npm-cache/
+.pip-cache/
 
 # Runtime media and local projects
 assets/whiteboard/
