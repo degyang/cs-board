@@ -167,9 +167,3 @@ Pop-Location
 ## 许可证
 
 本项目采用 [MIT License](LICENSE)。
-
-## 关于作者
-
-一个爱养鱼的老登 / AI Builder / 用 AI 团队打造一人公司。
-
-抖音、B站、公众号：江哥是老登啊
