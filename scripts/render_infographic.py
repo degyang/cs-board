@@ -10,20 +10,13 @@ from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from scripts.font_utils import load_system_font
 
 W, H, FPS = 1920, 1080, 30
 
 
 def font(size: int, serif: bool = False, bold: bool = False) -> ImageFont.FreeTypeFont:
-    root = Path("C:/Windows/Fonts")
-    names = (["simhei.ttf", "msyhbd.ttc"] if bold else
-             ["simkai.ttf", "simsun.ttc"] if serif else
-             ["msyh.ttc", "simhei.ttf"])
-    for name in names:
-        path = root / name
-        if path.exists():
-            return ImageFont.truetype(str(path), size=size)
-    return ImageFont.load_default()
+    return load_system_font(size, serif=serif, bold=bold)
 
 
 def palette(style: str) -> dict[str, tuple[int, int, int]]:

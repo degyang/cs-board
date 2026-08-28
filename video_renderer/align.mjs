@@ -2,6 +2,7 @@ import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {fileURLToPath} from 'node:url';
 import {
   downloadWhisperModel,
   installWhisperCpp,
@@ -14,7 +15,7 @@ if (!inputArgument || !outputArgument) {
   throw new Error('用法：node align.mjs <voice.wav> <captions.json>');
 }
 
-const rendererRoot = path.dirname(new URL(import.meta.url).pathname.replace(/^\/(.:)/, '$1'));
+const rendererRoot = path.dirname(fileURLToPath(import.meta.url));
 const inputPath = path.resolve(inputArgument);
 const outputPath = path.resolve(outputArgument);
 const cacheRoot = path.join(rendererRoot, '.cache');

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/project.schema.json",
+  "type": "object",
+  "required": ["schema_version", "project_id", "title", "status", "pipeline_id", "engine", "created_at", "updated_at", "active_run_id", "revision"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "project_id": {"$ref": "common.schema.json#/$defs/id"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "status": {"enum": ["draft", "ready", "running", "succeeded", "failed", "cancelled"]},
+    "pipeline_id": {"type": "string", "minLength": 1},
+    "engine": {"$ref": "common.schema.json#/$defs/engine"},
+    "created_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "updated_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "active_run_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/id"}, {"type": "null"}]},
+    "revision": {"type": "integer", "minimum": 1}
+  }
+}

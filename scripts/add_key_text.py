@@ -7,14 +7,7 @@ from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFont, ImageStat
 
-
-FONT_CANDIDATES = (
-    Path("C:/Windows/Fonts/msyhbd.ttc"),
-    Path("C:/Windows/Fonts/msyh.ttc"),
-    Path("C:/Windows/Fonts/simhei.ttf"),
-    Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"),
-    Path("/System/Library/Fonts/PingFang.ttc"),
-)
+from scripts.font_utils import load_system_font
 
 
 def clean_key_text(value: str, limit: int = 10) -> str:
@@ -24,8 +17,7 @@ def clean_key_text(value: str, limit: int = 10) -> str:
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    path = next((candidate for candidate in FONT_CANDIDATES if candidate.exists()), None)
-    return ImageFont.truetype(str(path), size) if path else ImageFont.load_default()
+    return load_system_font(size, bold=True)
 
 
 def _dark_background(image: Image.Image) -> bool:

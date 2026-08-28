@@ -62,7 +62,7 @@
 
 ### 环境要求
 
-- Windows 10/11（已提供一键启动脚本）
+- Windows 10/11、WSL 2（Ubuntu 等）或 macOS
 - Python 3.11+
 - Node.js 22.13+
 - FFmpeg 与 FFprobe，且已加入系统 `PATH`
@@ -76,6 +76,8 @@ ffmpeg -version
 ffprobe -version
 ```
 
+所有运行时依赖必须安装在实际启动项目的系统中。例如在 WSL 中启动时，Python、Node、FFmpeg 和字体都应安装在该 WSL 发行版中；不要混用 Windows 的 `.venv` 或 `node_modules`。**推荐每个系统使用各自的 Git 克隆目录**；若必须共用目录，在切换系统前删除 `.venv`、`web/node_modules` 与 `video_renderer/node_modules` 后重新安装，避免原生依赖互相污染。
+
 ### Windows
 
 在项目根目录执行一次安装：
@@ -86,15 +88,48 @@ python scripts/prepare_env.py
 Push-Location web
 npm ci
 Pop-Location
+Push-Location video_renderer
+npm ci
+Pop-Location
 ```
 
-然后启动工作台：
+双击 `启动白板工坊.bat`，或执行：
 
 ```powershell
 .\start-webapp.ps1
 ```
 
-脚本会启动前后端并打开 [http://127.0.0.1:13000/](http://127.0.0.1:13000/)。同一局域网设备也可以通过脚本输出的地址访问。
+### WSL 2 / Linux
+
+在 WSL 终端进入项目目录后执行（Ubuntu/Debian 的字体包名如下）：
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg fonts-noto-cjk
+python3 scripts/prepare_env.py
+.venv/bin/python -m pip install -r webapp/requirements.txt
+(cd web && npm ci)
+(cd video_renderer && npm ci)
+./start-webapp.sh
+```
+
+如果项目当前位于 `/mnt/c/...`，可以运行，但视频渲染涉及大量小文件，建议将项目放到 WSL 的 Linux 文件系统（如 `~/Projects/cs-board`）以获得更稳定、更快的 I/O。WSL 启动后可直接在 Windows 浏览器打开 `http://127.0.0.1:13000/`；局域网访问还需按你的 WSL 网络模式或 Windows 防火墙规则放行端口。
+
+### macOS
+
+先安装 [Homebrew](https://brew.sh/)，再执行：
+
+```bash
+brew install python@3.11 node ffmpeg
+python3 scripts/prepare_env.py
+.venv/bin/python -m pip install -r webapp/requirements.txt
+(cd web && npm ci)
+(cd video_renderer && npm ci)
+chmod +x start-webapp.sh
+./start-webapp.sh
+```
+
+macOS 自带苹方字体；Linux 请安装 `fonts-noto-cjk`，否则图片中的中文重点词可能无法正确绘制。启动器会启动前后端并打开 [http://127.0.0.1:13000/](http://127.0.0.1:13000/)。同一局域网设备可通过启动器输出的地址访问。
 
 ### 首次配置
 
@@ -136,13 +171,17 @@ Pop-Location
 
 ## 开发验证
 
-```powershell
+```bash
 # 前端构建与页面验证
-Push-Location web
-npm test
-Pop-Location
+(cd web && npm test)
 
 # 后端任务队列、断点恢复与时间线测试
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Windows PowerShell 请将最后一行替换为：
+
+```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
@@ -157,7 +196,9 @@ Pop-Location
 ├── video_renderer/       # Remotion 动态信息图渲染器
 ├── web/                  # React 前端
 ├── webapp/               # FastAPI 后端
-└── start-webapp.ps1      # Windows 一键启动
+├── start-webapp.py       # 跨平台启动逻辑
+├── start-webapp.sh       # WSL / Linux / macOS 入口
+└── start-webapp.ps1      # Windows PowerShell 入口
 ```
 
 ## 贡献

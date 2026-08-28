@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/common.schema.json",
+  "title": "Mountain common definitions",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-fA-F0-9]{8,}$"
+    },
+    "entrypoint": {
+      "enum": ["web", "desktop", "cli", "skill"]
+    },
+    "engine": {
+      "enum": ["whiteboard", "infographic-remotion"]
+    },
+    "artifact_metadata": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "artifact_id",
+        "artifact_key",
+        "project_id",
+        "run_id",
+        "pipeline_id",
+        "engine",
+        "producer_stage",
+        "producer_version",
+        "created_at",
+        "input_fingerprint"
+      ],
+      "properties": {
+        "schema_version": {"type": "integer", "const": 1},
+        "artifact_type": {"type": "string", "minLength": 1},
+        "artifact_id": {"$ref": "#/$defs/id"},
+        "artifact_key": {"type": "string", "minLength": 1},
+        "project_id": {"$ref": "#/$defs/id"},
+        "run_id": {"$ref": "#/$defs/id"},
+        "pipeline_id": {"type": "string", "minLength": 1},
+        "engine": {"$ref": "#/$defs/engine"},
+        "producer_stage": {"type": "string", "minLength": 1},
+        "producer_version": {"type": "string", "minLength": 1},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "input_fingerprint": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source_range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

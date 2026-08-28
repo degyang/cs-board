@@ -27,7 +27,7 @@ STATE_DIR = ROOT / ".webapp"
 JOBS_DIR = STATE_DIR / "jobs"
 CONFIG_PATH = STATE_DIR / "config.json"
 PREFERENCES_PATH = STATE_DIR / "preferences.json"
-PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
+PYTHON = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 NODE = shutil.which("node") or "node"
 REMOTION_RENDERER = ROOT / "video_renderer"
 HAND = ROOT / "assets" / "drawing-hand-clean.png"
@@ -1410,8 +1410,9 @@ def make_branded_hand(text: str, target: Path) -> Path:
         return HAND
     hand = Image.open(HAND).convert("RGBA")
     label = text.strip()[:12]
-    font_paths = [Path("C:/Windows/Fonts/msyhbd.ttc"), Path("C:/Windows/Fonts/msyh.ttc"), Path("C:/Windows/Fonts/simhei.ttf")]
-    font_path = next((p for p in font_paths if p.exists()), None)
+    from scripts.font_utils import system_font_path
+
+    font_path = system_font_path(bold=True)
     font = ImageFont.truetype(str(font_path), 58) if font_path else ImageFont.load_default()
     strip = Image.new("RGBA", (430, 104), (0, 0, 0, 0))
     draw = ImageDraw.Draw(strip)

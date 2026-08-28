@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/run.schema.json",
+  "type": "object",
+  "required": ["schema_version", "run_id", "project_id", "trace_id", "entrypoint", "command_ids", "status", "target_stage", "started_at", "finished_at", "stages", "warnings"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "run_id": {"$ref": "common.schema.json#/$defs/id"},
+    "project_id": {"$ref": "common.schema.json#/$defs/id"},
+    "trace_id": {"$ref": "common.schema.json#/$defs/id"},
+    "entrypoint": {"$ref": "common.schema.json#/$defs/entrypoint"},
+    "command_ids": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/id"}},
+    "status": {"enum": ["pending", "running", "succeeded", "failed", "cancelled"]},
+    "target_stage": {"type": "string", "minLength": 1},
+    "started_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "finished_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/timestamp"}, {"type": "null"}]},
+    "stages": {"type": "object", "additionalProperties": {"type": "object", "required": ["status", "attempt"], "properties": {"status": {"enum": ["pending", "running", "succeeded", "failed", "cancelled", "stale", "skipped"]}, "attempt": {"type": "integer", "minimum": 0}}}},
+    "warnings": {"type": "array", "items": {"type": "object", "required": ["code", "message"], "properties": {"code": {"type": "string"}, "unit_id": {"$ref": "common.schema.json#/$defs/id"}, "message": {"type": "string"}}}}
+  }
+}

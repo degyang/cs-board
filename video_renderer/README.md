@@ -6,7 +6,7 @@
 
 清单页的 `relationshipType` 为 `none`，不会绘制箭头。只有原文明确表达步骤或因果关系时，渲染器才允许显示方向连接。
 
-首次运行会下载 Windows Whisper.cpp 1.5.5 二进制和 multilingual `medium` 模型。严格中文旁白对齐优先保证准确率；资源受限时可通过 `INFOGRAPHIC_WHISPER_MODEL=small` 改用较小模型。
+首次运行会按当前系统下载兼容的 Whisper.cpp 1.5.5 二进制和 multilingual `medium` 模型。严格中文旁白对齐优先保证准确率；资源受限时可通过 `INFOGRAPHIC_WHISPER_MODEL=small` 改用较小模型。
 
 安装与检查：
 

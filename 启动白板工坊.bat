@@ -22,16 +22,22 @@ if errorlevel 1 (
 )
 
 if not exist "web\node_modules" (
-    echo Frontend dependencies were not found. Run npm install in the web folder first.
+    echo Frontend dependencies were not found. Run npm ci in the web folder first.
+    pause
+    exit /b 1
+)
+
+if not exist "video_renderer\node_modules" (
+    echo Renderer dependencies were not found. Run npm ci in the video_renderer folder first.
     pause
     exit /b 1
 )
 
 echo Starting the whiteboard video workshop...
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-webapp.ps1"
+".venv\Scripts\python.exe" "%~dp0start-webapp.py"
 if errorlevel 1 (
     echo.
-    echo Startup failed. See .webapp\launcher-error.log for details.
+    echo Startup failed. See .webapp\backend-error.log or .webapp\frontend-error.log for details.
     pause
     exit /b 1
 )
