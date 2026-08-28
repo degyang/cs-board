@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/final-manifest.schema.json",
+  "allOf": [{"$ref": "common.schema.json#/$defs/artifact_metadata"}],
+  "type": "object",
+  "required": ["final_path", "sha256", "container", "video_codec", "audio_codec", "duration_ms", "av_duration_delta_ms", "validation"],
+  "properties": {
+    "artifact_type": {"const": "final-manifest"},
+    "artifact_key": {"const": "output.final-manifest"},
+    "final_path": {"type": "string", "minLength": 1},
+    "sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "container": {"type": "string", "minLength": 1},
+    "video_codec": {"type": "string", "minLength": 1},
+    "audio_codec": {"type": "string", "minLength": 1},
+    "duration_ms": {"type": "integer", "minimum": 1},
+    "av_duration_delta_ms": {"type": "integer", "minimum": 0},
+    "validation": {"type": "object", "required": ["passed"], "properties": {"passed": {"type": "boolean"}, "checks": {"type": "array"}}}
+  }
+}

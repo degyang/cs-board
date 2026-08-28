@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/audit-record.schema.json",
+  "type": "object",
+  "required": ["schema_version", "record_id", "timestamp", "entrypoint", "command_id", "action", "outcome"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "record_id": {"$ref": "common.schema.json#/$defs/id"},
+    "timestamp": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "entrypoint": {"$ref": "common.schema.json#/$defs/entrypoint"},
+    "command_id": {"$ref": "common.schema.json#/$defs/id"},
+    "trace_id": {"$ref": "common.schema.json#/$defs/id"},
+    "project_id": {"$ref": "common.schema.json#/$defs/id"},
+    "run_id": {"$ref": "common.schema.json#/$defs/id"},
+    "action": {"type": "string", "minLength": 1},
+    "outcome": {"enum": ["succeeded", "failed", "rejected"]},
+    "actor": {"type": "object", "properties": {"type": {"type": "string"}, "id": {"type": "string"}}},
+    "details": {"type": "object"}
+  }
+}

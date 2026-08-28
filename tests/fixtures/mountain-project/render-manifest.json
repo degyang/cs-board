@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "artifact_type": "render-manifest",
+  "artifact_id": "artifact-render-001",
+  "artifact_key": "render.manifest",
+  "project_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "producer_stage": "render-visuals",
+  "producer_version": "1.0.0",
+  "created_at": "2026-08-29T09:07:00Z",
+  "input_fingerprint": "sha256:0123456789abcdef",
+  "renderer": "fixture-whiteboard-renderer",
+  "canvas": {"width": 1920, "height": 1080},
+  "fps": 30,
+  "clips": [{"visual_id": "visual-001-01", "clip_path": "runs/run-fixture-001/media/clips/visual-001-01.mp4", "sha256": "sha256:3333333333333333", "duration_ms": 5740}]
+}

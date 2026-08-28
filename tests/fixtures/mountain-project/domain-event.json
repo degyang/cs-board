@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "record_id": "event-fixture-001",
+  "sequence": 1,
+  "timestamp": "2026-08-29T09:02:00Z",
+  "event_name": "stage.succeeded",
+  "entrypoint": "cli",
+  "project_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "trace_id": "trace-fixture-001",
+  "command_id": "command-fixture-001",
+  "span_id": "span-segment-001",
+  "stage": "segment-script",
+  "artifact_key": "planning.av-plan"
+}

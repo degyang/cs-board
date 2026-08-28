@@ -172,10 +172,13 @@ macOS 自带苹方字体；Linux 请安装 `fonts-noto-cjk`，否则图片中的
 ## 开发验证
 
 ```bash
+# 首次运行完整测试时安装开发依赖（包括 Mountain JSON Schema 校验器）
+.venv/bin/python -m pip install -r requirements-dev.txt
+
 # 前端构建与页面验证
 (cd web && npm test)
 
-# 后端任务队列、断点恢复与时间线测试
+# 后端任务队列、断点恢复、时间线与 Mountain 契约测试
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
@@ -192,9 +195,11 @@ Windows PowerShell 请将最后一行替换为：
 ├── docs/                 # 动态信息图与工作流文档
 ├── examples/             # 白板动画示例
 ├── scripts/              # 白板渲染、时间线与维护脚本
-├── tests/                # 队列、恢复与语义时间测试
+├── schemas/mountain/     # Mountain Project、Artifact、Event、Log 与 Audit JSON Schema
+├── tests/                # 队列、恢复、语义时间与 Mountain 契约测试
 ├── video_renderer/       # Remotion 动态信息图渲染器
-├── web/                  # React 前端
+├── web/                  # 当前 legacy Vinext 前端
+├── web-v2/               # Mountain 新 React/Vite 前端（独立目录，M07 实现）
 ├── webapp/               # FastAPI 后端
 ├── start-webapp.py       # 跨平台启动逻辑
 ├── start-webapp.sh       # WSL / Linux / macOS 入口

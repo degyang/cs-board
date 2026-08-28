@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/diagnostic-log.schema.json",
+  "type": "object",
+  "required": ["schema_version", "record_id", "timestamp", "level", "event_name", "component", "project_id", "run_id", "trace_id", "command_id"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "record_id": {"$ref": "common.schema.json#/$defs/id"},
+    "timestamp": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "level": {"enum": ["DEBUG", "INFO", "WARNING", "ERROR"]},
+    "event_name": {"type": "string", "minLength": 1},
+    "component": {"type": "string", "minLength": 1},
+    "entrypoint": {"$ref": "common.schema.json#/$defs/entrypoint"},
+    "project_id": {"$ref": "common.schema.json#/$defs/id"},
+    "run_id": {"$ref": "common.schema.json#/$defs/id"},
+    "trace_id": {"$ref": "common.schema.json#/$defs/id"},
+    "command_id": {"$ref": "common.schema.json#/$defs/id"},
+    "span_id": {"$ref": "common.schema.json#/$defs/id"},
+    "parent_span_id": {"$ref": "common.schema.json#/$defs/id"},
+    "stage": {"type": "string"},
+    "unit_id": {"$ref": "common.schema.json#/$defs/id"},
+    "visual_id": {"$ref": "common.schema.json#/$defs/id"},
+    "status": {"type": "string"},
+    "duration_ms": {"type": "number", "minimum": 0},
+    "message": {"type": "string", "maxLength": 2000},
+    "error": {"type": "object", "properties": {"code": {"type": "string"}, "retryable": {"type": "boolean"}, "message": {"type": "string", "maxLength": 2000}}}
+  }
+}

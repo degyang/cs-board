@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "record_id": "log-fixture-001",
+  "timestamp": "2026-08-29T09:03:00Z",
+  "level": "INFO",
+  "event_name": "provider.request.completed",
+  "component": "fixture-provider",
+  "entrypoint": "cli",
+  "project_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "trace_id": "trace-fixture-001",
+  "command_id": "command-fixture-001",
+  "span_id": "span-tts-001",
+  "parent_span_id": "span-clone-voice-001",
+  "stage": "clone-voice",
+  "unit_id": "unit-001",
+  "status": "succeeded",
+  "duration_ms": 184.5,
+  "message": "provider request completed"
+}
