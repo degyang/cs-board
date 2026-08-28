@@ -22,6 +22,10 @@ class FailingAligner:
     def align(self, unit, voice): return AlignmentResult({}, 0, 0, reason_code="ALIGNMENT_EXECUTION_FAILED")
 
 
+class ExplodingAligner:
+    def align(self, unit, voice): raise RuntimeError("whisper missing")
+
+
 class VoiceUnitsTest(unittest.TestCase):
     def test_reuses_voice_and_records_unit_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -36,4 +40,15 @@ class VoiceUnitsTest(unittest.TestCase):
             self.assertEqual(synth.calls, 1)
             self.assertEqual(manifest["voices"][0]["duration_ms"], 1001)
             self.assertEqual(timeline["units"][0]["timing_source"], "equal_fallback")
+            self.assertEqual(timeline["units"][0]["alignment"]["reason_code"], "ALIGNMENT_EXECUTION_FAILED")
+            events = service.telemetry.read_events("project-1", "run-1")
+            self.assertEqual([item["event_type"] for item in events[:3]], ["VoiceUnitStarted", "AlignmentFallback", "VoiceUnitSucceeded"])
+
+    def test_alignment_exception_becomes_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = FilesystemProjectRepository(Path(temporary))
+            project = Project("project-1", "测试", "mountain-av-v1", Engine.WHITEBOARD, ProjectStatus.READY, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z")
+            run = Run("run-1", "project-1", "trace-1", Entrypoint.CLI, ["command-1"], RunStatus.PENDING, "compose-video", "2026-01-01T00:00:00Z")
+            repo.create_project(project); repo.create_run(run)
+            _, timeline = VoiceUnitService(repo, FakeSynthesizer(), ExplodingAligner()).run("project-1", "run-1", segment_script("一句话。"), "test")
             self.assertEqual(timeline["units"][0]["alignment"]["reason_code"], "ALIGNMENT_EXECUTION_FAILED")
