@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from csboard.application.av_artifacts import av_plan_document, timeline_document
 from csboard.domain.av_timing import AlignmentResult, segment_script, time_voice_unit
 from csboard.domain.enums import TimingSource
 
@@ -31,6 +32,17 @@ class AvTimingTest(unittest.TestCase):
         self.assertEqual(result.timing_source, TimingSource.EQUAL_FALLBACK)
         self.assertEqual([(item.start_ms, item.end_ms) for item in result.visual_timings], [(0, 3333), (3333, 6667), (6667, 10001)])
         self.assertEqual(result.alignment["reason_code"], "ALIGNMENT_NON_MONOTONIC")
+
+    def test_artifact_documents_keep_contract_identifiers_and_local_timing(self) -> None:
+        source = "第一句话。第二句话。"
+        units = segment_script(source)
+        plan = av_plan_document("project-1", "run-1", units, source)
+        timing = time_voice_unit(units[0], 1000, None)
+        timeline = timeline_document("project-1", "run-1", (timing,))
+        self.assertEqual(plan["artifact_key"], "planning.av-plan")
+        self.assertEqual(plan["voice_units"][0]["visual_items"][1]["source_range"]["start"], len("第一句话。"))
+        self.assertEqual(timeline["units"][0]["timing_source"], "equal_fallback")
+        self.assertEqual(timeline["units"][0]["visual_timings"][-1]["end_ms"], 1000)
 
 
 if __name__ == "__main__":
