@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemProjectRepository
-from csboard.application.av_artifacts import json_bytes, timeline_document
+from csboard.application.av_artifacts import json_bytes, timeline_document, voice_manifest_document
 from csboard.domain.av_timing import AlignmentResult, UnitTiming, VoiceUnit, time_voice_unit
 from csboard.domain.enums import Engine
 
@@ -53,7 +53,7 @@ class VoiceUnitService:
             timings.append(timing)
             item = self.artifacts.get(project_id, run_id, key)
             voices.append({"unit_id": unit.unit_id, "audio_path": f"artifacts/{item['relative_path']}", "sha256": f"sha256:{hashlib.sha256(voice.audio).hexdigest()}", "duration_ms": voice.duration_ms, "sample_rate": voice.sample_rate, "channels": voice.channels, "tts_profile": profile, "attempt": 1})
-        manifest = {"schema_version": 1, "artifact_type": "voice-manifest", "artifact_key": "audio.voice-manifest", "voices": voices}
+        manifest = voice_manifest_document(project_id, run_id, voices, engine)
         timeline = timeline_document(project_id, run_id, tuple(timings), engine)
         self.artifacts.commit_bytes(project_id, run_id, "audio.voice-manifest", "audio/voice-manifest.json", json_bytes(manifest), "clone-voice")
         self.artifacts.commit_bytes(project_id, run_id, "timing.timeline", "timing/timeline.json", json_bytes(timeline), "clone-voice")

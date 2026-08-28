@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from csboard.application.av_artifacts import av_plan_document, timeline_document
+from csboard.application.av_artifacts import av_plan_document, timeline_document, voice_manifest_document
 from csboard.domain.av_timing import AlignmentResult, segment_script, time_voice_unit
 from csboard.domain.enums import TimingSource
 
@@ -43,6 +43,7 @@ class AvTimingTest(unittest.TestCase):
         self.assertEqual(plan["voice_units"][0]["visual_items"][1]["source_range"]["start"], len("第一句话。"))
         self.assertEqual(timeline["units"][0]["timing_source"], "equal_fallback")
         self.assertEqual(timeline["units"][0]["visual_timings"][-1]["end_ms"], 1000)
+        self.assertEqual(voice_manifest_document("project-1", "run-1", [{"unit_id": "unit-001"}])["artifact_key"], "audio.voice-manifest")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,10 @@ def timeline_document(project_id: str, run_id: str, timings: tuple[UnitTiming, .
     }
 
 
+def voice_manifest_document(project_id: str, run_id: str, voices: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+    return {**_metadata("voice-manifest", "audio.voice-manifest", project_id, run_id, "clone-voice", engine), "voices": voices}
+
+
 def json_bytes(value: dict[str, Any]) -> bytes:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
 
