@@ -77,6 +77,7 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--stage", required=True)
         command.add_argument("--unit")
         command.add_argument("--visual")
+        command.add_argument("--script")
     return root
 
 
@@ -96,6 +97,10 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         return commands.list_logs(args.project, args.run)
     if (args.resource, args.action) == ("diagnostics", "export"):
         return commands.export_diagnostics(args.project, args.run)
+    if (args.resource, args.action, args.stage) == ("stage", "run", "segment-script"):
+        if not args.run or not args.script:
+            raise ValueError("segment-script 需要 --run 与 --script")
+        return commands.segment_script(args.project, args.run, args.script)
     if args.resource in {"pipeline", "stage"}:
         raise DomainError(
             "CAPABILITY_NOT_AVAILABLE",

@@ -44,8 +44,12 @@ class CliCsboardTest(unittest.TestCase):
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(events["items"][0]["event_type"], "ProjectCreated")
 
-    def test_not_yet_implemented_stage_is_explicitly_rejected(self) -> None:
-        code, result = self.invoke("stage", "run", "--project", "project-missing", "--stage", "segment-script", "--json")
+    def test_segment_script_persists_av_plan_and_other_stage_is_rejected(self) -> None:
+        _, created = self.invoke("project", "create", "--title", "分割任务", "--json")
+        code, segmented = self.invoke("stage", "run", "--project", created["project_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "第一句话。第二句话。", "--json")
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(segmented["artifacts"], ["planning.av-plan"])
+        code, result = self.invoke("stage", "run", "--project", "project-missing", "--stage", "clone-voice", "--json")
         self.assertEqual(code, EXIT_VALIDATION)
         self.assertEqual(result["error"]["code"], "CAPABILITY_NOT_AVAILABLE")
 
