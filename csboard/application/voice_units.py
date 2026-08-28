@@ -9,6 +9,8 @@ from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import json_bytes, timeline_document, voice_manifest_document
 from csboard.domain.av_timing import AlignmentResult, UnitTiming, VoiceUnit, time_voice_unit
 from csboard.domain.enums import Engine
+from csboard.domain.enums import StageStatus
+from csboard.domain.models import StageState
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,4 +71,12 @@ class VoiceUnitService:
         timeline = timeline_document(project_id, run_id, tuple(timings), engine)
         self.artifacts.commit_bytes(project_id, run_id, "audio.voice-manifest", "audio/voice-manifest.json", json_bytes(manifest), "clone-voice")
         self.artifacts.commit_bytes(project_id, run_id, "timing.timeline", "timing/timeline.json", json_bytes(timeline), "clone-voice")
+        run = self.repository.get_run(project_id, run_id)
+        run.stages["clone-voice"] = StageState(StageStatus.SUCCEEDED, 1)
+        for item in timings:
+            if item.timing_source.value == "equal_fallback":
+                warning = {"code": "ALIGNMENT_EQUAL_FALLBACK", "unit_id": item.unit_id, "message": "该单元已按图片数量等分实际语音时长"}
+                if warning not in run.warnings:
+                    run.warnings.append(warning)
+        self.repository.save_run(run)
         return manifest, timeline

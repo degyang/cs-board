@@ -43,6 +43,9 @@ class VoiceUnitsTest(unittest.TestCase):
             self.assertEqual(timeline["units"][0]["alignment"]["reason_code"], "ALIGNMENT_EXECUTION_FAILED")
             events = service.telemetry.read_events("project-1", "run-1")
             self.assertEqual([item["event_type"] for item in events[:3]], ["VoiceUnitStarted", "AlignmentFallback", "VoiceUnitSucceeded"])
+            run_state = repo.get_run("project-1", "run-1")
+            self.assertEqual(run_state.stages["clone-voice"].status.value, "succeeded")
+            self.assertEqual(run_state.warnings[0]["code"], "ALIGNMENT_EQUAL_FALLBACK")
 
     def test_alignment_exception_becomes_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
