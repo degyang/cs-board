@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from jsonschema import Draft202012Validator
 
 from csboard.application.av_artifacts import av_plan_document, timeline_document, voice_manifest_document
 from csboard.domain.av_timing import AlignmentResult, segment_script, time_voice_unit
 from csboard.domain.enums import TimingSource
+from tests.test_mountain_contracts import validator_for
 
 
 class AvTimingTest(unittest.TestCase):
@@ -44,6 +47,17 @@ class AvTimingTest(unittest.TestCase):
         self.assertEqual(timeline["units"][0]["timing_source"], "equal_fallback")
         self.assertEqual(timeline["units"][0]["visual_timings"][-1]["end_ms"], 1000)
         self.assertEqual(voice_manifest_document("project-1", "run-1", [{"unit_id": "unit-001"}])["artifact_key"], "audio.voice-manifest")
+
+    def test_generated_documents_validate_against_mountain_schemas(self) -> None:
+        source = "第一句话。第二句话。"
+        units = segment_script(source)
+        plan = av_plan_document("project-1", "run-1", units, source)
+        timing = time_voice_unit(units[0], 1000, None)
+        timeline = timeline_document("project-1", "run-1", (timing,))
+        voice = voice_manifest_document("project-1", "run-1", [{"unit_id": "unit-001", "audio_path": "artifacts/media/voices/unit-001.wav", "sha256": "sha256:abcdef12", "duration_ms": 1000, "sample_rate": 24000, "channels": 1, "tts_profile": "test", "attempt": 1}])
+        root = Path(__file__).resolve().parents[1] / "schemas" / "mountain"
+        for name, document in (("av-plan.schema.json", plan), ("timeline.schema.json", timeline), ("voice-manifest.schema.json", voice)):
+            self.assertEqual([], list(validator_for(root / name).iter_errors(document)), name)
 
 
 if __name__ == "__main__":
