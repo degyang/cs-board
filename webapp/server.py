@@ -21,6 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from gradio_client import Client, handle_file
 
+from csboard.application import LegacyJobBridge
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / ".webapp"
@@ -278,6 +280,13 @@ def terminate_running_process(job_id: str) -> None:
 def _persist_job_locked(job_id: str) -> None:
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    # A legacy job remains the source of truth during the migration period.  The
+    # bridge only appends a private correlation block and writes sidecar Mountain
+    # telemetry; any bridge failure must never prevent legacy recovery.
+    try:
+        LegacyJobBridge(JOBS_DIR.parent).sync(job_id, JOBS[job_id])
+    except Exception:
+        pass
     target = job_dir / "job.json"
     temporary = job_dir / "job.json.tmp"
     temporary.write_text(json.dumps(JOBS[job_id], ensure_ascii=False, indent=2), encoding="utf-8")
@@ -512,6 +521,7 @@ def job_snapshot(job_id: str) -> dict[str, Any]:
             result["can_rerender"] = True
         result.pop("copy", None)
         result.pop("visual_references", None)
+        result.pop("_mountain", None)
         timings = {key: value.copy() for key, value in source.get("timings", {}).items()}
         current = source.get("current_phase")
         phase_started = source.get("phase_started_at")
