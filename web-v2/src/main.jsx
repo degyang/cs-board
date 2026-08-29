@@ -1,0 +1,2 @@
+import React,{useEffect,useState}from'react';import{createRoot}from'react-dom/client';
+function App(){const[p,setP]=useState([]);useEffect(()=>{fetch('/api/mountain/projects').then(r=>r.json()).then(x=>setP(x.items||[]))},[]);return <main><h1>CS Board Mountain</h1><p>标准白板项目</p><ul>{p.map(x=><li key={x.project_id}>{x.title} · {x.status}</li>)}</ul></main>};createRoot(document.getElementById('root')).render(<App/>);
