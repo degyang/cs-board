@@ -11,7 +11,8 @@ from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.application.voice_units import SynthesizedVoice, VoiceUnitService
 from csboard.domain.av_timing import AlignmentResult, TextRange, VisualItem, VoiceUnit
-from csboard.domain.enums import RunStatus
+from csboard.domain.enums import RunStatus, StageStatus
+from csboard.domain.models import StageState
 
 
 class LegacyTtsAdapter:
@@ -67,6 +68,7 @@ def _sync_legacy(root: Path, project_id: str, run_id: str, legacy_id: str) -> No
         try:
             job = httpx.get(f"http://127.0.0.1:8000/api/jobs/{legacy_id}", timeout=15).json()
             run = repo.get_run(project_id, run_id)
+            _project_legacy_stages(run, job)
             if job.get("status") == "done":
                 result_name = str(job.get("result_file") or "final.mp4")
                 final = root / "jobs" / legacy_id / result_name
@@ -80,6 +82,40 @@ def _sync_legacy(root: Path, project_id: str, run_id: str, legacy_id: str) -> No
                 run.status = RunStatus.FAILED if job.get("status") == "error" else RunStatus.CANCELLED
                 run.warnings.append({"code": "LEGACY_PIPELINE", "message": str(job.get("error") or job.get("stage"))})
                 repo.save_run(run); return
+            repo.save_run(run)
         except Exception:
             return
         time.sleep(2)
+
+
+def _project_legacy_stages(run, job: dict) -> None:
+    """Project legacy progress into the canonical six Stage names without guessing success."""
+    status = str(job.get("status") or "")
+    progress = int(job.get("progress") or 0)
+    phase = str(job.get("current_phase") or job.get("queue_stage") or "")
+    checkpoint = str(job.get("checkpoint") or "")
+    completed = {"segment-script"}
+    if progress >= 14 or phase in {"model", "render"}:
+        completed.add("clone-voice")
+    if checkpoint in {"plan_done", "images", "render"} or phase == "render":
+        completed.add("storyboard")
+    if checkpoint in {"images", "render"} or phase == "render":
+        completed.add("illustrate")
+    if checkpoint == "render" or status == "done":
+        completed.add("whiteboard")
+    if status == "done":
+        completed.add("compose")
+    ordered = ["segment-script", "clone-voice", "storyboard", "illustrate", "whiteboard", "compose"]
+    active = {"voice": "clone-voice", "model": "storyboard", "render": "whiteboard"}.get(phase)
+    if status in {"error", "cancelled"}:
+        active = active or next((name for name in ordered if name not in completed), "compose")
+    for name in ordered:
+        if name in completed:
+            stage_status = StageStatus.SUCCEEDED
+        elif name == active:
+            stage_status = StageStatus.FAILED if status == "error" else StageStatus.CANCELLED if status == "cancelled" else StageStatus.RUNNING
+        else:
+            stage_status = StageStatus.PENDING
+        previous = run.stages.get(name)
+        attempt = previous.attempt if previous else 0
+        run.stages[name] = StageState(stage_status, max(1, attempt) if stage_status is not StageStatus.PENDING else attempt)
