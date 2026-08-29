@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -12,7 +13,7 @@ from csboard.application.commands import MountainCommands
 from csboard.application.context import CommandContext
 from csboard.domain.enums import Entrypoint
 from fastapi import Body
-from csboard.domain.errors import NotFoundError
+from csboard.domain.errors import DomainError, NotFoundError
 from webapp.mountain_stages import clone_voice, submit_legacy_full_pipeline, sync_legacy_state
 
 
@@ -266,6 +267,155 @@ def mountain_router(data_dir: Path) -> APIRouter:
             except httpx.HTTPError:
                 pass
             return {"tts": {"configured": bool(config.get("tts_url")), "reachable": tts_ok}, "provider": {"configured": bool(config.get("api_key"))}}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── 新增阶段端点 ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/plan-storyboard")
+    def plan_storyboard(project_id: str, run_id: str):
+        try:
+            commands = MountainCommands(data_dir)
+            # 使用 FakeTextModel，实际生产环境会使用配置的模型
+            from csboard.adapters.fakes import FakeTextModel
+            text_model = FakeTextModel()
+            return commands.plan_storyboard(project_id, run_id, text_model, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/generate-illustrations")
+    def generate_illustrations(project_id: str, run_id: str, visual_id: str = None):
+        try:
+            commands = MountainCommands(data_dir)
+            # 使用 FakeImageModel，实际生产环境会使用配置的模型
+            from csboard.adapters.fakes import FakeImageModel
+            image_model = FakeImageModel()
+            return commands.generate_illustrations(project_id, run_id, image_model, visual_id, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/render-visuals")
+    def render_visuals(project_id: str, run_id: str):
+        try:
+            commands = MountainCommands(data_dir)
+            # 使用 WhiteboardRendererAdapter
+            from csboard.adapters.whiteboard.renderer_adapter import WhiteboardRendererAdapter
+            renderer = WhiteboardRendererAdapter()
+            return commands.render_visuals(project_id, run_id, renderer, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/compose-video")
+    def compose_video(project_id: str, run_id: str):
+        try:
+            commands = MountainCommands(data_dir)
+            # 使用 FakeMedia，实际生产环境会使用 FFmpegMediaAdapter
+            from csboard.adapters.fakes import FakeMedia
+            media = FakeMedia()
+            return commands.compose_video(project_id, run_id, media, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    # ── Pipeline 操作 ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/pipeline/run")
+    def pipeline_run(
+        project_id: str,
+        run_id: str,
+        policy: str = "auto",
+        target_stage: str = None,
+    ):
+        try:
+            commands = MountainCommands(data_dir)
+            return commands.pipeline_run(project_id, run_id, policy, target_stage, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/pipeline/resume")
+    def pipeline_resume(project_id: str, run_id: str, policy: str = "auto"):
+        try:
+            commands = MountainCommands(data_dir)
+            return commands.pipeline_resume(project_id, run_id, policy, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    # ── Stage 重试 ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/{stage}/retry")
+    def stage_retry(
+        project_id: str,
+        run_id: str,
+        stage: str,
+        unit_id: str = None,
+        visual_id: str = None,
+    ):
+        try:
+            commands = MountainCommands(data_dir)
+            return commands.stage_retry(project_id, run_id, stage, unit_id, visual_id, CommandContext(entrypoint=Entrypoint.WEB))
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    # ── 产物展示 ──────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/artifacts")
+    def list_artifacts(project_id: str, run_id: str):
+        try:
+            run_dir = repository.run_dir(project_id, run_id)
+            index_path = run_dir / "artifacts" / "index.json"
+            if not index_path.exists():
+                return {"items": []}
+            index = repository.read_json(index_path)
+            items = [
+                {"artifact_key": key, **item}
+                for key, item in index.get("artifacts", {}).items()
+            ]
+            return {"items": items}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/artifacts/{artifact_key}/content")
+    def artifact_content(project_id: str, run_id: str, artifact_key: str):
+        try:
+            index = repository.read_json(repository.run_dir(project_id, run_id) / "artifacts" / "index.json")
+            item = index.get("artifacts", {}).get(artifact_key)
+            if not item:
+                raise HTTPException(404, "产物不存在")
+            path = repository.run_dir(project_id, run_id) / "artifacts" / str(item["relative_path"])
+            if not path.exists():
+                raise HTTPException(404, "产物文件不存在")
+            if path.suffix == ".json":
+                content = json.loads(path.read_text(encoding="utf-8"))
+            else:
+                content = path.read_text(encoding="utf-8")
+            return {"artifact_key": artifact_key, "content": content, "metadata": item}
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
