@@ -73,10 +73,25 @@ class ProviderFactory:
         return self._profiles.get(name)
 
     def update_profile_config(self, name: str, config: dict[str, Any]) -> None:
-        """更新 Provider Profile 的非敏感配置。"""
+        """更新 Provider Profile 的非敏感配置。
+
+        仅允许更新 profile 默认 config 中已声明的 key。
+        """
         if name not in self._profiles:
             raise ValueError(f"Provider '{name}' 不存在")
         profile = self._profiles[name]
+        allowed_keys = set(profile.config.keys())
+        # 从默认 PROVIDER_PROFILES 获取允许的 key（而非合并后的）
+        from csboard.domain.provider_types import PROVIDER_PROFILES
+        default_profile = PROVIDER_PROFILES.get(name)
+        if default_profile:
+            allowed_keys = set(default_profile.config.keys())
+        unknown_keys = set(config.keys()) - allowed_keys
+        if unknown_keys:
+            raise ValueError(
+                f"不允许更新未知字段: {', '.join(sorted(unknown_keys))}。"
+                f"允许的字段: {', '.join(sorted(allowed_keys)) if allowed_keys else '(无)'}"
+            )
         new_config = {**profile.config, **config}
         self._profiles[name] = ProviderProfile(
             provider_type=profile.provider_type,

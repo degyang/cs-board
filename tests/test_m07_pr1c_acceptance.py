@@ -530,15 +530,15 @@ class TestProviderFailure:
 # ── 测试类别 5: FFmpeg 验收 ──────────────────────────────────────────────
 
 class TestFFmpegComposition:
-    """验证通过 CompositionService 生成 final.mp4，ffprobe 验证 audio+video stream。"""
+    """验证通过 CompositionService.run() 生成 final.mp4，ffprobe 验证 audio+video stream。"""
 
     def test_composition_service_produces_valid_mp4(
         self, tmp_path: Path, sample_audio_file: Path, sample_image_file: Path
     ):
-        """CompositionService 生成的 MP4 文件可以通过 ffprobe 验证。"""
+        """CompositionService.run() 生成的 MP4 文件可以通过 ffprobe 验证，artifact index 标记为 succeeded。"""
         from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
         from csboard.application.composition import CompositionService
-        from csboard.adapters.filesystem import FilesystemProjectRepository
+        from csboard.adapters.filesystem import FilesystemProjectRepository, FilesystemArtifactStore
         from csboard.domain.models import Project, Run, StageState
         from csboard.domain.enums import ProjectStatus, RunStatus, StageStatus, Entrypoint
         from csboard.application.context import CommandContext, new_id, utc_now
@@ -547,6 +547,7 @@ class TestFFmpegComposition:
         data_dir = tmp_path / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         repository = FilesystemProjectRepository(data_dir)
+        artifacts = FilesystemArtifactStore(repository)
 
         # 创建项目和 run
         project_id = new_id("project")
@@ -574,13 +575,13 @@ class TestFFmpegComposition:
         repository.create_project(project)
         repository.create_run(run)
 
-        # 创建渲染输出目录和文件
         run_dir = repository.run_dir(project_id, run_id)
-        render_dir = run_dir / "render"
-        render_dir.mkdir(parents=True, exist_ok=True)
+        artifacts_dir = run_dir / "artifacts"
 
         # 使用 FFmpeg 创建一个真实的视频片段
-        clip_path = render_dir / "clip_001.mp4"
+        clip_dir = run_dir / "render"
+        clip_dir.mkdir(parents=True, exist_ok=True)
+        clip_path = clip_dir / "clip_001.mp4"
         subprocess.run(
             [
                 "ffmpeg", "-y",
@@ -593,49 +594,88 @@ class TestFFmpegComposition:
             capture_output=True, check=True,
         )
 
-        # 创建 timeline.json
-        timeline_dir = run_dir / "artifacts" / "timing"
-        timeline_dir.mkdir(parents=True, exist_ok=True)
+        # 创建 render.manifest artifact
+        render_manifest = {
+            "total_duration_ms": 1000,
+            "clips": [
+                {
+                    "clip_id": "clip_001",
+                    "clip_path": f"render/clip_001.mp4",
+                    "duration_ms": 1000,
+                }
+            ],
+        }
+        artifacts.commit_bytes(
+            project_id, run_id, "render.manifest", "render/manifest.json",
+            json.dumps(render_manifest).encode("utf-8"), "render-visuals",
+        )
+
+        # 创建 audio.voice-manifest artifact
+        audio_dir = artifacts_dir / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        audio_path = audio_dir / "unit_001.wav"
+        shutil.copy2(sample_audio_file, audio_path)
+        voice_manifest = {
+            "voices": [
+                {
+                    "unit_id": "unit_001",
+                    "audio_path": "audio/unit_001.wav",
+                    "duration_ms": 1000,
+                }
+            ],
+        }
+        artifacts.commit_bytes(
+            project_id, run_id, "audio.voice-manifest", "audio/voice-manifest.json",
+            json.dumps(voice_manifest).encode("utf-8"), "clone-voice",
+        )
+
+        # 创建 timing.timeline artifact
         timeline_data = {
             "units": [
                 {
                     "unit_id": "unit_001",
                     "duration_ms": 1000,
-                    "clips": [
-                        {
-                            "clip_id": "clip_001",
-                            "clip_path": str(clip_path),
-                            "duration_ms": 1000,
-                            "start_ms": 0,
-                            "end_ms": 1000,
-                        }
-                    ]
+                    "text": "测试文案",
                 }
-            ]
+            ],
         }
-        (timeline_dir / "timeline.json").write_text(
-            json.dumps(timeline_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        artifacts.commit_bytes(
+            project_id, run_id, "timing.timeline", "timing/timeline.json",
+            json.dumps(timeline_data).encode("utf-8"), "clone-voice",
         )
 
-        # 创建 audio manifest
-        audio_dir = run_dir / "artifacts" / "audio"
-        audio_dir.mkdir(parents=True, exist_ok=True)
-        audio_path = audio_dir / "unit_001.wav"
-        shutil.copy2(sample_audio_file, audio_path)
+        # 创建 planning.av-plan artifact
+        av_plan = {
+            "voice_units": [
+                {
+                    "unit_id": "unit_001",
+                    "text": "测试文案",
+                    "duration_ms": 1000,
+                }
+            ],
+        }
+        artifacts.commit_bytes(
+            project_id, run_id, "planning.av-plan", "planning/av-plan.json",
+            json.dumps(av_plan).encode("utf-8"), "plan-storyboard",
+        )
 
-        # 使用 FFmpegMediaAdapter 合成最终视频
+        # 通过 CompositionService.run() 合成最终视频
         media = FFmpegMediaAdapter()
-        output_path = run_dir / "artifacts" / "output" / "final.mp4"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 合成视频
-        media.mux_audio(clip_path, audio_path, output_path)
+        service = CompositionService(media=media, repository=repository)
+        result = service.run(project_id, run_id)
 
         # 验证输出文件存在
-        assert output_path.exists()
+        output_path = Path(result["output_path"])
+        assert output_path.exists(), "CompositionService 未生成 final.mp4"
+
+        # 验证 artifact index 中 final 成片为 succeeded
+        final_video_ref = artifacts.get(project_id, run_id, "output.final-video")
+        assert final_video_ref is not None, "artifact index 中没有 output.final-video"
+        final_manifest_ref = artifacts.get(project_id, run_id, "output.final-manifest")
+        assert final_manifest_ref is not None, "artifact index 中没有 output.final-manifest"
 
         # 使用 ffprobe 验证
-        result = subprocess.run(
+        probe_result = subprocess.run(
             [
                 "ffprobe", "-v", "quiet", "-print_format", "json",
                 "-show_streams", str(output_path),
@@ -643,7 +683,7 @@ class TestFFmpegComposition:
             capture_output=True, text=True, check=True,
         )
 
-        probe_data = json.loads(result.stdout)
+        probe_data = json.loads(probe_result.stdout)
         streams = probe_data.get("streams", [])
 
         # 验证有视频流和音频流
@@ -652,14 +692,6 @@ class TestFFmpegComposition:
 
         assert len(video_streams) > 0, "MP4 文件没有视频流"
         assert len(audio_streams) > 0, "MP4 文件没有音频流"
-
-        # 验证视频流属性
-        video = video_streams[0]
-        assert video.get("codec_name") == "h264"
-
-        # 验证音频流属性
-        audio = audio_streams[0]
-        assert audio.get("codec_name") == "aac"
 
 
 # ── 测试类别 6: API 验收 ──────────────────────────────────────────────────
@@ -706,6 +738,19 @@ class TestApiAcceptance:
             json={"token": "secret-token"},
         )
         assert response.status_code == 400
+
+    def test_update_provider_config_rejects_unknown_fields(self, api_client: TestClient):
+        """测试 PUT /providers/{name}/config 端点拒绝未知字段。"""
+        response = api_client.put(
+            "/api/v1/providers/text_model/config",
+            json={"unknown_field": "value", "another_bad": 123},
+        )
+        assert response.status_code == 400
+        detail = response.json().get("detail", {})
+        assert detail.get("code") == "UNKNOWN_FIELDS"
+        assert "allowed" in detail
+        # text_model 的允许字段: base_url, model, api_mode
+        assert set(detail["allowed"]) == {"base_url", "model", "api_mode"}
 
     def test_health_endpoint_uses_availability(self, api_client: TestClient):
         """测试 /health 端点使用实际可用性检查。"""

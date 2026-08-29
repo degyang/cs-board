@@ -124,6 +124,17 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             if key.lower() in forbidden_keys or any(f in key.lower() for f in forbidden_keys):
                 raise HTTPException(400, f"不允许更新敏感字段: {key}")
 
+        # 检查未知字段（仅允许 profile 默认 config 中已声明的 key）
+        default_profile = PROVIDER_PROFILES[provider_name]
+        allowed_keys = set(default_profile.config.keys())
+        unknown_keys = set(payload.keys()) - allowed_keys
+        if unknown_keys:
+            raise HTTPException(400, {
+                "code": "UNKNOWN_FIELDS",
+                "message": f"不允许更新未知字段: {', '.join(sorted(unknown_keys))}",
+                "allowed": sorted(allowed_keys),
+            })
+
         try:
             provider_factory.update_profile_config(provider_name, payload)
             profile = provider_factory.get_profile(provider_name)
