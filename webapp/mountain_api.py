@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
@@ -146,6 +147,13 @@ def mountain_router(data_dir: Path) -> APIRouter:
             return {"items": [] if not path.exists() else [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]}
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/final")
+    def final_video(project_id: str, run_id: str):
+        path = repository.run_dir(project_id, run_id) / "artifacts" / "output" / "final.mp4"
+        if not path.exists():
+            raise HTTPException(404, "成片尚未生成")
+        return FileResponse(path, media_type="video/mp4", filename=f"cs-board-{project_id}.mp4")
 
     @router.post("/projects/{project_id}/runs/{run_id}/diagnostics")
     def diagnostics(project_id: str, run_id: str):
