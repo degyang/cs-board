@@ -1,0 +1,1 @@
+"""SecretStore adapter implementations."""
