@@ -41,4 +41,11 @@ def mountain_router(data_dir: Path) -> APIRouter:
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
+    @router.post("/projects/{project_id}/runs/{run_id}/diagnostics")
+    def diagnostics(project_id: str, run_id: str):
+        try:
+            return {"bundle": str(telemetry.export_diagnostic_bundle(project_id, run_id))}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
     return router
