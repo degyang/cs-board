@@ -1,0 +1,1 @@
+"""IndexTTS voice cloning adapter."""
