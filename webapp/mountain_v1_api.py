@@ -1,0 +1,630 @@
+"""Mountain v1 API — 纯净的 /api/v1 端点。
+
+不依赖 legacy mountain_stages、legacy_execution_id 或 127.0.0.1:8000。
+所有操作通过 MountainCommands 和 PipelineOrchestrator 完成。
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+
+from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.observability import JsonlTelemetry
+from csboard.application.commands import MountainCommands
+from csboard.application.context import CommandContext
+from csboard.domain.enums import Engine, Entrypoint
+from csboard.domain.errors import DomainError, NotFoundError
+
+
+def mountain_v1_router(data_dir: Path) -> APIRouter:
+    """创建 /api/v1 路由器。
+
+    所有端点直接调用 MountainCommands，不依赖 legacy 系统。
+    """
+    repository = FilesystemProjectRepository(data_dir)
+    telemetry = JsonlTelemetry(repository)
+    router = APIRouter(prefix="/api/v1", tags=["mountain-v1"])
+
+    def _commands() -> MountainCommands:
+        """创建 MountainCommands 实例。"""
+        return MountainCommands(data_dir)
+
+    def _context() -> CommandContext:
+        """创建 Web 入口的 CommandContext。"""
+        return CommandContext(entrypoint=Entrypoint.WEB)
+
+    # ── Capability ──────────────────────────────────────────────────
+
+    @router.get("/capabilities")
+    def capabilities():
+        """返回支持的引擎/视觉来源组合。"""
+        return {
+            "items": [
+                {
+                    "engine": "whiteboard",
+                    "visual_source": "preset",
+                    "supported": True,
+                    "pipeline_id": "mountain-av-v1",
+                },
+                {
+                    "engine": "whiteboard",
+                    "visual_source": "custom-reference",
+                    "supported": False,
+                    "reason_code": "CAPABILITY_NOT_AVAILABLE",
+                },
+                {
+                    "engine": "infographic-remotion",
+                    "visual_source": "preset",
+                    "supported": False,
+                    "reason_code": "CAPABILITY_NOT_AVAILABLE",
+                },
+            ]
+        }
+
+    # ── Project ──────────────────────────────────────────────────────
+
+    @router.post("/projects")
+    def create_project(payload: dict = Body(...)):
+        """创建新项目。"""
+        try:
+            title = str(payload.get("title", ""))
+            engine = Engine(payload.get("engine", "whiteboard"))
+            pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
+            return _commands().create_project(
+                title, pipeline_id, engine, context=_context()
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @router.get("/projects")
+    def list_projects(limit: int = 50):
+        """列出项目。"""
+        items = []
+        projects_dir = data_dir / "projects"
+        if projects_dir.exists():
+            for path in sorted(projects_dir.glob("*/project.json"), reverse=True)[
+                : max(1, min(limit, 100))
+            ]:
+                try:
+                    items.append(repository.get_project(path.parent.name).to_dict())
+                except NotFoundError:
+                    continue
+        return {"items": items}
+
+    @router.get("/projects/{project_id}")
+    def get_project(project_id: str):
+        """获取项目详情。"""
+        try:
+            project = repository.get_project(project_id)
+            run = (
+                repository.get_run(project_id, project.active_run_id)
+                if project.active_run_id
+                else None
+            )
+            return _project_detail_view(project, run)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Input Upload ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/inputs")
+    async def upload_inputs(
+        project_id: str,
+        script: str = Form(...),
+        reference: UploadFile = File(...),
+        style: str = Form("极简粗线简笔白板风"),
+        include_subtitles: bool = Form(True),
+        pen_text: str = Form(""),
+        stroke_detail: str = Form("detailed"),
+    ):
+        """上传项目输入（文案和参考音频）。"""
+        try:
+            repository.get_project(project_id)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+        if len(script.strip()) < 10:
+            raise HTTPException(400, "文案至少需要 10 个字")
+
+        suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
+        if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
+            raise HTTPException(400, "参考音频格式不支持")
+
+        # 保存参考音频
+        input_dir = repository.project_dir(project_id) / "inputs"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        target = input_dir / f"reference{suffix}"
+        temporary = target.with_suffix(f"{suffix}.partial")
+        with temporary.open("wb") as output:
+            while chunk := await reference.read(1024 * 1024):
+                output.write(chunk)
+        temporary.replace(target)
+
+        # 保存 request.json（新 Project request）
+        request_data = {
+            "script": script.strip(),
+            "reference_audio": str(target),
+            "style": style,
+            "include_subtitles": include_subtitles,
+            "pen_text": pen_text[:12],
+            "stroke_detail": stroke_detail
+            if stroke_detail in {"light", "standard", "detailed", "full"}
+            else "detailed",
+        }
+        request_path = repository.project_dir(project_id) / "request.json"
+        request_path.write_text(
+            json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        return {"ok": True, "project_id": project_id, "input_saved": True}
+
+    # ── Run Operations ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/start")
+    def start_run(project_id: str, run_id: str, policy: str = "auto"):
+        """启动标准流程。"""
+        try:
+            # 检查 request.json 是否存在
+            request_path = repository.project_dir(project_id) / "request.json"
+            if not request_path.exists():
+                raise HTTPException(400, "请先上传文案与参考音频")
+
+            # 检查 Provider 配置
+            provider_check = _check_providers()
+            if not provider_check["all_configured"]:
+                raise HTTPException(
+                    400,
+                    {
+                        "code": "CAPABILITY_NOT_AVAILABLE",
+                        "message": "Provider 未配置",
+                        "missing": provider_check["missing"],
+                    },
+                )
+
+            # 通过 Pipeline 启动
+            return _commands().pipeline_run(
+                project_id, run_id, policy, context=_context()
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/cancel")
+    def cancel_run(project_id: str, run_id: str):
+        """取消运行。"""
+        try:
+            run = repository.get_run(project_id, run_id)
+            # 直接更新 Run 状态为 cancelled
+            from csboard.domain.enums import RunStatus
+            run.status = RunStatus.CANCELLED
+            repository.save_run(run)
+            telemetry.append_event(
+                project_id, run_id, {"event_type": "RunCancelled"}
+            )
+            return {"ok": True, "status": "cancelled"}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/retry")
+    def retry_run(project_id: str, run_id: str):
+        """重试失败的运行。"""
+        try:
+            return _commands().pipeline_resume(
+                project_id, run_id, context=_context()
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+
+    # ── Stage Operations ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/{stage}/run")
+    def run_stage(project_id: str, run_id: str, stage: str):
+        """运行指定阶段。"""
+        try:
+            return _commands().pipeline_run(
+                project_id, run_id, "targeted", stage, _context()
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/{stage}/retry")
+    def retry_stage(
+        project_id: str,
+        run_id: str,
+        stage: str,
+        unit_id: str = None,
+        visual_id: str = None,
+    ):
+        """重试指定阶段。"""
+        try:
+            return _commands().stage_retry(
+                project_id, run_id, stage, unit_id, visual_id, _context()
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+
+    # ── Pipeline Operations ──────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/pipeline/run")
+    def pipeline_run(
+        project_id: str,
+        run_id: str,
+        policy: str = "auto",
+        target_stage: str = None,
+    ):
+        """运行 Pipeline。"""
+        try:
+            return _commands().pipeline_run(
+                project_id, run_id, policy, target_stage, _context()
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/pipeline/resume")
+    def pipeline_resume(project_id: str, run_id: str, policy: str = "auto"):
+        """恢复 Pipeline。"""
+        try:
+            return _commands().pipeline_resume(
+                project_id, run_id, policy, _context()
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+
+    # ── Run Status ──────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}")
+    def get_run(project_id: str, run_id: str):
+        """获取 Run 详情。"""
+        try:
+            run = repository.get_run(project_id, run_id)
+            return _run_view(run)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/stages")
+    def get_stages(project_id: str, run_id: str):
+        """获取所有阶段状态。"""
+        try:
+            run = repository.get_run(project_id, run_id)
+            return {
+                "items": [
+                    {"stage": name, **state.to_dict()}
+                    for name, state in run.stages.items()
+                ]
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Voice Units ──────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/units")
+    def get_units(project_id: str, run_id: str):
+        """获取 Voice Units。"""
+        try:
+            run_dir = repository.run_dir(project_id, run_id)
+            plan_path = run_dir / "artifacts" / "planning" / "av-plan.json"
+            if not plan_path.exists():
+                return {"items": []}
+            plan = repository.read_json(plan_path)
+            timeline_path = run_dir / "artifacts" / "timing" / "timeline.json"
+            timings = (
+                {
+                    item["unit_id"]: item
+                    for item in repository.read_json(timeline_path).get("units", [])
+                }
+                if timeline_path.exists()
+                else {}
+            )
+            return {
+                "items": [
+                    {**unit, "timing": timings.get(unit["unit_id"])}
+                    for unit in plan.get("voice_units", [])
+                ]
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Artifacts ──────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/artifacts")
+    def list_artifacts(project_id: str, run_id: str):
+        """列出所有产物。"""
+        try:
+            run_dir = repository.run_dir(project_id, run_id)
+            index_path = run_dir / "artifacts" / "index.json"
+            if not index_path.exists():
+                return {"items": []}
+            index = repository.read_json(index_path)
+            items = [
+                {"artifact_key": key, **item}
+                for key, item in index.get("artifacts", {}).items()
+            ]
+            return {"items": items}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/artifacts/{artifact_key}")
+    def download_artifact(project_id: str, run_id: str, artifact_key: str):
+        """下载产物文件。"""
+        try:
+            index = repository.read_json(
+                repository.run_dir(project_id, run_id) / "artifacts" / "index.json"
+            )
+            item = index.get("artifacts", {}).get(artifact_key)
+            if not item or item.get("status") != "succeeded":
+                raise HTTPException(404, "产物不可用")
+            path = (
+                repository.run_dir(project_id, run_id)
+                / "artifacts"
+                / str(item["relative_path"])
+            )
+            if not path.is_file():
+                raise HTTPException(404, "产物文件不存在")
+            return FileResponse(path, filename=path.name)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get(
+        "/projects/{project_id}/runs/{run_id}/artifacts/{artifact_key}/content"
+    )
+    def artifact_content(project_id: str, run_id: str, artifact_key: str):
+        """获取产物内容（JSON 或文本）。"""
+        try:
+            index = repository.read_json(
+                repository.run_dir(project_id, run_id) / "artifacts" / "index.json"
+            )
+            item = index.get("artifacts", {}).get(artifact_key)
+            if not item:
+                raise HTTPException(404, "产物不存在")
+            path = (
+                repository.run_dir(project_id, run_id)
+                / "artifacts"
+                / str(item["relative_path"])
+            )
+            if not path.exists():
+                raise HTTPException(404, "产物文件不存在")
+            if path.suffix == ".json":
+                content = json.loads(path.read_text(encoding="utf-8"))
+            else:
+                content = path.read_text(encoding="utf-8")
+            return {
+                "artifact_key": artifact_key,
+                "content": content,
+                "metadata": item,
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Events ──────────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/events")
+    def get_events(project_id: str, run_id: str, after: int = 0):
+        """获取事件列表。"""
+        try:
+            items = telemetry.read_events(project_id, run_id, after)
+            return {
+                "items": items,
+                "next_cursor": items[-1]["sequence"] if items else after,
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Logs ──────────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/logs")
+    def get_logs(
+        project_id: str,
+        run_id: str,
+        level: str = "",
+        component: str = "",
+        stage: str = "",
+    ):
+        """获取日志列表。"""
+        try:
+            path = (
+                repository.run_dir(project_id, run_id)
+                / "observability"
+                / "logs.jsonl"
+            )
+            repository.get_run(project_id, run_id)
+            items = (
+                []
+                if not path.exists()
+                else [
+                    json.loads(line)
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if line
+                ]
+            )
+            return {
+                "items": [
+                    item
+                    for item in items
+                    if (not level or item.get("level") == level)
+                    and (not component or item.get("component") == component)
+                    and (not stage or item.get("stage") == stage)
+                ]
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Trace ──────────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/trace")
+    def get_trace(project_id: str, run_id: str):
+        """获取 Trace 信息。"""
+        try:
+            run = repository.get_run(project_id, run_id)
+            return {
+                "trace_id": run.trace_id,
+                "command_ids": run.command_ids,
+                "entrypoint": run.entrypoint.value,
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Metrics ──────────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/metrics")
+    def get_metrics(project_id: str, run_id: str):
+        """获取运行指标。"""
+        try:
+            run = repository.get_run(project_id, run_id)
+            return {
+                "run_status": run.status.value,
+                "stage_attempts": {
+                    name: state.attempt for name, state in run.stages.items()
+                },
+                "fallback_count": sum(
+                    1
+                    for warning in run.warnings
+                    if "FALLBACK" in str(warning.get("code", ""))
+                ),
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Diagnostics ──────────────────────────────────────────────────────
+
+    @router.post("/projects/{project_id}/runs/{run_id}/diagnostics")
+    def export_diagnostics(project_id: str, run_id: str):
+        """导出诊断包。"""
+        try:
+            bundle = telemetry.export_diagnostic_bundle(project_id, run_id)
+            return {
+                "bundle_id": bundle.stem,
+                "download_url": f"/api/v1/projects/{project_id}/runs/{run_id}/diagnostics/{bundle.name}",
+            }
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/diagnostics/{filename}")
+    def download_diagnostics(project_id: str, run_id: str, filename: str):
+        """下载诊断包。"""
+        if (
+            not filename.startswith("diagnostic-")
+            or not filename.endswith(".zip")
+            or "/" in filename
+        ):
+            raise HTTPException(400, "诊断包名称无效")
+        try:
+            repository.get_run(project_id, run_id)
+            path = (
+                repository.run_dir(project_id, run_id) / "diagnostics" / filename
+            )
+            if not path.is_file():
+                raise HTTPException(404, "诊断包不存在")
+            return FileResponse(
+                path, media_type="application/zip", filename=filename
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    # ── Final Video ──────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/runs/{run_id}/final")
+    def download_final(project_id: str, run_id: str):
+        """下载成片。"""
+        path = (
+            repository.run_dir(project_id, run_id)
+            / "artifacts"
+            / "output"
+            / "final.mp4"
+        )
+        if not path.exists():
+            raise HTTPException(404, "成片尚未生成")
+        return FileResponse(
+            path, media_type="video/mp4", filename=f"cs-board-{project_id}.mp4"
+        )
+
+    # ── Health ──────────────────────────────────────────────────────────
+
+    @router.get("/health")
+    def health():
+        """服务健康检查。"""
+        provider_check = _check_providers()
+        return {
+            "status": "ok" if provider_check["all_configured"] else "degraded",
+            "providers": provider_check,
+        }
+
+    # ── Helper Functions ──────────────────────────────────────────────────
+
+    def _check_providers() -> dict[str, Any]:
+        """检查 Provider 配置状态。"""
+        # TODO: 从 SecretStore 读取真实配置
+        # 目前返回未配置状态，要求用户配置后才能启动
+        return {
+            "all_configured": False,
+            "missing": ["text_model", "image_model", "tts"],
+            "configured": [],
+        }
+
+    def _project_detail_view(project, run) -> dict[str, Any]:
+        """构建 Project 详情视图。"""
+        result = {
+            "project": project.to_dict(),
+            "active_run": run.to_dict() if run else None,
+            "stages": [],
+            "warnings": [],
+            "artifacts": [],
+            "trace": None,
+        }
+        if run:
+            result["stages"] = [
+                {"stage": name, **state.to_dict()}
+                for name, state in run.stages.items()
+            ]
+            result["warnings"] = run.warnings
+            result["trace"] = {
+                "trace_id": run.trace_id,
+                "command_ids": run.command_ids,
+            }
+            # 获取产物列表
+            index_path = (
+                repository.run_dir(project.project_id, run.run_id)
+                / "artifacts"
+                / "index.json"
+            )
+            if index_path.exists():
+                index = repository.read_json(index_path)
+                result["artifacts"] = [
+                    {"artifact_key": key, **item}
+                    for key, item in index.get("artifacts", {}).items()
+                ]
+        return result
+
+    def _run_view(run) -> dict[str, Any]:
+        """构建 Run 视图。"""
+        return {
+            "run_id": run.run_id,
+            "project_id": run.project_id,
+            "trace_id": run.trace_id,
+            "status": run.status.value,
+            "entrypoint": run.entrypoint.value,
+            "target_stage": run.target_stage,
+            "started_at": run.started_at,
+            "finished_at": run.finished_at,
+            "stages": {
+                name: state.to_dict() for name, state in run.stages.items()
+            },
+            "warnings": run.warnings,
+        }
+
+    return router

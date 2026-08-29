@@ -23,6 +23,7 @@ from gradio_client import Client, handle_file
 
 from csboard.application import LegacyJobBridge
 from webapp.mountain_api import mountain_router
+from webapp.mountain_v1_api import mountain_v1_router
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -218,6 +219,7 @@ def oil_visual_reference_context(scenes: list[dict[str, Any]], infographic: bool
 
 app = FastAPI(title="白板声画工坊", version="0.1.0")
 app.include_router(mountain_router(STATE_DIR))
+app.include_router(mountain_v1_router(STATE_DIR))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:13000", "http://127.0.0.1:13000"],
