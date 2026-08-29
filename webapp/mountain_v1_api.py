@@ -47,16 +47,16 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/capabilities")
     def capabilities():
         """返回支持的引擎/视觉来源组合。"""
-        provider_status = provider_factory.check_all_providers()
-        all_configured = provider_status["all_configured"]
+        availability = provider_factory.check_all_availability()
+        all_available = availability["all_available"]
         return {
             "items": [
                 {
                     "engine": "whiteboard",
                     "visual_source": "preset",
-                    "supported": all_configured,
+                    "supported": all_available,
                     "pipeline_id": "mountain-av-v1",
-                    "reason_code": None if all_configured else "CAPABILITY_NOT_AVAILABLE",
+                    "reason_code": None if all_available else "CAPABILITY_NOT_AVAILABLE",
                 },
                 {
                     "engine": "whiteboard",
@@ -71,7 +71,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                     "reason_code": "CAPABILITY_NOT_AVAILABLE",
                 },
             ],
-            "providers": provider_status,
+            "providers": availability,
         }
 
     # ── Provider Configuration ────────────────────────────────────────
@@ -79,17 +79,57 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/providers")
     def list_providers():
         """列出所有 Provider 配置状态。"""
-        provider_status = provider_factory.check_all_providers(PROVIDER_PROFILES)
+        provider_status = provider_factory.check_all_providers()
+        availability = provider_factory.check_all_availability()
         return {
             "providers": {
                 name: {
-                    "profile": PROVIDER_PROFILES[name].to_dict(),
-                    "status": status,
+                    "profile": provider_factory.get_profile(name).to_dict() if provider_factory.get_profile(name) else PROVIDER_PROFILES[name].to_dict(),
+                    "config_status": provider_status["providers"].get(name, {}),
+                    "availability": availability["providers"].get(name, {}),
                 }
-                for name, status in provider_status["providers"].items()
+                for name in provider_status["providers"]
             },
             "all_configured": provider_status["all_configured"],
+            "all_available": availability["all_available"],
         }
+
+    @router.get("/providers/{provider_name}")
+    def get_provider(provider_name: str):
+        """获取 Provider Profile 配置。"""
+        if provider_name not in PROVIDER_PROFILES:
+            raise HTTPException(404, f"Provider '{provider_name}' 不存在")
+        profile = provider_factory.get_profile(provider_name)
+        if profile is None:
+            raise HTTPException(404, f"Provider '{provider_name}' 不存在")
+        config_status = provider_factory.check_provider(provider_name)
+        availability = provider_factory.check_provider_availability(provider_name)
+        return {
+            "name": provider_name,
+            "profile": profile.to_dict(),
+            "config": profile.config,
+            "config_status": config_status,
+            "availability": availability,
+        }
+
+    @router.put("/providers/{provider_name}/config")
+    def update_provider_config(provider_name: str, payload: dict = Body(...)):
+        """更新 Provider Profile 非敏感配置。"""
+        if provider_name not in PROVIDER_PROFILES:
+            raise HTTPException(404, f"Provider '{provider_name}' 不存在")
+
+        # 禁止敏感字段
+        forbidden_keys = {"api_key", "token", "secret", "password", "credential"}
+        for key in payload:
+            if key.lower() in forbidden_keys or any(f in key.lower() for f in forbidden_keys):
+                raise HTTPException(400, f"不允许更新敏感字段: {key}")
+
+        try:
+            provider_factory.update_profile_config(provider_name, payload)
+            profile = provider_factory.get_profile(provider_name)
+            return {"ok": True, "provider": provider_name, "config": profile.config if profile else {}}
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
 
     @router.post("/providers/{provider_name}/secrets")
     def set_provider_secret(provider_name: str, payload: dict = Body(...)):
@@ -142,8 +182,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         """创建新项目。"""
         try:
             title = str(payload.get("title", ""))
-            outline = str(payload.get("outline", ""))
-            return _commands().create_project(title, outline)
+            engine = Engine(payload.get("engine", "whiteboard"))
+            pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
+            return _commands().create_project(
+                title, pipeline_id, engine, context=_context()
+            )
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 
@@ -240,20 +283,32 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             if not request_path.exists():
                 raise HTTPException(400, "请先上传文案与参考音频")
 
-            # 检查 Provider 配置
-            provider_check = provider_factory.check_all_providers()
-            if not provider_check["all_configured"]:
+            # 检查 Provider 实际可用性（配置 + 连接测试）
+            availability = provider_factory.check_all_availability()
+            if not availability["all_available"]:
+                # 构建结构化错误信息
+                unavailable_details = []
+                for name, status in availability["providers"].items():
+                    if not status["available"]:
+                        unavailable_details.append({
+                            "provider": name,
+                            "error_code": status.get("error_code"),
+                            "suggestion": status.get("suggestion"),
+                        })
                 raise HTTPException(
                     400,
                     {
                         "code": "CAPABILITY_NOT_AVAILABLE",
-                        "message": "Provider 未配置",
-                        "missing": provider_check["missing"],
+                        "message": "Provider 服务不可用",
+                        "unavailable": availability["unavailable"],
+                        "details": unavailable_details,
                     },
                 )
 
             # 通过 Pipeline 启动
-            return _commands().pipeline_run(project_id, mode=policy)
+            return _commands().pipeline_run(
+                project_id, run_id, policy, context=_context()
+            )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
         except DomainError as error:
@@ -622,10 +677,10 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/health")
     def health():
         """服务健康检查。"""
-        provider_status = provider_factory.check_all_providers()
+        availability = provider_factory.check_all_availability()
         return {
-            "status": "ok" if provider_status["all_configured"] else "degraded",
-            "providers": provider_status,
+            "status": "ok" if availability["all_available"] else "degraded",
+            "providers": availability,
         }
 
     # ── Helper Functions ──────────────────────────────────────────────────

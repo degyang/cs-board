@@ -150,6 +150,29 @@ class ProviderFactory:
             "configured": configured,
         }
 
+    def check_all_availability(self) -> dict[str, Any]:
+        """检查所有 Provider 实际可用性（配置 + 连接测试）。
+
+        Returns:
+            {
+                "all_available": bool,
+                "providers": dict[str, availability_status],
+                "unavailable": list[str],
+            }
+        """
+        providers = {}
+        unavailable = []
+        for name in self._profiles:
+            status = self.check_provider_availability(name)
+            providers[name] = status
+            if not status["available"]:
+                unavailable.append(name)
+        return {
+            "all_available": len(unavailable) == 0,
+            "providers": providers,
+            "unavailable": unavailable,
+        }
+
     def check_provider_availability(self, name: str) -> dict[str, Any]:
         """检查 Provider 实际可用性（连接测试）。
 
