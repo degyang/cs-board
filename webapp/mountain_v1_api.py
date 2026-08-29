@@ -15,10 +15,13 @@ from fastapi.responses import FileResponse
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
+from csboard.adapters.provider_factory import ProviderFactory
+from csboard.adapters.secrets import mask_secret
 from csboard.application.commands import MountainCommands
 from csboard.application.context import CommandContext
 from csboard.domain.enums import Engine, Entrypoint
 from csboard.domain.errors import DomainError, NotFoundError
+from csboard.domain.provider_types import PROVIDER_PROFILES
 
 
 def mountain_v1_router(data_dir: Path) -> APIRouter:
@@ -28,6 +31,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     """
     repository = FilesystemProjectRepository(data_dir)
     telemetry = JsonlTelemetry(repository)
+    provider_factory = ProviderFactory(data_dir)
     router = APIRouter(prefix="/api/v1", tags=["mountain-v1"])
 
     def _commands() -> MountainCommands:
@@ -43,13 +47,16 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/capabilities")
     def capabilities():
         """返回支持的引擎/视觉来源组合。"""
+        provider_status = provider_factory.check_all_providers(PROVIDER_PROFILES)
+        all_configured = provider_status["all_configured"]
         return {
             "items": [
                 {
                     "engine": "whiteboard",
                     "visual_source": "preset",
-                    "supported": True,
+                    "supported": all_configured,
                     "pipeline_id": "mountain-av-v1",
+                    "reason_code": None if all_configured else "CAPABILITY_NOT_AVAILABLE",
                 },
                 {
                     "engine": "whiteboard",
@@ -63,8 +70,70 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                     "supported": False,
                     "reason_code": "CAPABILITY_NOT_AVAILABLE",
                 },
-            ]
+            ],
+            "providers": provider_status,
         }
+
+    # ── Provider Configuration ────────────────────────────────────────
+
+    @router.get("/providers")
+    def list_providers():
+        """列出所有 Provider 配置状态。"""
+        provider_status = provider_factory.check_all_providers(PROVIDER_PROFILES)
+        return {
+            "providers": {
+                name: {
+                    "profile": PROVIDER_PROFILES[name].to_dict(),
+                    "status": status,
+                }
+                for name, status in provider_status["providers"].items()
+            },
+            "all_configured": provider_status["all_configured"],
+        }
+
+    @router.post("/providers/{provider_name}/secrets")
+    def set_provider_secret(provider_name: str, payload: dict = Body(...)):
+        """设置 Provider 的 secret。"""
+        if provider_name not in PROVIDER_PROFILES:
+            raise HTTPException(404, f"Provider '{provider_name}' 不存在")
+        profile = PROVIDER_PROFILES[provider_name]
+        secret_key = payload.get("key")
+        secret_value = payload.get("value")
+        if not secret_key or not secret_value:
+            raise HTTPException(400, "key 和 value 不能为空")
+        if secret_key not in profile.required_secrets and secret_key not in profile.optional_secrets:
+            raise HTTPException(400, f"Provider '{provider_name}' 不支持 secret '{secret_key}'")
+        full_key = f"{profile.provider_type.value}_{secret_key}"
+        provider_factory.secret_store.set(full_key, secret_value)
+        return {"ok": True, "provider": provider_name, "key": secret_key}
+
+    @router.get("/providers/{provider_name}/secrets")
+    def get_provider_secrets(provider_name: str):
+        """获取 Provider 的 secret 状态（不返回实际值）。"""
+        if provider_name not in PROVIDER_PROFILES:
+            raise HTTPException(404, f"Provider '{provider_name}' 不存在")
+        profile = PROVIDER_PROFILES[provider_name]
+        secrets = {}
+        for secret_key in profile.required_secrets + profile.optional_secrets:
+            full_key = f"{profile.provider_type.value}_{secret_key}"
+            value = provider_factory.secret_store.get(full_key)
+            secrets[secret_key] = {
+                "configured": value is not None,
+                "masked_value": mask_secret(value) if value else None,
+            }
+        return {"provider": provider_name, "secrets": secrets}
+
+    @router.delete("/providers/{provider_name}/secrets/{secret_key}")
+    def delete_provider_secret(provider_name: str, secret_key: str):
+        """删除 Provider 的 secret。"""
+        if provider_name not in PROVIDER_PROFILES:
+            raise HTTPException(404, f"Provider '{provider_name}' 不存在")
+        profile = PROVIDER_PROFILES[provider_name]
+        full_key = f"{profile.provider_type.value}_{secret_key}"
+        if not provider_factory.secret_store.has(full_key):
+            raise HTTPException(404, f"Secret '{secret_key}' 不存在")
+        provider_factory.secret_store.delete(full_key)
+        return {"ok": True, "provider": provider_name, "key": secret_key}
 
     # ── Project ──────────────────────────────────────────────────────
 
@@ -175,7 +244,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 raise HTTPException(400, "请先上传文案与参考音频")
 
             # 检查 Provider 配置
-            provider_check = _check_providers()
+            provider_check = provider_factory.check_all_providers(PROVIDER_PROFILES)
             if not provider_check["all_configured"]:
                 raise HTTPException(
                     400,
@@ -558,23 +627,13 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/health")
     def health():
         """服务健康检查。"""
-        provider_check = _check_providers()
+        provider_status = provider_factory.check_all_providers(PROVIDER_PROFILES)
         return {
-            "status": "ok" if provider_check["all_configured"] else "degraded",
-            "providers": provider_check,
+            "status": "ok" if provider_status["all_configured"] else "degraded",
+            "providers": provider_status,
         }
 
     # ── Helper Functions ──────────────────────────────────────────────────
-
-    def _check_providers() -> dict[str, Any]:
-        """检查 Provider 配置状态。"""
-        # TODO: 从 SecretStore 读取真实配置
-        # 目前返回未配置状态，要求用户配置后才能启动
-        return {
-            "all_configured": False,
-            "missing": ["text_model", "image_model", "tts"],
-            "configured": [],
-        }
 
     def _project_detail_view(project, run) -> dict[str, Any]:
         """构建 Project 详情视图。"""

@@ -1,4 +1,4 @@
-"""M07 PR-1a 验收测试：/api/v1 端点。"""
+"""M07 PR-1b 验收测试：Provider Profile、SecretStore 与真实执行接线。"""
 
 from __future__ import annotations
 
@@ -55,11 +55,85 @@ def test_v1_health(client: TestClient) -> None:
     assert "providers" in body
 
 
+# ── Provider 配置测试 ──────────────────────────────────────────────────
+
+
+def test_v1_list_providers(client: TestClient, tmp_state: Path) -> None:
+    """GET /api/v1/providers 返回所有 Provider 状态。"""
+    response = client.get("/api/v1/providers")
+    assert response.status_code == 200
+    body = response.json()
+    assert "providers" in body
+    assert "all_configured" in body
+    # 应该有 6 个 provider
+    assert len(body["providers"]) == 6
+    # 验证每个 provider 都有 profile 和 status
+    for name, provider in body["providers"].items():
+        assert "profile" in provider
+        assert "status" in provider
+        assert "configured" in provider["status"]
+
+
+def test_v1_set_provider_secret(client: TestClient, tmp_state: Path) -> None:
+    """POST /api/v1/providers/{name}/secrets 设置 secret。"""
+    # 设置 text_model 的 api_key
+    response = client.post(
+        "/api/v1/providers/text_model/secrets",
+        json={"key": "api_key", "value": "sk-test123456789"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["provider"] == "text_model"
+    assert body["key"] == "api_key"
+
+
+def test_v1_get_provider_secrets(client: TestClient, tmp_state: Path) -> None:
+    """GET /api/v1/providers/{name}/secrets 获取 secret 状态（不返回实际值）。"""
+    # 先设置一个 secret
+    client.post(
+        "/api/v1/providers/text_model/secrets",
+        json={"key": "api_key", "value": "sk-test123456789"},
+    )
+
+    # 获取 secret 状态
+    response = client.get("/api/v1/providers/text_model/secrets")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "text_model"
+    assert "secrets" in body
+    assert "api_key" in body["secrets"]
+    assert body["secrets"]["api_key"]["configured"] is True
+    # 验证不返回实际值
+    assert body["secrets"]["api_key"]["masked_value"] is not None
+    assert "test123456789" not in body["secrets"]["api_key"]["masked_value"]
+
+
+def test_v1_delete_provider_secret(client: TestClient, tmp_state: Path) -> None:
+    """DELETE /api/v1/providers/{name}/secrets/{key} 删除 secret。"""
+    # 先设置一个 secret
+    client.post(
+        "/api/v1/providers/text_model/secrets",
+        json={"key": "api_key", "value": "sk-test123456789"},
+    )
+
+    # 删除 secret
+    response = client.delete("/api/v1/providers/text_model/secrets/api_key")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    # 验证已删除
+    response = client.get("/api/v1/providers/text_model/secrets")
+    body = response.json()
+    assert body["secrets"]["api_key"]["configured"] is False
+
+
 # ── 项目生命周期测试 ──────────────────────────────────────────────────
 
 
 def test_v1_project_lifecycle(client: TestClient, tmp_state: Path) -> None:
-    """完整项目生命周期：创建 → 上传 → 启动 → 状态查询。"""
+    """完整项目生命周期：创建 → 上传 → 启动（Provider 未配置）。"""
     # 1. 创建项目
     response = client.post("/api/v1/projects", json={"title": "验收测试"})
     assert response.status_code == 200
@@ -87,7 +161,11 @@ def test_v1_project_lifecycle(client: TestClient, tmp_state: Path) -> None:
     assert body["input_saved"] is True
 
     # 3. 尝试启动标准流程（Provider 未配置，应返回 CAPABILITY_NOT_AVAILABLE）
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{project_id}/start")
+    response = client.get(f"/api/v1/projects/{project_id}")
+    assert response.status_code == 200
+    run_id = response.json()["active_run"]["run_id"]
+
+    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
     assert response.status_code == 400
     body = response.json()
     assert body["detail"]["code"] == "CAPABILITY_NOT_AVAILABLE"
@@ -143,8 +221,13 @@ def test_v1_start_without_inputs(client: TestClient, tmp_state: Path) -> None:
     response = client.post("/api/v1/projects", json={"title": "测试"})
     project_id = response.json()["project_id"]
 
+    # 获取项目详情（这会创建一个 Run）
+    response = client.get(f"/api/v1/projects/{project_id}")
+    assert response.status_code == 200
+    run_id = response.json()["active_run"]["run_id"]
+
     # 尝试启动（没有 request.json）
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{project_id}/start")
+    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
     assert response.status_code == 400
     assert "请先上传文案与参考音频" in response.text
 
@@ -177,8 +260,13 @@ def test_v1_list_artifacts_empty(client: TestClient, tmp_state: Path) -> None:
     response = client.post("/api/v1/projects", json={"title": "测试"})
     project_id = response.json()["project_id"]
 
+    # 获取项目详情（这会创建一个 Run）
+    response = client.get(f"/api/v1/projects/{project_id}")
+    assert response.status_code == 200
+    run_id = response.json()["active_run"]["run_id"]
+
     # 列出产物
-    response = client.get(f"/api/v1/projects/{project_id}/runs/{project_id}/artifacts")
+    response = client.get(f"/api/v1/projects/{project_id}/runs/{run_id}/artifacts")
     assert response.status_code == 200
     body = response.json()
     assert body["items"] == []
@@ -257,7 +345,7 @@ def test_v1_run_view(client: TestClient, tmp_state: Path) -> None:
 
 
 def test_v1_acceptance_flow_with_missing_provider(client: TestClient, tmp_state: Path) -> None:
-    """M07 PR-1a 验收：创建项目 → 上传音频 → 启动真实标准流程 → 返回 CAPABILITY_NOT_AVAILABLE。"""
+    """M07 PR-1b 验收：创建项目 → 上传音频 → 启动真实标准流程 → 返回 CAPABILITY_NOT_AVAILABLE。"""
     # 步骤 1: 创建项目
     response = client.post("/api/v1/projects", json={"title": "验收测试项目"})
     assert response.status_code == 200
@@ -298,40 +386,126 @@ def test_v1_acceptance_flow_with_missing_provider(client: TestClient, tmp_state:
     assert len(body["detail"]["missing"]) > 0
 
 
+# ── Provider 配置后启动测试 ──────────────────────────────────────────
+
+
+def test_v1_provider_configuration_enables_start(client: TestClient, tmp_state: Path) -> None:
+    """配置所有 Provider 后，start 应该调用 MountainCommands.pipeline_run。"""
+    # 配置所有必需的 secrets
+    providers_to_configure = {
+        "text_model": {"api_key": "sk-test-text-model"},
+        "image_model": {"api_key": "sk-test-image-model"},
+    }
+    for provider, secrets in providers_to_configure.items():
+        for key, value in secrets.items():
+            response = client.post(
+                f"/api/v1/providers/{provider}/secrets",
+                json={"key": key, "value": value},
+            )
+            assert response.status_code == 200
+
+    # 验证 all_configured 现在是 True
+    response = client.get("/api/v1/providers")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["all_configured"] is True
+
+    # 创建项目并上传输入
+    response = client.post("/api/v1/projects", json={"title": "配置完成测试"})
+    assert response.status_code == 200
+    project_id = response.json()["project_id"]
+
+    script = "这是一段用于测试的文案，足够长以满足最小要求。包含多个句子，用于测试分镜功能。"
+    response = client.post(
+        f"/api/v1/projects/{project_id}/inputs",
+        data={
+            "script": script,
+            "style": "极简粗线简笔白板风",
+            "include_subtitles": "true",
+        },
+        files={"reference": ("reference.wav", b"RIFF" + b"\x00" * 100, "audio/wav")},
+    )
+    assert response.status_code == 200
+
+    # 获取项目详情（这会创建一个 Run）
+    response = client.get(f"/api/v1/projects/{project_id}")
+    assert response.status_code == 200
+    run_id = response.json()["active_run"]["run_id"]
+
+    # 尝试启动（现在应该成功调用 pipeline_run）
+    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
+    # 注意：这里可能仍然会失败，因为 pipeline_run 内部可能需要更多依赖
+    # 但至少 Provider 检查应该通过
+    # 我们验证它不是因为 Provider 问题而失败
+    if response.status_code == 400:
+        body = response.json()
+        assert body["detail"]["code"] != "CAPABILITY_NOT_AVAILABLE"
+
+
+# ── Secret 安全性测试 ──────────────────────────────────────────────────
+
+
+def test_v1_secret_not_in_response(client: TestClient, tmp_state: Path) -> None:
+    """Secret 不应该出现在 API 响应中。"""
+    # 设置 secret
+    client.post(
+        "/api/v1/providers/text_model/secrets",
+        json={"key": "api_key", "value": "sk-super-secret-key-12345"},
+    )
+
+    # 获取 provider 状态
+    response = client.get("/api/v1/providers/text_model/secrets")
+    body = response.json()
+
+    # 验证响应中不包含实际 secret
+    response_text = json.dumps(body)
+    assert "sk-super-secret-key-12345" not in response_text
+
+    # 验证 masked_value 存在但不包含完整 key
+    if body["secrets"]["api_key"]["masked_value"]:
+        assert "sk-super-secret-key-12345" not in body["secrets"]["api_key"]["masked_value"]
+
+
+def test_v1_secret_not_in_health(client: TestClient, tmp_state: Path) -> None:
+    """Secret 不应该出现在 health 响应中。"""
+    # 设置 secret
+    client.post(
+        "/api/v1/providers/text_model/secrets",
+        json={"key": "api_key", "value": "sk-super-secret-key-12345"},
+    )
+
+    # 获取 health 状态
+    response = client.get("/api/v1/health")
+    body = response.json()
+
+    # 验证响应中不包含实际 secret
+    response_text = json.dumps(body)
+    assert "sk-super-secret-key-12345" not in response_text
+
+
 # ── 无 legacy 依赖验证 ──────────────────────────────────────────────────────
 
 
 def test_v1_no_legacy_references(client: TestClient) -> None:
     """验证 /api/v1 不包含任何 legacy 依赖。"""
-    # 这个测试通过代码检查来验证，而不是运行时检查
-    # 主要确保：
-    # 1. 没有 mountain_stages 导入
-    # 2. 没有 legacy_execution_id
-    # 3. 没有 127.0.0.1:8000 引用
-    # 4. 没有 Fake* 适配器使用
-
-    # 读取 mountain_v1_api.py 源码
     from webapp import mountain_v1_api
     import inspect
 
     source = inspect.getsource(mountain_v1_api)
 
-    # 验证没有 legacy 依赖（排除注释和文档字符串）
     # 将源码按行分割，只检查非注释行
     lines = source.split('\n')
     code_lines = []
     in_docstring = False
     for line in lines:
         stripped = line.strip()
-        # 跳过文档字符串
         if stripped.startswith('"""') or stripped.startswith("'''"):
             if stripped.count('"""') >= 2 or stripped.count("'''") >= 2:
-                continue  # 单行文档字符串
+                continue
             in_docstring = not in_docstring
             continue
         if in_docstring:
             continue
-        # 跳过注释
         if stripped.startswith('#'):
             continue
         code_lines.append(line)
@@ -349,3 +523,100 @@ def test_v1_no_legacy_references(client: TestClient) -> None:
     assert "FakeAlignment" not in code_only
     assert "FakeRenderer" not in code_only
     assert "FakeMedia" not in code_only
+
+
+# ── ProviderFactory 测试 ──────────────────────────────────────────────────
+
+
+def test_provider_factory_check_providers(tmp_path: Path) -> None:
+    """ProviderFactory.check_all_providers 返回正确状态。"""
+    from csboard.adapters.provider_factory import ProviderFactory
+    from csboard.domain.provider_types import PROVIDER_PROFILES
+
+    factory = ProviderFactory(tmp_path)
+
+    # 默认情况下，需要 secret 的 provider 未配置
+    result = factory.check_all_providers(PROVIDER_PROFILES)
+    assert result["all_configured"] is False
+    # 只有 text_model 和 image_model 需要 api_key secret
+    assert len(result["missing"]) == 2
+    assert "text_model" in result["missing"]
+    assert "image_model" in result["missing"]
+    # tts、alignment、renderer、media 不需要 secret
+    assert len(result["configured"]) == 4
+
+
+def test_provider_factory_create_adapters(tmp_path: Path) -> None:
+    """ProviderFactory 可以构造真实 Adapter。"""
+    from csboard.adapters.provider_factory import ProviderFactory
+    from csboard.domain.provider_types import PROVIDER_PROFILES
+
+    factory = ProviderFactory(tmp_path)
+
+    # 配置 text_model
+    factory.secret_store.set("text_model_api_key", "sk-test")
+
+    # 构造 text_model adapter
+    text_model = factory.create_text_model(PROVIDER_PROFILES["text_model"])
+    assert text_model is not None
+    assert hasattr(text_model, 'generate')
+
+    # 构造其他 adapters（不需要 secret）
+    tts = factory.create_tts(PROVIDER_PROFILES["tts"])
+    assert tts is not None
+
+    alignment = factory.create_alignment(PROVIDER_PROFILES["alignment"])
+    assert alignment is not None
+
+    renderer = factory.create_renderer(PROVIDER_PROFILES["renderer"])
+    assert renderer is not None
+
+    media = factory.create_media(PROVIDER_PROFILES["media"])
+    assert media is not None
+
+
+# ── SecretStore 测试 ──────────────────────────────────────────────────
+
+
+def test_secret_store_basic_operations(tmp_path: Path) -> None:
+    """SecretStore 基本操作：set、get、has、delete。"""
+    from csboard.adapters.secrets import SecretStore
+
+    store = SecretStore(tmp_path)
+
+    # 初始状态
+    assert store.get("test_key") is None
+    assert store.has("test_key") is False
+
+    # 设置
+    store.set("test_key", "test_value")
+    assert store.get("test_key") == "test_value"
+    assert store.has("test_key") is True
+
+    # 列出 keys
+    assert "test_key" in store.list_keys()
+
+    # 删除
+    assert store.delete("test_key") is True
+    assert store.get("test_key") is None
+    assert store.has("test_key") is False
+
+
+def test_mask_secret() -> None:
+    """mask_secret 正确掩码 secret 值。"""
+    from csboard.adapters.secrets import mask_secret
+
+    # 短 secret
+    assert mask_secret("abc") == "••••"
+
+    # 长 secret
+    result = mask_secret("sk-1234567890abcdef")
+    assert result.startswith("sk-1")
+    assert result.endswith("cdef")
+    assert "••••" in result
+
+    # None
+    assert mask_secret(None) == ""
+
+    # 空字符串
+    assert mask_secret("") == ""

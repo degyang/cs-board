@@ -8,6 +8,7 @@ never on HTTP payload shapes or SDK objects.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -164,3 +165,111 @@ class MediaProbeResult:
     channels: int = 0
     bitrate: int = 0
     format: str = ""
+
+
+# ── Provider Profile ─────────────────────────────────────────────────
+
+class ProviderType(Enum):
+    """Provider 类型枚举。"""
+    TEXT_MODEL = "text_model"
+    IMAGE_MODEL = "image_model"
+    TEXT_TO_SPEECH = "tts"
+    ALIGNMENT = "alignment"
+    RENDERER = "renderer"
+    MEDIA = "media"
+
+
+@dataclass(frozen=True)
+class ProviderProfile:
+    """Provider 配置 Profile。
+
+    Attributes:
+        provider_type: Provider 类型
+        name: 显示名称
+        description: 描述
+        required_secrets: 必需的 secret key 列表
+        optional_secrets: 可选的 secret key 列表
+        config: 非敏感配置项
+    """
+    provider_type: ProviderType
+    name: str
+    description: str
+    required_secrets: list[str] = field(default_factory=list)
+    optional_secrets: list[str] = field(default_factory=list)
+    config: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为字典（不含 secret 值）。"""
+        return {
+            "provider_type": self.provider_type.value,
+            "name": self.name,
+            "description": self.description,
+            "required_secrets": self.required_secrets,
+            "optional_secrets": self.optional_secrets,
+            "config": self.config,
+        }
+
+
+# 预定义的 Provider Profile
+PROVIDER_PROFILES: dict[str, ProviderProfile] = {
+    "text_model": ProviderProfile(
+        provider_type=ProviderType.TEXT_MODEL,
+        name="Text Model (OpenAI-compatible)",
+        description="OpenAI-compatible Chat Completions / Responses API",
+        required_secrets=["api_key"],
+        optional_secrets=[],
+        config={
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4o",
+            "api_mode": "chat-completions",
+        },
+    ),
+    "image_model": ProviderProfile(
+        provider_type=ProviderType.IMAGE_MODEL,
+        name="Image Model (OpenAI-compatible)",
+        description="OpenAI-compatible Images API",
+        required_secrets=["api_key"],
+        optional_secrets=[],
+        config={
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-image-1",
+        },
+    ),
+    "tts": ProviderProfile(
+        provider_type=ProviderType.TEXT_TO_SPEECH,
+        name="Text-to-Speech (IndexTTS)",
+        description="IndexTTS 语音克隆服务",
+        required_secrets=[],
+        optional_secrets=[],
+        config={
+            "url": "http://127.0.0.1:7860",
+            "mode": "gradio",
+        },
+    ),
+    "alignment": ProviderProfile(
+        provider_type=ProviderType.ALIGNMENT,
+        name="Alignment (Whisper)",
+        description="Whisper 语音对齐服务",
+        required_secrets=[],
+        optional_secrets=[],
+        config={
+            "mode": "node",
+        },
+    ),
+    "renderer": ProviderProfile(
+        provider_type=ProviderType.RENDERER,
+        name="Renderer (Whiteboard)",
+        description="白板动画渲染器",
+        required_secrets=[],
+        optional_secrets=[],
+        config={},
+    ),
+    "media": ProviderProfile(
+        provider_type=ProviderType.MEDIA,
+        name="Media (FFmpeg)",
+        description="FFmpeg 媒体处理",
+        required_secrets=[],
+        optional_secrets=[],
+        config={},
+    ),
+}
