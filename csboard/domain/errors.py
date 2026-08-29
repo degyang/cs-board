@@ -28,3 +28,9 @@ class InvalidStateTransition(DomainError):
 class InvalidArtifactPath(DomainError):
     def __init__(self, message: str) -> None:
         super().__init__("INVALID_ARTIFACT_PATH", message)
+
+
+class StageFailedError(DomainError):
+    def __init__(self, stage: str, error: str) -> None:
+        super().__init__("STAGE_FAILED", f"阶段 {stage} 失败: {error}")
+        self.stage = stage

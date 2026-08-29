@@ -36,7 +36,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     def _commands() -> MountainCommands:
         """创建 MountainCommands 实例。"""
-        return MountainCommands(data_dir)
+        return MountainCommands(data_dir, provider_factory=provider_factory)
 
     def _context() -> CommandContext:
         """创建 Web 入口的 CommandContext。"""
@@ -47,7 +47,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/capabilities")
     def capabilities():
         """返回支持的引擎/视觉来源组合。"""
-        provider_status = provider_factory.check_all_providers(PROVIDER_PROFILES)
+        provider_status = provider_factory.check_all_providers()
         all_configured = provider_status["all_configured"]
         return {
             "items": [
@@ -142,11 +142,8 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         """创建新项目。"""
         try:
             title = str(payload.get("title", ""))
-            engine = Engine(payload.get("engine", "whiteboard"))
-            pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
-            return _commands().create_project(
-                title, pipeline_id, engine, context=_context()
-            )
+            outline = str(payload.get("outline", ""))
+            return _commands().create_project(title, outline)
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 
@@ -244,7 +241,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 raise HTTPException(400, "请先上传文案与参考音频")
 
             # 检查 Provider 配置
-            provider_check = provider_factory.check_all_providers(PROVIDER_PROFILES)
+            provider_check = provider_factory.check_all_providers()
             if not provider_check["all_configured"]:
                 raise HTTPException(
                     400,
@@ -256,9 +253,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 )
 
             # 通过 Pipeline 启动
-            return _commands().pipeline_run(
-                project_id, run_id, policy, context=_context()
-            )
+            return _commands().pipeline_run(project_id, mode=policy)
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
         except DomainError as error:
@@ -627,7 +622,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     @router.get("/health")
     def health():
         """服务健康检查。"""
-        provider_status = provider_factory.check_all_providers(PROVIDER_PROFILES)
+        provider_status = provider_factory.check_all_providers()
         return {
             "status": "ok" if provider_status["all_configured"] else "degraded",
             "providers": provider_status,
