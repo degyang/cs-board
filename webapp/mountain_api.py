@@ -18,6 +18,14 @@ def mountain_router(data_dir: Path) -> APIRouter:
     telemetry = JsonlTelemetry(repository)
     router = APIRouter(prefix="/api/mountain", tags=["mountain"])
 
+    @router.get("/capabilities")
+    def capabilities():
+        return {"items": [
+            {"engine": "whiteboard", "visual_source": "preset", "supported": True, "pipeline_id": "mountain-av-v1"},
+            {"engine": "whiteboard", "visual_source": "custom-reference", "supported": False, "reason_code": "CAPABILITY_NOT_AVAILABLE"},
+            {"engine": "infographic-remotion", "visual_source": "preset", "supported": False, "reason_code": "CAPABILITY_NOT_AVAILABLE"},
+        ]}
+
     @router.post("/projects")
     def create_project(payload: dict = Body(...)):
         try:
