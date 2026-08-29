@@ -13,7 +13,7 @@ from csboard.application.context import CommandContext
 from csboard.domain.enums import Entrypoint
 from fastapi import Body
 from csboard.domain.errors import NotFoundError
-from webapp.mountain_stages import clone_voice, submit_legacy_full_pipeline
+from webapp.mountain_stages import clone_voice, submit_legacy_full_pipeline, sync_legacy_state
 
 
 def mountain_router(data_dir: Path) -> APIRouter:
@@ -84,6 +84,12 @@ def mountain_router(data_dir: Path) -> APIRouter:
         try:
             value = repository.get_project(project_id)
             run = repository.get_run(project_id, value.active_run_id) if value.active_run_id else None
+            execution = repository.run_dir(project_id, run.run_id) / "execution.json" if run else None
+            if run and execution and execution.exists() and run.status.value in {"pending", "running"}:
+                legacy_id = str(repository.read_json(execution).get("legacy_execution_id") or "")
+                if legacy_id:
+                    sync_legacy_state(data_dir, project_id, run.run_id, legacy_id)
+                    run = repository.get_run(project_id, run.run_id)
             artifacts = []
             if run:
                 index = repository.run_dir(project_id, run.run_id) / "artifacts" / "index.json"

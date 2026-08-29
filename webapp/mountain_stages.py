@@ -67,26 +67,36 @@ def _sync_legacy(root: Path, project_id: str, run_id: str, legacy_id: str) -> No
     repo = FilesystemProjectRepository(root)
     while True:
         try:
-            job = httpx.get(f"http://127.0.0.1:8000/api/jobs/{legacy_id}", timeout=15).json()
-            run = repo.get_run(project_id, run_id)
-            _project_legacy_stages(run, job)
-            if job.get("status") == "done":
-                result_name = str(job.get("result_file") or "final.mp4")
-                final = root / "jobs" / legacy_id / result_name
-                if final.exists():
-                    FilesystemArtifactStore(repo).commit_bytes(
-                        project_id, run_id, "output.final-video", "output/final.mp4", final.read_bytes(), "compose-video"
-                    )
-                run.status = RunStatus.SUCCEEDED
-                repo.save_run(run); return
-            if job.get("status") in {"error", "cancelled"}:
-                run.status = RunStatus.FAILED if job.get("status") == "error" else RunStatus.CANCELLED
-                run.warnings.append({"code": "LEGACY_PIPELINE", "message": str(job.get("error") or job.get("stage"))})
-                repo.save_run(run); return
-            repo.save_run(run)
+            terminal = sync_legacy_state(root, project_id, run_id, legacy_id)
+            if terminal: return
         except Exception:
             return
         time.sleep(2)
+
+
+def sync_legacy_state(root: Path, project_id: str, run_id: str, legacy_id: str) -> bool:
+    """Idempotently reconcile one legacy job; safe after a Web service restart."""
+    repo = FilesystemProjectRepository(root)
+    job = httpx.get(f"http://127.0.0.1:8000/api/jobs/{legacy_id}", timeout=15).json()
+    run = repo.get_run(project_id, run_id)
+    _project_legacy_stages(run, job)
+    if job.get("status") == "done":
+        result_name = str(job.get("result_file") or "final.mp4")
+        final = root / "jobs" / legacy_id / result_name
+        if final.exists():
+            FilesystemArtifactStore(repo).commit_bytes(project_id, run_id, "output.final-video", "output/final.mp4", final.read_bytes(), "compose-video")
+        run.status = RunStatus.SUCCEEDED
+        repo.save_run(run)
+        return True
+    if job.get("status") in {"error", "cancelled"}:
+        run.status = RunStatus.FAILED if job.get("status") == "error" else RunStatus.CANCELLED
+        message = str(job.get("error") or job.get("stage"))
+        if not any(item.get("message") == message for item in run.warnings):
+            run.warnings.append({"code": "LEGACY_PIPELINE", "message": message})
+        repo.save_run(run)
+        return True
+    repo.save_run(run)
+    return False
 
 
 def _project_legacy_stages(run, job: dict) -> None:
