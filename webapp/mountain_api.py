@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
@@ -24,6 +24,39 @@ def mountain_router(data_dir: Path) -> APIRouter:
             return MountainCommands(data_dir).create_project(str(payload.get("title", "")), context=CommandContext(entrypoint=Entrypoint.WEB))
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
+
+    @router.post("/projects/{project_id}/inputs")
+    async def save_inputs(
+        project_id: str,
+        script: str = Form(...),
+        reference: UploadFile = File(...),
+        style: str = Form("极简粗线简笔白板风"),
+        include_subtitles: bool = Form(True),
+        pen_text: str = Form(""),
+        stroke_detail: str = Form("detailed"),
+    ):
+        try:
+            repository.get_project(project_id)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        if len(script.strip()) < 10:
+            raise HTTPException(400, "文案至少需要 10 个字")
+        suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
+        if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
+            raise HTTPException(400, "参考音频格式不支持")
+        input_dir = repository.project_dir(project_id) / "inputs"
+        target = input_dir / f"reference{suffix}"
+        temporary = target.with_suffix(f"{suffix}.partial")
+        with temporary.open("wb") as output:
+            while chunk := await reference.read(1024 * 1024):
+                output.write(chunk)
+        temporary.replace(target)
+        repository.write_json(input_dir / "request.json", {
+            "script": script.strip(), "reference_path": target.name, "style": style,
+            "include_subtitles": include_subtitles, "pen_text": pen_text[:12],
+            "stroke_detail": stroke_detail if stroke_detail in {"light", "standard", "detailed", "full"} else "detailed",
+        })
+        return {"ok": True, "project_id": project_id, "input_saved": True}
 
     @router.get("/projects")
     def projects(limit: int = 50):
