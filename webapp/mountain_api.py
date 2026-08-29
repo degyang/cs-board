@@ -41,6 +41,16 @@ def mountain_router(data_dir: Path) -> APIRouter:
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
+    @router.get("/projects/{project_id}/runs/{run_id}/logs")
+    def logs(project_id: str, run_id: str):
+        try:
+            path = repository.run_dir(project_id, run_id) / "observability" / "logs.jsonl"
+            repository.get_run(project_id, run_id)
+            import json
+            return {"items": [] if not path.exists() else [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
     @router.post("/projects/{project_id}/runs/{run_id}/diagnostics")
     def diagnostics(project_id: str, run_id: str):
         try:
