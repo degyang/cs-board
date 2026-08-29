@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 
+import httpx
+
 from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.application.voice_units import SynthesizedVoice, VoiceUnitService
 from csboard.domain.av_timing import AlignmentResult, TextRange, VisualItem, VoiceUnit
+from csboard.domain.enums import RunStatus
 
 
 class LegacyTtsAdapter:
@@ -34,3 +40,46 @@ def clone_voice(root: Path, project_id: str, run_id: str) -> tuple[dict, dict]:
     ) for item in plan["voice_units"])
     reference = repo.project_dir(project_id) / "inputs" / request["reference_path"]
     return VoiceUnitService(repo, LegacyTtsAdapter(reference), FallbackAligner()).run(project_id, run_id, units, "legacy-tts")
+
+
+def submit_legacy_full_pipeline(root: Path, project_id: str, run_id: str) -> str:
+    """Bridge mature execution into a Mountain Run; the browser never sees legacy state."""
+    repo = FilesystemProjectRepository(root)
+    request = repo.read_json(repo.project_dir(project_id) / "inputs" / "request.json")
+    reference = repo.project_dir(project_id) / "inputs" / request["reference_path"]
+    with reference.open("rb") as audio, httpx.Client(timeout=30) as client:
+        response = client.post("http://127.0.0.1:8000/api/jobs", data={
+            "copy": request["script"], "task_name": repo.get_project(project_id).title,
+            "style": request.get("style", "极简粗线简笔白板风"),
+            "include_subtitles": str(bool(request.get("include_subtitles", True))).lower(),
+            "pen_text": request.get("pen_text", ""), "stroke_detail": request.get("stroke_detail", "detailed"),
+        }, files={"reference": (reference.name, audio, "audio/wav")})
+    response.raise_for_status()
+    legacy_id = str(response.json()["id"])
+    thread = threading.Thread(target=_sync_legacy, args=(root, project_id, run_id, legacy_id), daemon=True)
+    thread.start()
+    return legacy_id
+
+
+def _sync_legacy(root: Path, project_id: str, run_id: str, legacy_id: str) -> None:
+    repo = FilesystemProjectRepository(root)
+    while True:
+        try:
+            job = httpx.get(f"http://127.0.0.1:8000/api/jobs/{legacy_id}", timeout=15).json()
+            run = repo.get_run(project_id, run_id)
+            if job.get("status") == "done":
+                result_name = str(job.get("result_file") or "final.mp4")
+                final = root / "jobs" / legacy_id / result_name
+                if final.exists():
+                    FilesystemArtifactStore(repo).commit_bytes(
+                        project_id, run_id, "output.final-video", "output/final.mp4", final.read_bytes(), "compose-video"
+                    )
+                run.status = RunStatus.SUCCEEDED
+                repo.save_run(run); return
+            if job.get("status") in {"error", "cancelled"}:
+                run.status = RunStatus.FAILED if job.get("status") == "error" else RunStatus.CANCELLED
+                run.warnings.append({"code": "LEGACY_PIPELINE", "message": str(job.get("error") or job.get("stage"))})
+                repo.save_run(run); return
+        except Exception:
+            return
+        time.sleep(2)

@@ -11,7 +11,7 @@ from csboard.application.context import CommandContext
 from csboard.domain.enums import Entrypoint
 from fastapi import Body
 from csboard.domain.errors import NotFoundError
-from webapp.mountain_stages import clone_voice
+from webapp.mountain_stages import clone_voice, submit_legacy_full_pipeline
 
 
 def mountain_router(data_dir: Path) -> APIRouter:
@@ -119,9 +119,11 @@ def mountain_router(data_dir: Path) -> APIRouter:
             if not request_path.exists():
                 raise HTTPException(400, "请先保存文案与参考音频")
             request = repository.read_json(request_path)
-            return MountainCommands(data_dir).segment_script(
+            result = MountainCommands(data_dir).segment_script(
                 project_id, run_id, str(request["script"]), CommandContext(entrypoint=Entrypoint.WEB)
             )
+            result["legacy_execution_id"] = submit_legacy_full_pipeline(data_dir, project_id, run_id)
+            return result
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
         except ValueError as error:
