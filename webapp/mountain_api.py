@@ -103,6 +103,21 @@ def mountain_router(data_dir: Path) -> APIRouter:
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 
+    @router.post("/projects/{project_id}/runs/{run_id}/start")
+    def start_run(project_id: str, run_id: str):
+        try:
+            request_path = repository.project_dir(project_id) / "inputs" / "request.json"
+            if not request_path.exists():
+                raise HTTPException(400, "请先保存文案与参考音频")
+            request = repository.read_json(request_path)
+            return MountainCommands(data_dir).segment_script(
+                project_id, run_id, str(request["script"]), CommandContext(entrypoint=Entrypoint.WEB)
+            )
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
     @router.get("/projects/{project_id}/runs/{run_id}/logs")
     def logs(project_id: str, run_id: str):
         try:
