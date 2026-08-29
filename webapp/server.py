@@ -2236,9 +2236,9 @@ def test_config(payload: dict[str, Any]) -> dict[str, Any]:
     results: dict[str, Any] = {}
     try:
         provider_text(config, "只回复：连接成功")
-        results["openlux"] = {"ok": True, "message": f"OpenLux {config['text_model']} 连接成功"}
+        results["llm"] = {"ok": True, "message": f"LLM {config['text_model']} 连接成功"}
     except Exception as exc:
-        results["openlux"] = {"ok": False, "message": str(exc)}
+        results["llm"] = {"ok": False, "message": str(exc)}
     try:
         models = provider_models(config)
         image_model = str(config["image_model"])
