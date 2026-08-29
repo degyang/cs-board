@@ -57,6 +57,7 @@ def submit_legacy_full_pipeline(root: Path, project_id: str, run_id: str) -> str
         }, files={"reference": (reference.name, audio, "audio/wav")})
     response.raise_for_status()
     legacy_id = str(response.json()["id"])
+    repo.write_json(repo.run_dir(project_id, run_id) / "execution.json", {"legacy_execution_id": legacy_id})
     thread = threading.Thread(target=_sync_legacy, args=(root, project_id, run_id, legacy_id), daemon=True)
     thread.start()
     return legacy_id

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+import httpx
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
@@ -98,6 +99,34 @@ def mountain_router(data_dir: Path) -> APIRouter:
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
+    @router.get("/projects/{project_id}/runs/{run_id}/units")
+    def units(project_id: str, run_id: str):
+        try:
+            run_dir = repository.run_dir(project_id, run_id)
+            plan_path = run_dir / "artifacts" / "planning" / "av-plan.json"
+            if not plan_path.exists():
+                return {"items": []}
+            plan = repository.read_json(plan_path)
+            timeline_path = run_dir / "artifacts" / "timing" / "timeline.json"
+            timings = {item["unit_id"]: item for item in repository.read_json(timeline_path).get("units", [])} if timeline_path.exists() else {}
+            return {"items": [{**unit, "timing": timings.get(unit["unit_id"])} for unit in plan.get("voice_units", [])]}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/artifacts/{artifact_key}")
+    def artifact_download(project_id: str, run_id: str, artifact_key: str):
+        try:
+            index = repository.read_json(repository.run_dir(project_id, run_id) / "artifacts" / "index.json")
+            item = index.get("artifacts", {}).get(artifact_key)
+            if not item or item.get("status") != "succeeded":
+                raise HTTPException(404, "产物不可用")
+            path = repository.run_dir(project_id, run_id) / "artifacts" / str(item["relative_path"])
+            if not path.is_file():
+                raise HTTPException(404, "产物文件不存在")
+            return FileResponse(path, filename=path.name)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
     @router.get("/projects/{project_id}/runs/{run_id}/events")
     def events(project_id: str, run_id: str, after: int = 0):
         try:
@@ -138,13 +167,34 @@ def mountain_router(data_dir: Path) -> APIRouter:
         except (OSError, RuntimeError, ValueError) as error:
             raise HTTPException(500, str(error)) from error
 
+    def legacy_execution(project_id: str, run_id: str) -> str:
+        path = repository.run_dir(project_id, run_id) / "execution.json"
+        if not path.exists():
+            raise HTTPException(409, "该运行尚未提交到执行器")
+        return str(repository.read_json(path).get("legacy_execution_id") or "")
+
+    @router.post("/projects/{project_id}/runs/{run_id}/cancel")
+    def cancel(project_id: str, run_id: str):
+        legacy_id = legacy_execution(project_id, run_id)
+        response = httpx.post(f"http://127.0.0.1:8000/api/jobs/{legacy_id}/cancel", timeout=20)
+        response.raise_for_status()
+        return {"ok": True, "legacy_execution_id": legacy_id}
+
+    @router.post("/projects/{project_id}/runs/{run_id}/retry")
+    def retry(project_id: str, run_id: str):
+        legacy_id = legacy_execution(project_id, run_id)
+        response = httpx.post(f"http://127.0.0.1:8000/api/jobs/{legacy_id}/retry", timeout=20)
+        response.raise_for_status()
+        return {"ok": True, "legacy_execution_id": str(response.json().get("id") or legacy_id)}
+
     @router.get("/projects/{project_id}/runs/{run_id}/logs")
-    def logs(project_id: str, run_id: str):
+    def logs(project_id: str, run_id: str, level: str = "", component: str = "", stage: str = ""):
         try:
             path = repository.run_dir(project_id, run_id) / "observability" / "logs.jsonl"
             repository.get_run(project_id, run_id)
             import json
-            return {"items": [] if not path.exists() else [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]}
+            items = [] if not path.exists() else [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+            return {"items": [item for item in items if (not level or item.get("level") == level) and (not component or item.get("component") == component) and (not stage or item.get("stage") == stage)]}
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
@@ -158,7 +208,58 @@ def mountain_router(data_dir: Path) -> APIRouter:
     @router.post("/projects/{project_id}/runs/{run_id}/diagnostics")
     def diagnostics(project_id: str, run_id: str):
         try:
-            return {"bundle": str(telemetry.export_diagnostic_bundle(project_id, run_id))}
+            bundle = telemetry.export_diagnostic_bundle(project_id, run_id)
+            return {"bundle_id": bundle.stem, "download_url": f"/api/mountain/projects/{project_id}/runs/{run_id}/diagnostics/{bundle.name}"}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/diagnostics/{filename}")
+    def diagnostic_download(project_id: str, run_id: str, filename: str):
+        if not filename.startswith("diagnostic-") or not filename.endswith(".zip") or "/" in filename:
+            raise HTTPException(400, "诊断包名称无效")
+        try:
+            repository.get_run(project_id, run_id)
+            path = repository.run_dir(project_id, run_id) / "diagnostics" / filename
+            if not path.is_file():
+                raise HTTPException(404, "诊断包不存在")
+            return FileResponse(path, media_type="application/zip", filename=filename)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/trace")
+    def trace(project_id: str, run_id: str):
+        try:
+            run = repository.get_run(project_id, run_id)
+            return {"trace_id": run.trace_id, "command_ids": run.command_ids, "entrypoint": run.entrypoint.value}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/metrics")
+    def metrics(project_id: str, run_id: str):
+        try:
+            run = repository.get_run(project_id, run_id)
+            execution = repository.run_dir(project_id, run_id) / "execution.json"
+            legacy = {}
+            if execution.exists():
+                legacy_id = repository.read_json(execution).get("legacy_execution_id")
+                job_path = data_dir / "jobs" / str(legacy_id) / "job.json"
+                if job_path.exists(): legacy = repository.read_json(job_path)
+            return {"run_status": run.status.value, "stage_attempts": {name: state.attempt for name, state in run.stages.items()}, "timings": legacy.get("timings", {}), "progress": legacy.get("progress"), "fallback_count": sum(1 for warning in run.warnings if "FALLBACK" in str(warning.get("code", "")))}
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+    @router.get("/projects/{project_id}/runs/{run_id}/health")
+    def health(project_id: str, run_id: str):
+        try:
+            repository.get_run(project_id, run_id)
+            from webapp.server import load_config
+            config = load_config()
+            tts_ok = False
+            try:
+                tts_ok = httpx.get(config["tts_url"], timeout=5).is_success
+            except httpx.HTTPError:
+                pass
+            return {"tts": {"configured": bool(config.get("tts_url")), "reachable": tts_ok}, "provider": {"configured": bool(config.get("api_key"))}}
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
