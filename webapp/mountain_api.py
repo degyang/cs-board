@@ -14,6 +14,16 @@ def mountain_router(data_dir: Path) -> APIRouter:
     telemetry = JsonlTelemetry(repository)
     router = APIRouter(prefix="/api/mountain", tags=["mountain"])
 
+    @router.get("/projects")
+    def projects(limit: int = 50):
+        items = []
+        for path in sorted((data_dir / "projects").glob("*/project.json"), reverse=True)[:max(1, min(limit, 100))]:
+            try:
+                items.append(repository.get_project(path.parent.name).to_dict())
+            except NotFoundError:
+                continue
+        return {"items": items}
+
     @router.get("/projects/{project_id}")
     def project(project_id: str):
         try:
