@@ -1292,9 +1292,11 @@ def _synthesize_voice_once(config: dict[str, Any], reference: Path, copy: str, t
     # default Gradio HTTP read timeout is too short and abandons a healthy job.
     client = Client(config["tts_url"], verbose=False, httpx_kwargs={"timeout": 1800.0})
     job = client.submit(
-        "Same as the voice reference", handle_file(str(reference)), copy, None, 0.65,
+        "Same as the voice reference", handle_file(str(reference)), copy,
+        None,  # optional emotion-reference audio
+        0.65,
         0, 0, 0, 0, 0, 0, 0, 0, "", False, 120,
-        True, 0.8, 30, 0.8, 0.0, 3, 10.0, 1500,
+        1.0, True, 0.8, 30, 0.8, 0.0, 3, 10.0, 1500,
         api_name="/gen_single",
     )
     result = job.result(timeout=1800)
