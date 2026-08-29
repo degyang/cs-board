@@ -39,3 +39,4 @@ assets/whiteboard/
 *.log
 Thumbs.db
 .DS_Store
+projects/
