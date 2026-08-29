@@ -9,7 +9,13 @@ import httpx
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.filesystem import FilesystemArtifactStore
-from csboard.application.voice_units import SynthesizedVoice, VoiceUnitService
+from csboard.application.voice_units import (
+    SynthesizedVoice,
+    VoiceUnitService,
+    _LegacyAlignerAdapter,
+    _LegacySynthesizerAdapter,
+    _NoOpMedia,
+)
 from csboard.domain.av_timing import AlignmentResult, TextRange, VisualItem, VoiceUnit
 from csboard.domain.enums import RunStatus, StageStatus
 from csboard.domain.models import StageState
@@ -40,7 +46,15 @@ def clone_voice(root: Path, project_id: str, run_id: str) -> tuple[dict, dict]:
         tuple(VisualItem(v["visual_id"], int(v["order"]), TextRange(**v["source_range"]), v["text"]) for v in item["visual_items"]),
     ) for item in plan["voice_units"])
     reference = repo.project_dir(project_id) / "inputs" / request["reference_path"]
-    return VoiceUnitService(repo, LegacyTtsAdapter(reference), FallbackAligner()).run(project_id, run_id, units, "legacy-tts")
+    legacy_tts = LegacyTtsAdapter(reference)
+    legacy_aligner = FallbackAligner()
+    return VoiceUnitService(
+        tts=_LegacySynthesizerAdapter(legacy_tts),
+        alignment=_LegacyAlignerAdapter(legacy_aligner),
+        media=_NoOpMedia(),
+        repository=repo,
+        reference_audio=reference,
+    ).run(project_id, run_id, units, "legacy-tts")
 
 
 def submit_legacy_full_pipeline(root: Path, project_id: str, run_id: str) -> str:

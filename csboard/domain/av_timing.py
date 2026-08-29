@@ -3,6 +3,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from csboard.domain.enums import TimingSource
+from csboard.domain.provider_types import AlignmentResult
+
+__all__ = [
+    "AlignmentResult",
+    "TextRange",
+    "UnitTiming",
+    "VisualItem",
+    "VisualTiming",
+    "VoiceUnit",
+    "segment_script",
+    "time_voice_unit",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,15 +38,6 @@ class VoiceUnit:
     source_range: TextRange
     text: str
     visual_items: tuple[VisualItem, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class AlignmentResult:
-    starts_ms: dict[str, int]
-    coverage: float
-    confidence: float
-    engine: str = "whisper"
-    reason_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

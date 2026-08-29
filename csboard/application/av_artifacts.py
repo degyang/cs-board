@@ -35,6 +35,44 @@ def voice_manifest_document(project_id: str, run_id: str, voices: list[dict[str,
     return {**_metadata("voice-manifest", "audio.voice-manifest", project_id, run_id, "clone-voice", engine), "voices": voices}
 
 
+def storyboard_document(project_id: str, run_id: str, visuals: list[dict[str, Any]], bible: dict[str, Any], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+    return {
+        **_metadata("storyboard", "planning.storyboard", project_id, run_id, "plan-storyboard", engine),
+        "visual_bible": bible,
+        "visuals": visuals,
+    }
+
+
+def illustration_manifest_document(project_id: str, run_id: str, illustrations: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+    return {
+        **_metadata("illustration-manifest", "illustrations.manifest", project_id, run_id, "generate-illustrations", engine),
+        "illustrations": illustrations,
+    }
+
+
+def render_manifest_document(project_id: str, run_id: str, clips: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+    return {
+        **_metadata("render-manifest", "render.manifest", project_id, run_id, "render-visuals", engine),
+        "clips": clips,
+    }
+
+
+def final_manifest_document(
+    project_id: str,
+    run_id: str,
+    video_path: str,
+    srt_path: str | None,
+    validation: dict[str, Any],
+    engine: Engine = Engine.WHITEBOARD,
+) -> dict[str, Any]:
+    return {
+        **_metadata("final-manifest", "output.final-manifest", project_id, run_id, "compose-video", engine),
+        "video_path": video_path,
+        "srt_path": srt_path,
+        "validation": validation,
+    }
+
+
 def json_bytes(value: dict[str, Any]) -> bytes:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
 
@@ -49,6 +87,62 @@ def _metadata(artifact_type: str, artifact_key: str, project_id: str, run_id: st
 
 def _sha(value: str) -> str:
     return f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}"
+
+
+def save_json_artifact(
+    project_id: str,
+    run_id: str,
+    filename: str,
+    data: dict[str, Any],
+    stage: str = "unknown",
+) -> str:
+    """Save a JSON artifact to the run's artifacts directory.
+
+    Returns the artifact key.
+    """
+    from pathlib import Path
+
+    project_dir = Path("projects") / project_id
+    run_dir = project_dir / "runs" / run_id
+    artifacts_dir = run_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    artifact_path = artifacts_dir / filename
+    artifact_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    # Derive artifact key from filename
+    artifact_key = filename.replace(".json", "").replace("-", ".")
+    if stage == "render-visuals":
+        artifact_key = "render.manifest"
+    elif stage == "compose-video":
+        artifact_key = "output.final-manifest"
+
+    return artifact_key
+
+
+def read_manifest(project_id: str, run_id: str, filename: str) -> dict[str, Any]:
+    """Read a JSON manifest from the run's artifacts directory."""
+    from pathlib import Path
+
+    project_dir = Path("projects") / project_id
+    run_dir = project_dir / "runs" / run_id
+    artifacts_dir = run_dir / "artifacts"
+
+    # Try direct filename first
+    artifact_path = artifacts_dir / filename
+    if artifact_path.exists():
+        return json.loads(artifact_path.read_text(encoding="utf-8"))
+
+    # Try with .json extension if not present
+    if not filename.endswith(".json"):
+        artifact_path = artifacts_dir / f"{filename}.json"
+        if artifact_path.exists():
+            return json.loads(artifact_path.read_text(encoding="utf-8"))
+
+    return {}
 
 
 def _range(value: object) -> dict[str, int]:
