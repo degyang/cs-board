@@ -6,8 +6,6 @@ from fastapi import APIRouter, HTTPException
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
-from csboard.application.commands import MountainCommands
-from fastapi import Body
 from csboard.domain.errors import NotFoundError
 
 
@@ -15,13 +13,6 @@ def mountain_router(data_dir: Path) -> APIRouter:
     repository = FilesystemProjectRepository(data_dir)
     telemetry = JsonlTelemetry(repository)
     router = APIRouter(prefix="/api/mountain", tags=["mountain"])
-
-    @router.post("/projects")
-    def create_project(payload: dict = Body(...)):
-        try:
-            return MountainCommands(data_dir).create_project(str(payload.get("title", "")))
-        except ValueError as error:
-            raise HTTPException(400, str(error)) from error
 
     @router.get("/projects")
     def projects(limit: int = 50):
