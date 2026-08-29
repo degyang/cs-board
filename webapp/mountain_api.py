@@ -11,6 +11,7 @@ from csboard.application.context import CommandContext
 from csboard.domain.enums import Entrypoint
 from fastapi import Body
 from csboard.domain.errors import NotFoundError
+from webapp.mountain_stages import clone_voice
 
 
 def mountain_router(data_dir: Path) -> APIRouter:
@@ -125,6 +126,14 @@ def mountain_router(data_dir: Path) -> APIRouter:
             raise HTTPException(404, error.message) from error
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/clone-voice")
+    def voice(project_id: str, run_id: str):
+        try:
+            manifest, timeline = clone_voice(data_dir, project_id, run_id)
+            return {"ok": True, "voice_manifest": manifest, "timeline": timeline}
+        except (OSError, RuntimeError, ValueError) as error:
+            raise HTTPException(500, str(error)) from error
 
     @router.get("/projects/{project_id}/runs/{run_id}/logs")
     def logs(project_id: str, run_id: str):
