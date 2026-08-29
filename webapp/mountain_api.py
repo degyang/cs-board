@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.commands import MountainCommands
+from csboard.application.context import CommandContext
+from csboard.domain.enums import Entrypoint
 from fastapi import Body
 from csboard.domain.errors import NotFoundError
 
@@ -19,7 +21,7 @@ def mountain_router(data_dir: Path) -> APIRouter:
     @router.post("/projects")
     def create_project(payload: dict = Body(...)):
         try:
-            return MountainCommands(data_dir).create_project(str(payload.get("title", "")))
+            return MountainCommands(data_dir).create_project(str(payload.get("title", "")), context=CommandContext(entrypoint=Entrypoint.WEB))
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 
@@ -60,6 +62,13 @@ def mountain_router(data_dir: Path) -> APIRouter:
             return {"items": items, "next_cursor": items[-1]["sequence"] if items else after}
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
+
+    @router.post("/projects/{project_id}/runs/{run_id}/stages/segment-script")
+    def segment(project_id: str, run_id: str, payload: dict = Body(...)):
+        try:
+            return MountainCommands(data_dir).segment_script(project_id, run_id, str(payload.get("script", "")), CommandContext(entrypoint=Entrypoint.WEB))
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
 
     @router.get("/projects/{project_id}/runs/{run_id}/logs")
     def logs(project_id: str, run_id: str):
