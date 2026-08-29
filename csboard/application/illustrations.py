@@ -144,7 +144,8 @@ class IllustrationService:
         return {
             "visual_id": visual_id,
             "unit_id": visual.get("unit_id", ""),
-            "image_path": f"runs/{run_id}/media/images/{image_filename}",
+            # Consumers receive a path relative to the owning run directory.
+            "image_path": f"media/images/{image_filename}",
             "sha256": f"sha256:{sha256}",
             "width": request.width,
             "height": request.height,

@@ -146,7 +146,16 @@ def _validate_coverage(text: str, units: tuple[VoiceUnit, ...]) -> None:
 def _whisper_timings(unit: VoiceUnit, duration_ms: int, result: AlignmentResult, min_coverage: float, min_confidence: float) -> tuple[VisualTiming, ...] | None:
     if result.coverage < min_coverage or result.confidence < min_confidence:
         return None
-    starts = [result.starts_ms.get(item.visual_id) for item in unit.visual_items]
+    starts = [
+        result.starts_ms.get(
+            item.visual_id,
+            result.starts_ms.get(f"char:{item.source_range.start - unit.source_range.start}"),
+        )
+        for item in unit.visual_items
+    ]
+    # A clip always starts at t=0 even when Whisper reports leading silence.
+    if starts:
+        starts[0] = 0
     if starts[0] != 0 or any(value is None or value < 0 or value >= duration_ms for value in starts):
         return None
     if any(int(starts[index]) >= int(starts[index + 1]) for index in range(len(starts) - 1)):

@@ -16,8 +16,27 @@ from typing import Any
 
 from csboard.adapters.filesystem import FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
-from csboard.application.av_artifacts import read_manifest, save_json_artifact
+from csboard.application.av_artifacts import json_bytes
+from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.ports.providers import MediaPort
+
+
+def final_manifest_document(
+    project_id: str, run_id: str, timeline: dict[str, Any], render: dict[str, Any], duration_ms: int,
+) -> dict[str, Any]:
+    """Compatibility validator used by the pre-existing contract test."""
+    expected = sum(int(item.get("duration_ms", 0)) for item in timeline.get("units", []))
+    actual = sum(int(item.get("duration_ms", 0)) for item in render.get("clips", []))
+    return {
+        "project_id": project_id, "run_id": run_id, "duration_ms": duration_ms,
+        "validation": {"passed": expected == actual == duration_ms, "expected_ms": expected, "actual_ms": actual},
+    }
+
+
+def require_valid_final(manifest: dict[str, Any]) -> dict[str, Any]:
+    if not manifest.get("validation", {}).get("passed"):
+        raise ValueError("禁止报告无效音画合成结果")
+    return manifest
 
 
 @dataclass
@@ -49,19 +68,37 @@ class CompositionService:
         """
         run_dir = self.repository.run_dir(project_id, run_id)
         artifacts_dir = run_dir / "artifacts"
+        artifacts = FilesystemArtifactStore(self.repository)
 
-        # Read render manifest
-        render_manifest = self._read_artifact(artifacts_dir, "render-manifest.json")
+        # Read by logical artifact key.  Producers own their physical layout;
+        # consumers must never reconstruct paths from file names.
+        render_manifest = self._read_artifact(artifacts, project_id, run_id, "render.manifest")
+        if not render_manifest:
+            raise ValueError("请先运行 render-visuals 生成 render.manifest")
         clips = render_manifest.get("clips", [])
         total_duration_ms = render_manifest.get("total_duration_ms", 0)
 
-        # Read voice manifest
-        voice_manifest = self._read_artifact(artifacts_dir, "voice-manifest.json")
-        voice_units = voice_manifest.get("units", [])
+        voice_manifest = self._read_artifact(artifacts, project_id, run_id, "audio.voice-manifest")
+        voice_units = voice_manifest.get("voices", [])
+        if not voice_units:
+            raise ValueError("请先运行 clone-voice 生成 audio.voice-manifest")
 
-        # Read timeline for subtitle generation
-        timeline = self._read_artifact(artifacts_dir, "timeline.json")
+        timeline = self._read_artifact(artifacts, project_id, run_id, "timing.timeline")
         units = timeline.get("units", [])
+        if not units:
+            raise ValueError("请先运行 clone-voice 生成 timing.timeline")
+        av_plan = self._read_artifact(artifacts, project_id, run_id, "planning.av-plan")
+        text_by_unit = {item.get("unit_id"): item.get("text", "") for item in av_plan.get("voice_units", [])}
+        subtitle_units: list[dict[str, Any]] = []
+        cursor_ms = 0
+        for unit in units:
+            duration_ms = int(unit.get("duration_ms", 0))
+            subtitle_units.append({
+                "text": text_by_unit.get(unit.get("unit_id"), unit.get("text", "")),
+                "start_ms": cursor_ms,
+                "end_ms": cursor_ms + duration_ms,
+            })
+            cursor_ms += duration_ms
 
         # Build audio map: unit_id -> audio_path
         audio_map = {}
@@ -75,35 +112,46 @@ class CompositionService:
 
         # Generate subtitle file
         subtitle_path = artifacts_dir / "subtitles.srt"
-        self._generate_subtitles(units, subtitle_path)
+        self._generate_subtitles(subtitle_units, subtitle_path)
 
-        # Concatenate clips into silent master
-        clip_paths = []
+        # Concatenate visual clips and narration audio with FFmpeg.  A final
+        # result is never considered successful without both streams.
+        clip_paths: list[Path] = []
         for clip in clips:
             clip_path_str = clip.get("clip_path", "")
             if clip_path_str:
-                # Resolve relative to project root
-                clip_path = self.repository.root / clip_path_str
+                clip_path = run_dir / clip_path_str
                 if clip_path.exists():
                     clip_paths.append(clip_path)
+        if not clip_paths:
+            raise ValueError("render.manifest 中没有可用的视频片段")
 
-        silent_master = artifacts_dir / "silent_master.mp4"
-        if clip_paths:
-            try:
-                self.media.concat(clip_paths, silent_master)
-            except Exception:
-                # Fallback: just copy the first clip
-                if clip_paths[0].exists():
-                    import shutil
-                    shutil.copy2(clip_paths[0], silent_master)
+        audio_paths: list[Path] = []
+        for voice in voice_units:
+            audio_path = voice.get("audio_path", "")
+            if audio_path:
+                path = run_dir / str(audio_path).removeprefix("artifacts/")
+                # Voice manifests use an artifact-relative path.
+                if not path.exists():
+                    path = run_dir / "artifacts" / str(audio_path).removeprefix("artifacts/")
+                if path.exists():
+                    audio_paths.append(path)
+        if not audio_paths:
+            raise ValueError("audio.voice-manifest 中没有可用的语音文件")
 
-        # Merge audio with video
-        # For now, create a simple merged output without actual FFmpeg
-        # Real implementation would use media.subtitle() to add subtitles
+        silent_master = output_dir / "visuals.mp4"
+        narration = output_dir / "narration.wav"
         final_path = output_dir / "final.mp4"
-        if silent_master.exists():
-            import shutil
-            shutil.copy2(silent_master, final_path)
+        muxed_path = output_dir / "muxed.mp4"
+        self.media.concat(clip_paths, silent_master)
+        self.media.concat(audio_paths, narration)
+        self.media.mux_audio(silent_master, narration, muxed_path)
+        self.media.subtitle(muxed_path, subtitle_path, final_path)
+        if not final_path.exists() or final_path.stat().st_size == 0:
+            raise RuntimeError("FFmpeg 未生成最终视频")
+        probe = self.media.probe(final_path)
+        if probe.duration_ms <= 0 or not probe.codec:
+            raise RuntimeError("最终视频校验失败：未检测到有效视频流")
 
         # Build final manifest
         final_manifest = self._build_final_manifest(
@@ -116,16 +164,17 @@ class CompositionService:
             subtitle_path=str(subtitle_path.relative_to(self.repository.root)) if subtitle_path.exists() else None,
         )
 
-        # Save final manifest
-        manifest_path = artifacts_dir / "final-manifest.json"
-        manifest_path.write_text(
-            json.dumps(final_manifest, ensure_ascii=False, indent=2),
-            encoding="utf-8",
+        manifest_ref = artifacts.commit_bytes(
+            project_id, run_id, "output.final-manifest", "output/final-manifest.json",
+            json_bytes(final_manifest), "compose-video",
         )
-        artifact_key = "output.final-manifest"
+        artifacts.commit_bytes(
+            project_id, run_id, "output.final-video", "output/final.mp4",
+            final_path.read_bytes(), "compose-video",
+        )
 
         return {
-            "artifact_key": "output.final-manifest",
+            "artifact_key": manifest_ref.artifact_key,
             "output_path": str(final_path),
             "duration_ms": total_duration_ms,
             "visual_count": len(clips),
@@ -204,10 +253,11 @@ class CompositionService:
             },
         }
 
-    @staticmethod
-    def _read_artifact(artifacts_dir: Path, filename: str) -> dict[str, Any]:
-        """Read a JSON artifact from the artifacts directory."""
-        artifact_path = artifacts_dir / filename
-        if artifact_path.exists():
-            return json.loads(artifact_path.read_text(encoding="utf-8"))
-        return {}
+    def _read_artifact(
+        self, artifacts: FilesystemArtifactStore, project_id: str, run_id: str, key: str,
+    ) -> dict[str, Any]:
+        ref = artifacts.get(project_id, run_id, key)
+        if not ref:
+            return {}
+        path = self.repository.run_dir(project_id, run_id) / "artifacts" / ref["relative_path"]
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}

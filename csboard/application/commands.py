@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -377,15 +378,16 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", "项目请求中缺少 reference_audio 字段")
         tts_url = request.get("tts_url", "http://127.0.0.1:7860")
         tts_mode = request.get("tts_mode", "gradio")
-        # Create adapters
-        from csboard.adapters.fakes import FakeAlignment, FakeMedia, FakeTTS
         from csboard.adapters.indextts.tts_adapter import IndexTTSAdapter
-        if tts_url and tts_url != "http://127.0.0.1:7860":
-            tts = IndexTTSAdapter(base_url=tts_url, mode=tts_mode)
-        else:
-            tts = FakeTTS(duration_ms=2000)
-        alignment = FakeAlignment()
-        media = FakeMedia()
+        from csboard.adapters.whisper.alignment_adapter import WhisperAlignmentAdapter
+        from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+        tts = IndexTTSAdapter(base_url=tts_url, mode=tts_mode)
+        alignment = WhisperAlignmentAdapter(
+            mode=request.get("whisper_mode", "node"),
+            renderer_root=Path(request.get("whisper_renderer_root", Path(__file__).resolve().parents[2] / "video_renderer")),
+            base_url=request.get("whisper_url", "http://127.0.0.1:9000"),
+        )
+        media = FFmpegMediaAdapter()
         return self.clone_voice(
             project_id, run_id, tts, alignment, media,
             reference_audio=Path(reference_audio),
@@ -498,16 +500,12 @@ class MountainCommands:
 
     def _exec_plan_storyboard(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for plan-storyboard."""
-        from csboard.adapters.fakes import FakeTextModel
-        # Use fake text model for now; real implementation would use configured model
-        text_model = FakeTextModel()
+        text_model = self._text_model_from_request(project_id)
         return self.plan_storyboard(project_id, run_id, text_model, context)
 
     def _exec_generate_illustrations(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for generate-illustrations."""
-        from csboard.adapters.fakes import FakeImageModel
-        # Use fake image model for now; real implementation would use configured model
-        image_model = FakeImageModel()
+        image_model = self._image_model_from_request(project_id)
         return self.generate_illustrations(project_id, run_id, image_model, context=context)
 
     def render_visuals(
@@ -530,19 +528,20 @@ class MountainCommands:
         run.command_ids.append(context.command_id)
         self.repository.save_run(run)
 
-        # Read required artifacts
         run_dir = self.repository.run_dir(project_id, run_id)
-        artifacts_dir = run_dir / "artifacts"
+        store = FilesystemArtifactStore(self.repository)
+        def artifact_path(key: str) -> Path | None:
+            ref = store.get(project_id, run_id, key)
+            return run_dir / "artifacts" / ref["relative_path"] if ref else None
+        timeline_path = artifact_path("timing.timeline")
+        storyboard_path = artifact_path("planning.storyboard")
+        illustration_manifest_path = artifact_path("illustrations.manifest")
 
-        timeline_path = artifacts_dir / "timeline.json"
-        storyboard_path = artifacts_dir / "storyboard.json"
-        illustration_manifest_path = artifacts_dir / "illustration-manifest.json"
-
-        if not timeline_path.exists():
+        if timeline_path is None or not timeline_path.exists():
             raise DomainError("VALIDATION_ERROR", "timeline 不存在，请先运行 clone-voice")
-        if not storyboard_path.exists():
+        if storyboard_path is None or not storyboard_path.exists():
             raise DomainError("VALIDATION_ERROR", "storyboard 不存在，请先运行 plan-storyboard")
-        if not illustration_manifest_path.exists():
+        if illustration_manifest_path is None or not illustration_manifest_path.exists():
             raise DomainError("VALIDATION_ERROR", "illustration-manifest 不存在，请先运行 generate-illustrations")
 
         # Create output directory
@@ -571,15 +570,10 @@ class MountainCommands:
             "output_path": str(result.output_path.relative_to(self.repository.root)),
         }
 
-        # Save render manifest
-        from csboard.application.av_artifacts import save_json_artifact
-        artifact_key = save_json_artifact(
-            project_id=project_id,
-            run_id=run_id,
-            filename="render-manifest.json",
-            data=render_manifest,
-            stage="render-visuals",
-        )
+        artifact_key = store.commit_bytes(
+            project_id, run_id, "render.manifest", "render/render-manifest.json",
+            json_bytes(render_manifest), "render-visuals",
+        ).artifact_key
 
         run.stages["render-visuals"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
@@ -668,9 +662,30 @@ class MountainCommands:
 
     def _exec_compose_video(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for compose-video."""
-        from csboard.adapters.fakes import FakeMedia
-        media = FakeMedia()
+        from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+        media = FFmpegMediaAdapter()
         return self.compose_video(project_id, run_id, media, context)
+
+    def _provider_config(self, project_id: str, kind: str) -> dict[str, Any]:
+        config = self._read_request(project_id).get("providers", {}).get(kind, {})
+        if not isinstance(config, dict) or not config.get("base_url"):
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", f"未配置 {kind} provider")
+        api_key = config.get("api_key")
+        if not api_key and config.get("api_key_env"):
+            api_key = os.environ.get(str(config["api_key_env"]))
+        if not api_key:
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", f"{kind} provider 缺少 API Key")
+        return {**config, "api_key": api_key}
+
+    def _text_model_from_request(self, project_id: str) -> TextModelPort:
+        from csboard.adapters.openai_compatible.text_adapter import OpenAITextAdapter
+        config = self._provider_config(project_id, "text")
+        return OpenAITextAdapter(config["base_url"], config["api_key"], config.get("model", "gpt-4o"), config.get("protocol", "chat_completions"))
+
+    def _image_model_from_request(self, project_id: str) -> ImageModelPort:
+        from csboard.adapters.openai_compatible.image_adapter import OpenAIImageAdapter
+        config = self._provider_config(project_id, "image")
+        return OpenAIImageAdapter(config["base_url"], config["api_key"], config.get("model", "dall-e-3"))
 
     @staticmethod
     def _ok(command: str, project: Project, run: Run, context: CommandContext, **extra: Any) -> dict[str, Any]:

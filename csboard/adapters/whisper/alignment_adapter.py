@@ -97,19 +97,22 @@ class WhisperAlignmentAdapter:
                 reason_code="NO_SEGMENTS",
             )
 
-        # Build character-level starts_ms from segments
+        # Build character-offset timestamps.  A character value is ambiguous
+        # for repeated characters, whereas offsets can be mapped deterministically
+        # to each VisualItem source range by the domain timing service.
         starts_ms: dict[str, int] = {}
         char_index = 0
         for seg in segments:
             seg_text = str(seg.get("text", "")).strip()
             start_ms = int(float(seg.get("startMs", seg.get("start", 0)) * 1000))
-            for ch in seg_text:
+            end_ms = int(float(seg.get("endMs", seg.get("end", start_ms / 1000)) * 1000))
+            for offset, _ in enumerate(seg_text):
                 if char_index < len(text):
-                    starts_ms[text[char_index]] = start_ms
+                    starts_ms[f"char:{char_index}"] = start_ms + ((end_ms - start_ms) * offset // max(len(seg_text), 1))
                     char_index += 1
 
         total_chars = len(text.strip())
-        matched = sum(1 for ch in text.strip() if ch in starts_ms)
+        matched = min(char_index, total_chars)
         coverage = matched / max(total_chars, 1)
 
         return AlignmentResult(
@@ -157,13 +160,14 @@ class WhisperAlignmentAdapter:
             seg_text = str(seg.get("text", "")).strip()
             start_sec = float(seg.get("start", 0))
             start_ms = int(start_sec * 1000)
-            for ch in seg_text:
+            end_ms = int(float(seg.get("end", start_sec)) * 1000)
+            for offset, _ in enumerate(seg_text):
                 if char_index < len(text):
-                    starts_ms[text[char_index]] = start_ms
+                    starts_ms[f"char:{char_index}"] = start_ms + ((end_ms - start_ms) * offset // max(len(seg_text), 1))
                     char_index += 1
 
         total_chars = len(text.strip())
-        matched = sum(1 for ch in text.strip() if ch in starts_ms)
+        matched = min(char_index, total_chars)
         coverage = matched / max(total_chars, 1)
         avg_prob = 0.0
         if segments:

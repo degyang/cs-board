@@ -29,12 +29,12 @@ class TestWhiteboardRendererAdapterUnit(unittest.TestCase):
         visual = {"visual_id": "vis-1", "order": 0}
         annotation = self.adapter._build_annotation(visual, 5000)
         self.assertIn("canvas", annotation)
-        self.assertIn("sequence", annotation)
+        self.assertIn("elements", annotation)
         self.assertEqual(annotation["canvas"]["width"], 1920)
         self.assertEqual(annotation["canvas"]["height"], 1080)
         self.assertEqual(annotation["sceneDurationMs"], 5000)
-        self.assertEqual(len(annotation["sequence"]), 1)
-        self.assertEqual(annotation["sequence"][0]["id"], "vis-1")
+        self.assertEqual(len(annotation["elements"]), 1)
+        self.assertEqual(annotation["elements"][0]["id"], "vis-1")
 
     def test_read_json_valid(self):
         with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
@@ -117,7 +117,7 @@ class TestWhiteboardRendererAdapterRender(unittest.TestCase):
             (artifacts_dir / "illustration-manifest.json").write_text(json.dumps(illustration_manifest))
 
             # Create image file
-            images_dir = project_dir / "images"
+            images_dir = run_dir / "images"
             images_dir.mkdir(parents=True)
             (images_dir / "vis-1.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
 

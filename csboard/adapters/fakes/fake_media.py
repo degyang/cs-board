@@ -56,6 +56,14 @@ class FakeMedia:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"\x00" * 128)
 
+    def mux_audio(self, video: Path, audio: Path, output: Path) -> None:
+        self.call_count += 1
+        self._sleep()
+        if self._fail:
+            raise RuntimeError("FakeMedia: injected failure")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(video.read_bytes() if video.exists() else b"\x00" * 128)
+
     def subtitle(self, video: Path, srt: Path, output: Path) -> None:
         self.call_count += 1
         self._sleep()

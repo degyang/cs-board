@@ -32,6 +32,38 @@ class VoiceAligner(Protocol):
     def align(self, unit: VoiceUnit, voice: Any) -> AlignmentResult | None: ...
 
 
+# Kept only so the still-imported legacy server can start while M07 replaces
+# it with the new API.  The new Pipeline never uses these adapters.
+class _LegacySynthesizerAdapter:
+    def __init__(self, synthesizer: VoiceSynthesizer) -> None:
+        self.synthesizer = synthesizer
+
+    def synthesize(self, request: Any) -> Any:
+        from csboard.domain.provider_types import TTSResult
+        unit = type("LegacyUnit", (), {"unit_id": "legacy", "text": request.text})()
+        result = self.synthesizer.synthesize(unit)
+        return TTSResult(result.audio, result.duration_ms, result.sample_rate, result.channels)
+
+
+class _LegacyAlignerAdapter:
+    def __init__(self, aligner: VoiceAligner) -> None:
+        self.aligner = aligner
+
+    def align(self, request: Any) -> AlignmentResult:
+        return AlignmentResult({}, 0, 0, reason_code="LEGACY_ALIGNMENT_NOT_MAPPED")
+
+
+class _NoOpMedia:
+    def probe(self, path: Path) -> Any:
+        from csboard.domain.provider_types import MediaProbeResult
+        return MediaProbeResult()
+
+    def normalize(self, input_path: Path, output_path: Path, target_lufs: float = -14.0) -> None: pass
+    def concat(self, inputs: list[Path], output: Path) -> None: pass
+    def mux_audio(self, video: Path, audio: Path, output: Path) -> None: pass
+    def subtitle(self, video: Path, srt: Path, output: Path) -> None: pass
+
+
 @dataclass(frozen=True, slots=True)
 class SynthesizedVoice:
     audio: bytes

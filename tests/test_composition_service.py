@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
 from csboard.adapters.fakes import FakeMedia
-from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemProjectRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.composition import CompositionService
 from csboard.domain.enums import Entrypoint, ProjectStatus, RunStatus
@@ -68,7 +70,7 @@ class TestCompositionServiceUnit(unittest.TestCase):
                 {
                     "visual_id": "vis-1",
                     "unit_id": "unit-1",
-                    "clip_path": "projects/proj-comp/runs/run-comp/render/clips/vis-1.mp4",
+                    "clip_path": "render/clips/vis-1.mp4",
                     "duration_ms": 5000,
                     "start_ms": 0,
                     "end_ms": 5000,
@@ -76,7 +78,7 @@ class TestCompositionServiceUnit(unittest.TestCase):
                 {
                     "visual_id": "vis-2",
                     "unit_id": "unit-2",
-                    "clip_path": "projects/proj-comp/runs/run-comp/render/clips/vis-2.mp4",
+                    "clip_path": "render/clips/vis-2.mp4",
                     "duration_ms": 5000,
                     "start_ms": 5000,
                     "end_ms": 10000,
@@ -94,15 +96,15 @@ class TestCompositionServiceUnit(unittest.TestCase):
             "provider": "FakeTTS",
             "total_duration_ms": 10000,
             "unit_count": 2,
-            "units": [
+            "voices": [
                 {
                     "unit_id": "unit-1",
-                    "audio_path": "audio/unit-1.wav",
+                    "audio_path": "artifacts/media/voices/unit-1.wav",
                     "duration_ms": 5000,
                 },
                 {
                     "unit_id": "unit-2",
-                    "audio_path": "audio/unit-2.wav",
+                    "audio_path": "artifacts/media/voices/unit-2.wav",
                     "duration_ms": 5000,
                 },
             ],
@@ -139,6 +141,15 @@ class TestCompositionServiceUnit(unittest.TestCase):
         clips_dir.mkdir(parents=True)
         (clips_dir / "vis-1.mp4").write_bytes(b"\x00" * 128)
         (clips_dir / "vis-2.mp4").write_bytes(b"\x00" * 128)
+
+        voices_dir = artifacts_dir / "media" / "voices"
+        voices_dir.mkdir(parents=True)
+        (voices_dir / "unit-1.wav").write_bytes(b"\x00" * 128)
+        (voices_dir / "unit-2.wav").write_bytes(b"\x00" * 128)
+        store = FilesystemArtifactStore(self.repo)
+        store.commit_bytes("proj-comp", "run-comp", "render.manifest", "render/render-manifest.json", (artifacts_dir / "render-manifest.json").read_bytes(), "render-visuals")
+        store.commit_bytes("proj-comp", "run-comp", "audio.voice-manifest", "audio/voice-manifest.json", (artifacts_dir / "voice-manifest.json").read_bytes(), "clone-voice")
+        store.commit_bytes("proj-comp", "run-comp", "timing.timeline", "timing/timeline.json", (artifacts_dir / "timeline.json").read_bytes(), "clone-voice")
 
         return artifacts_dir
 
@@ -188,7 +199,7 @@ class TestCompositionServiceUnit(unittest.TestCase):
 
         # Read final manifest
         run_dir = self.repo.run_dir("proj-comp", "run-comp")
-        manifest_path = run_dir / "artifacts" / "final-manifest.json"
+        manifest_path = run_dir / "artifacts" / "output" / "final-manifest.json"
         self.assertTrue(manifest_path.exists())
 
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -261,16 +272,16 @@ class TestCompositionServiceIntegration(unittest.TestCase):
             "clips": [{
                 "visual_id": "vis-1",
                 "unit_id": "unit-1",
-                "clip_path": "projects/proj-int/runs/run-int/render/clips/vis-1.mp4",
+                "clip_path": "render/clips/vis-1.mp4",
                 "duration_ms": 5000,
             }],
         }
         (artifacts_dir / "render-manifest.json").write_text(json.dumps(render_manifest))
 
         voice_manifest = {
-            "units": [{
+            "voices": [{
                 "unit_id": "unit-1",
-                "audio_path": "audio/unit-1.wav",
+                "audio_path": "artifacts/media/voices/unit-1.wav",
                 "duration_ms": 5000,
             }],
         }
@@ -290,6 +301,13 @@ class TestCompositionServiceIntegration(unittest.TestCase):
         clips_dir = run_dir / "render" / "clips"
         clips_dir.mkdir(parents=True)
         (clips_dir / "vis-1.mp4").write_bytes(b"\x00" * 128)
+        voices_dir = artifacts_dir / "media" / "voices"
+        voices_dir.mkdir(parents=True)
+        (voices_dir / "unit-1.wav").write_bytes(b"\x00" * 128)
+        store = FilesystemArtifactStore(self.repo)
+        store.commit_bytes("proj-int", "run-int", "render.manifest", "render/render-manifest.json", (artifacts_dir / "render-manifest.json").read_bytes(), "render-visuals")
+        store.commit_bytes("proj-int", "run-int", "audio.voice-manifest", "audio/voice-manifest.json", (artifacts_dir / "voice-manifest.json").read_bytes(), "clone-voice")
+        store.commit_bytes("proj-int", "run-int", "timing.timeline", "timing/timeline.json", (artifacts_dir / "timeline.json").read_bytes(), "clone-voice")
 
         # Run composition
         service = CompositionService(self.media, self.repo)
@@ -302,7 +320,7 @@ class TestCompositionServiceIntegration(unittest.TestCase):
         self.assertEqual(result["unit_count"], 1)
 
         # Verify final manifest
-        manifest_path = artifacts_dir / "final-manifest.json"
+        manifest_path = artifacts_dir / "output" / "final-manifest.json"
         self.assertTrue(manifest_path.exists())
 
         # Verify subtitle
@@ -310,6 +328,39 @@ class TestCompositionServiceIntegration(unittest.TestCase):
         self.assertTrue(subtitle_path.exists())
         content = subtitle_path.read_text(encoding="utf-8")
         self.assertIn("Test subtitle", content)
+
+
+class TestCompositionServiceFFmpegAcceptance(unittest.TestCase):
+    """A real-media guard: placeholders must never satisfy composition."""
+
+    def test_real_ffmpeg_produces_playable_audio_video(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = FilesystemProjectRepository(root)
+            project = Project("proj-real", "real", "mountain-av-v1", "whiteboard", ProjectStatus.READY,
+                              "2025-01-01T00:00:00Z", "2025-01-01T00:00:00Z", "run-real")
+            run = Run("run-real", "proj-real", "trace-real", Entrypoint.CLI, ["cmd-real"], RunStatus.RUNNING,
+                      "compose-video", "2025-01-01T00:00:00Z")
+            repo.create_project(project)
+            repo.create_run(run)
+            run_dir = repo.run_dir("proj-real", "run-real")
+            clip = run_dir / "render" / "clips" / "v-01.mp4"
+            wav = run_dir / "artifacts" / "media" / "voices" / "u-01.wav"
+            clip.parent.mkdir(parents=True)
+            wav.parent.mkdir(parents=True)
+            subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=blue:s=320x180:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip)], check=True, capture_output=True)
+            subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-ar", "24000", "-ac", "1", str(wav)], check=True, capture_output=True)
+            store = FilesystemArtifactStore(repo)
+            store.commit_bytes("proj-real", "run-real", "render.manifest", "render/render-manifest.json", json.dumps({"total_duration_ms": 1000, "clips": [{"visual_id": "v-01", "unit_id": "u-01", "clip_path": "render/clips/v-01.mp4", "duration_ms": 1000}]}).encode(), "render-visuals")
+            store.commit_bytes("proj-real", "run-real", "audio.voice-manifest", "audio/voice-manifest.json", json.dumps({"voices": [{"unit_id": "u-01", "audio_path": "artifacts/media/voices/u-01.wav", "duration_ms": 1000}]}).encode(), "clone-voice")
+            store.commit_bytes("proj-real", "run-real", "timing.timeline", "timing/timeline.json", json.dumps({"units": [{"unit_id": "u-01", "duration_ms": 1000}]}).encode(), "clone-voice")
+            store.commit_bytes("proj-real", "run-real", "planning.av-plan", "planning/av-plan.json", json.dumps({"voice_units": [{"unit_id": "u-01", "text": "验收字幕"}]}).encode(), "segment-script")
+
+            result = CompositionService(FFmpegMediaAdapter(), repo).run("proj-real", "run-real")
+            probe = FFmpegMediaAdapter().probe(Path(result["output_path"]))
+            self.assertGreater(probe.duration_ms, 0)
+            self.assertEqual(probe.codec, "h264")
+            self.assertGreater(probe.sample_rate, 0)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -35,13 +36,13 @@ class WhiteboardRendererAdapter:
     def __init__(
         self,
         render_script: Path | str | None = None,
-        python_bin: str = "python3",
+        python_bin: str | None = None,
         timeout: float = 300.0,
     ) -> None:
         if render_script is None:
-            render_script = Path(__file__).resolve().parents[2] / "scripts" / "render_stream_whiteboard.py"
+            render_script = Path(__file__).resolve().parents[3] / "scripts" / "render_stream_whiteboard.py"
         self._script = str(render_script)
-        self._python = python_bin
+        self._python = python_bin or sys.executable
         self._timeout = timeout
 
     def render(self, request: RenderRequest) -> RenderResult:
@@ -85,11 +86,13 @@ class WhiteboardRendererAdapter:
                 if not image_path:
                     continue
 
-                # Resolve image path relative to project root
-                # timeline_path is at: projects/<proj>/runs/<run>/artifacts/timeline.json
-                # So parents[3] is the project root
-                project_root = request.timeline_path.parents[3]
-                full_image_path = project_root / image_path
+                # Illustration paths are run-relative. Find the artifact
+                # directory instead of relying on a fixed parent count.
+                artifact_dir = next((parent for parent in request.timeline_path.parents if parent.name == "artifacts"), None)
+                if artifact_dir is None:
+                    raise RuntimeError("Cannot resolve artifacts directory from timeline artifact")
+                run_dir = artifact_dir.parent
+                full_image_path = run_dir / image_path
 
                 if not full_image_path.exists():
                     continue
@@ -102,15 +105,10 @@ class WhiteboardRendererAdapter:
                 self._render_clip(full_image_path, annotation, clip_path, duration_ms)
 
                 if clip_path.exists():
-                    # Make clip path relative to project root
-                    try:
-                        clip_relative = clip_path.relative_to(project_root)
-                    except ValueError:
-                        clip_relative = clip_path
                     clips.append({
                         "visual_id": visual_id,
                         "unit_id": unit["unit_id"],
-                        "clip_path": str(clip_relative),
+                        "clip_path": str(clip_path.relative_to(run_dir)),
                         "duration_ms": duration_ms,
                         "start_ms": start_ms,
                         "end_ms": end_ms,
@@ -118,12 +116,11 @@ class WhiteboardRendererAdapter:
                     total_duration_ms += duration_ms
                     total_frames += max(1, duration_ms * 30 // 1000)  # Assume 30fps
 
-        # Create a concatenated master (placeholder - real implementation would use ffmpeg)
-        master_path = request.output_dir / "silent_master.mp4"
-        master_path.write_bytes(b"\x00" * 128)  # Placeholder
+        if not clips:
+            raise RuntimeError("Whiteboard rendering produced no clips")
 
         return RenderResult(
-            output_path=master_path,
+            output_path=request.output_dir / clips[0]["clip_path"],
             duration_ms=total_duration_ms,
             frames=total_frames,
             request_id=request.request_id,
@@ -142,11 +139,11 @@ class WhiteboardRendererAdapter:
         return {
             "canvas": {"width": 1920, "height": 1080},
             "sceneDurationMs": duration_ms,
-            "sequence": [
+            "elements": [
                 {
                     "id": visual.get("visual_id", "region-1"),
-                    "startMs": 0,
                     "region": {"x": 100, "y": 100, "width": 1720, "height": 880},
+                    "reveal": {"startMs": 0, "durationMs": duration_ms, "protectedRegions": []},
                 }
             ],
         }

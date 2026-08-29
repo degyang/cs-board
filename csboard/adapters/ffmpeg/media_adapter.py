@@ -108,6 +108,16 @@ class FFmpegMediaAdapter:
         finally:
             filelist.unlink(missing_ok=True)
 
+    def mux_audio(self, video: Path, audio: Path, output: Path) -> None:
+        """Mux a rendered video stream and narration audio into an MP4."""
+        output.parent.mkdir(parents=True, exist_ok=True)
+        self._run([
+            self._ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(video), "-i", str(audio),
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
+            "-shortest", "-movflags", "+faststart", str(output),
+        ])
+
     def subtitle(self, video: Path, srt: Path, output: Path) -> None:
         """Burn subtitles into a video file."""
         output.parent.mkdir(parents=True, exist_ok=True)

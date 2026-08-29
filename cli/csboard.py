@@ -204,14 +204,14 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             run_id = getattr(args, "run", None) or project.active_run_id
             if not run_id or not args.reference:
                 raise ValueError("clone-voice 需要 --run 与 --reference")
-            from csboard.adapters.fakes import FakeAlignment, FakeMedia, FakeTTS
             from csboard.adapters.indextts.tts_adapter import IndexTTSAdapter
-            if args.tts_url and args.tts_url != "http://127.0.0.1:7860":
-                tts = IndexTTSAdapter(base_url=args.tts_url, mode=args.tts_mode)
-            else:
-                tts = FakeTTS(duration_ms=2000)
-            alignment = FakeAlignment()
-            media = FakeMedia()
+            from csboard.adapters.whisper.alignment_adapter import WhisperAlignmentAdapter
+            from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+            tts = IndexTTSAdapter(base_url=args.tts_url, mode=args.tts_mode)
+            alignment = WhisperAlignmentAdapter(
+                renderer_root=ROOT / "video_renderer",
+            )
+            media = FFmpegMediaAdapter()
             return commands.clone_voice(
                 args.project, run_id, tts, alignment, media,
                 reference_audio=args.reference,
@@ -221,16 +221,14 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             run_id = getattr(args, "run", None) or project.active_run_id
             if not run_id:
                 raise ValueError("需要 --run 或项目有活跃运行")
-            from csboard.adapters.fakes import FakeTextModel
-            text_model = FakeTextModel()
+            text_model = commands._text_model_from_request(args.project)
             return commands.plan_storyboard(args.project, run_id, text_model)
         elif args.stage == "generate-illustrations":
             project = commands.repository.get_project(args.project)
             run_id = getattr(args, "run", None) or project.active_run_id
             if not run_id:
                 raise ValueError("需要 --run 或项目有活跃运行")
-            from csboard.adapters.fakes import FakeImageModel
-            image_model = FakeImageModel()
+            image_model = commands._image_model_from_request(args.project)
             return commands.generate_illustrations(args.project, run_id, image_model)
         elif args.stage == "render-visuals":
             project = commands.repository.get_project(args.project)
@@ -245,8 +243,8 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             run_id = getattr(args, "run", None) or project.active_run_id
             if not run_id:
                 raise ValueError("需要 --run 或项目有活跃运行")
-            from csboard.adapters.fakes import FakeMedia
-            media = FakeMedia()
+            from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+            media = FFmpegMediaAdapter()
             return commands.compose_video(args.project, run_id, media)
         else:
             # For unregistered stages, raise CAPABILITY_NOT_AVAILABLE

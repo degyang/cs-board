@@ -106,9 +106,10 @@ class PipelineOrchestrator:
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         run = self.get_run(project_id, run_id)
 
-        # For targeted policy, only run the target stage (skip deps check for now)
+        # A targeted rerun still needs every stale/missing dependency.  Running
+        # only the requested leaf would make artifacts internally inconsistent.
         if policy == "targeted":
-            pending = [target_stage] if self._needs_run(run, target_stage) else []
+            pending = self.get_pending_stages(run, target_stage)
         else:
             pending = self.get_pending_stages(run, target_stage)
 
@@ -244,6 +245,16 @@ class PipelineOrchestrator:
         try:
             return executor(project_id, run_id, context)
         except Exception as exc:
+            run = self.get_run(project_id, run_id)
+            state = run.stages.get(stage)
+            run.stages[stage] = type(state)(StageStatus.FAILED, (state.attempt if state else 0) + 1) if state else None
+            if run.stages.get(stage) is None:
+                # Keep the orchestrator usable with the concrete Run model
+                # without importing repository concerns into the public API.
+                from csboard.domain.models import StageState
+                run.stages[stage] = StageState(StageStatus.FAILED, 1)
+            run.status = RunStatus.FAILED
+            self.save_run(run)
             return {
                 "ok": False,
                 "command": "stage.run",

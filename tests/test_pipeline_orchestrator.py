@@ -128,12 +128,11 @@ class TestRunPipeline(unittest.TestCase):
         self.assertEqual(len(result["stages_executed"]), 1)
         self.assertEqual(result["stages_executed"][0], "segment-script")
 
-    def test_targeted_runs_only_target(self) -> None:
+    def test_targeted_runs_target_with_missing_dependencies(self) -> None:
         orch, _, _ = self._make_orchestrator()
         result = orch.run_pipeline("project-test", "run-test", policy="targeted", target_stage="clone-voice")
         self.assertTrue(result["ok"])
-        self.assertEqual(len(result["stages_executed"]), 1)
-        self.assertEqual(result["stages_executed"][0], "clone-voice")
+        self.assertEqual(result["stages_executed"], ["segment-script", "clone-voice"])
 
     def test_targeted_requires_stage(self) -> None:
         orch, _, _ = self._make_orchestrator()
