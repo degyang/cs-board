@@ -1,1 +1,1 @@
-{"name":"cs-board-web-v2","private":true,"type":"module","scripts":{"dev":"vite","build":"vite build"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest"},"devDependencies":{}}
+{"name":"cs-board-web-v2","private":true,"type":"module","scripts":{"dev":"vite","build":"vite build"},"dependencies":{"react":"latest","react-dom":"latest"},"devDependencies":{"@vitejs/plugin-react":"latest","vite":"latest"}}
