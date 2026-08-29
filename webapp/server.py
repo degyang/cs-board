@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
     "base_url": "https://api.openlux.ai/v1",
     "text_model": "gpt-5",
     "image_model": "gpt-image-2",
+    "llm_api_mode": "chat-completions",
     "tts_url": "http://127.0.0.1:7860",
     "tts_url_2": "",
     "tts_mode": "gradio",
@@ -650,7 +651,7 @@ def provider_retry_delay(attempt: int) -> int:
 
 def provider_post(config: dict[str, Any], endpoint: str, payload: dict[str, Any], timeout: float = 1800, job_id: str | None = None) -> dict[str, Any]:
     if not config.get("api_key"):
-        raise RuntimeError("请先在 API 设置中填写 OpenLux API Key")
+        raise RuntimeError("请先在 API 设置中填写 OpenAI 兼容 API Key")
     last_error: Exception | None = None
     for attempt in range(3):
         try:
@@ -661,7 +662,7 @@ def provider_post(config: dict[str, Any], endpoint: str, payload: dict[str, Any]
                     json=payload,
                 )
             if response.is_error:
-                error = ProviderHTTPError(response.status_code, f"OpenLux 调用失败：{response.status_code} {response.text[:800]}")
+                error = ProviderHTTPError(response.status_code, f"模型服务调用失败：{response.status_code} {response.text[:800]}")
                 if response.status_code not in {408, 409, 425, 429, 500, 502, 503, 504}:
                     raise error
                 raise error
@@ -679,16 +680,27 @@ def provider_post(config: dict[str, Any], endpoint: str, payload: dict[str, Any]
 
 def provider_models(config: dict[str, Any], timeout: float = 30) -> set[str]:
     if not config.get("api_key"):
-        raise RuntimeError("请先在 API 设置中填写 OpenLux API Key")
+        raise RuntimeError("请先在 API 设置中填写 OpenAI 兼容 API Key")
     with httpx.Client(timeout=timeout) as client:
         response = client.get(
             f"{config['base_url'].rstrip('/')}/models",
             headers={"Authorization": f"Bearer {config['api_key']}"},
         )
         if response.is_error:
-            raise ProviderHTTPError(response.status_code, f"OpenLux 模型列表读取失败：{response.status_code} {response.text[:800]}")
+            raise ProviderHTTPError(response.status_code, f"模型列表读取失败：{response.status_code} {response.text[:800]}")
         payload = response.json()
     return {str(item.get("id")) for item in payload.get("data", []) if isinstance(item, dict) and item.get("id")}
+
+
+def provider_text(config: dict[str, Any], prompt: str, job_id: str | None = None) -> dict[str, Any]:
+    """Call either common Chat Completions or the newer Responses API."""
+    if config.get("llm_api_mode") == "responses":
+        return provider_post(config, "responses", {"model": config["text_model"], "input": prompt}, job_id=job_id)
+    return provider_post(config, "chat/completions", {
+        "model": config["text_model"],
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+    }, job_id=job_id)
 
 
 def script_units(copy: str) -> list[str]:
@@ -1046,7 +1058,7 @@ elements 必须是恰好 3 个具体可画的中文短语，按叙事顺序排�
     scenes: list[dict[str, Any]] = []
     last_plan_error: Exception | None = None
     for attempt in range(3):
-        payload = provider_post(config, "responses", {"model": config["text_model"], "input": prompt}, job_id=job_id)
+        payload = provider_text(config, prompt, job_id=job_id)
         try:
             candidate = parse_json_block(extract_response_text(payload))
             if not isinstance(candidate, list) or not candidate:
@@ -1179,7 +1191,7 @@ def generate_image(config: dict[str, Any], prompt: str, target: Path, reference_
     }
     if reference_images:
         if not config.get("api_key"):
-            raise RuntimeError("请先在 API 设置中填写 OpenLux API Key")
+            raise RuntimeError("请先在 API 设置中填写 OpenAI 兼容 API Key")
         form_data = {key: str(value) for key, value in request_payload.items()}
         raw_files = [(path.name, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "image/png") for path in reference_images]
         response = None
@@ -1212,7 +1224,7 @@ def generate_image(config: dict[str, Any], prompt: str, target: Path, reference_
         if response is None or response.is_error:
             status = response.status_code if response is not None else 500
             detail = response.text[:800] if response is not None else str(last_transport_error or "没有响应")
-            raise ProviderHTTPError(status, f"OpenLux 参考图调用失败：{status} {detail}")
+            raise ProviderHTTPError(status, f"参考图模型调用失败：{status} {detail}")
         payload = response.json()
     else:
         try:
@@ -2223,7 +2235,7 @@ def test_config(payload: dict[str, Any]) -> dict[str, Any]:
             config[key] = value
     results: dict[str, Any] = {}
     try:
-        provider_post(config, "responses", {"model": config["text_model"], "input": "只回复：连接成功"}, timeout=60)
+        provider_text(config, "只回复：连接成功")
         results["openlux"] = {"ok": True, "message": f"OpenLux {config['text_model']} 连接成功"}
     except Exception as exc:
         results["openlux"] = {"ok": False, "message": str(exc)}
