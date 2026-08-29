@@ -107,6 +107,7 @@ class MountainCommands:
         if project.pipeline_id != "mountain-av-v1":
             raise ValueError("仅 mountain-av-v1 可运行标准文案分割")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        run.status = RunStatus.RUNNING
         units = segment_script(script)
         document = av_plan_document(project_id, run_id, units, script, project.engine)
         artifact = FilesystemArtifactStore(self.repository).commit_bytes(
