@@ -38,7 +38,18 @@ def mountain_router(data_dir: Path) -> APIRouter:
         try:
             value = repository.get_project(project_id)
             run = repository.get_run(project_id, value.active_run_id) if value.active_run_id else None
-            return {"project": value.to_dict(), "active_run": run.to_dict() if run else None}
+            artifacts = []
+            if run:
+                index = repository.run_dir(project_id, run.run_id) / "artifacts" / "index.json"
+                if index.exists():
+                    artifacts = [dict(artifact_key=key, **item) for key, item in repository.read_json(index).get("artifacts", {}).items()]
+            return {
+                "project": value.to_dict(), "active_run": run.to_dict() if run else None,
+                "stages": [] if not run else [{"stage": name, **state.to_dict()} for name, state in run.stages.items()],
+                "warnings": [] if not run else run.warnings,
+                "artifacts": artifacts,
+                "trace": None if not run else {"trace_id": run.trace_id, "command_ids": run.command_ids},
+            }
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
