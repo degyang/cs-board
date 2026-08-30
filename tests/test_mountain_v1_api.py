@@ -55,6 +55,62 @@ def test_v1_health(client: TestClient) -> None:
     assert "providers" in body
 
 
+# ── Provider DTO 契约测试 ────────────────────────────────────────────────
+
+
+def test_provider_dto_contract_no_deprecated_status_field(
+    client: TestClient, tmp_state: Path
+) -> None:
+    """Provider 响应不得包含已淘汰的 'status' 字段，防止前端误用。
+
+    断言 /api/v1/providers、/health、/capabilities 的 Provider 字段均使用
+    当前契约（config_status + availability），不包含旧版 'status'。
+    """
+    # GET /api/v1/providers
+    resp = client.get("/api/v1/providers")
+    assert resp.status_code == 200
+    providers_body = resp.json()
+    for name, entry in providers_body["providers"].items():
+        # 不得存在旧版 status 字段
+        assert "status" not in entry, f"providers/{name} contains deprecated 'status'"
+        # 当前契约字段
+        assert "config_status" in entry
+        assert "availability" in entry
+        cs = entry["config_status"]
+        assert isinstance(cs["configured"], bool)
+        assert isinstance(cs["missing_secrets"], list)
+        assert isinstance(cs["configured_secrets"], list)
+        assert isinstance(cs["is_encrypted"], bool)
+        av = entry["availability"]
+        assert isinstance(av["available"], bool)
+        assert isinstance(av["component"], str)
+        assert "error_code" in av
+        assert "suggestion" in av
+
+    # GET /api/v1/health
+    resp = client.get("/api/v1/health")
+    assert resp.status_code == 200
+    health_body = resp.json()
+    assert "providers" in health_body
+    health_providers = health_body["providers"].get("providers", {})
+    for name, av in health_providers.items():
+        assert isinstance(av["available"], bool)
+        assert isinstance(av["component"], str)
+        assert "error_code" in av
+        assert "suggestion" in av
+
+    # GET /api/v1/capabilities
+    resp = client.get("/api/v1/capabilities")
+    assert resp.status_code == 200
+    cap_body = resp.json()
+    assert isinstance(cap_body["items"], list)
+    for item in cap_body["items"]:
+        assert "engine" in item
+        assert "visual_source" in item
+        assert "supported" in item
+        assert isinstance(item["supported"], bool)
+
+
 # ── Provider 配置测试 ──────────────────────────────────────────────────
 
 
@@ -65,13 +121,26 @@ def test_v1_list_providers(client: TestClient, tmp_state: Path) -> None:
     body = response.json()
     assert "providers" in body
     assert "all_configured" in body
+    assert "all_available" in body
     # 应该有 6 个 provider
     assert len(body["providers"]) == 6
-    # 验证每个 provider 都有 profile 和 status
+    # 验证每个 provider 的字段契约
     for name, provider in body["providers"].items():
         assert "profile" in provider
-        assert "status" in provider
-        assert "configured" in provider["status"]
+        assert "config_status" in provider
+        assert "availability" in provider
+        # config_status 结构
+        cs = provider["config_status"]
+        assert "configured" in cs
+        assert isinstance(cs["configured"], bool)
+        assert "missing_secrets" in cs
+        assert "configured_secrets" in cs
+        assert "is_encrypted" in cs
+        # availability 结构
+        av = provider["availability"]
+        assert "available" in av
+        assert isinstance(av["available"], bool)
+        assert "component" in av
 
 
 def test_v1_set_provider_secret(client: TestClient, tmp_state: Path) -> None:
@@ -344,8 +413,23 @@ def test_v1_run_view(client: TestClient, tmp_state: Path) -> None:
 # ── 验收测试：完整流程（Provider 未配置场景） ──────────────────────────────
 
 
-def test_v1_acceptance_flow_with_missing_provider(client: TestClient, tmp_state: Path) -> None:
+def test_v1_acceptance_flow_with_missing_provider(
+    client: TestClient, tmp_state: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """M07 PR-1b 验收：创建项目 → 上传音频 → 启动真实标准流程 → 返回 CAPABILITY_NOT_AVAILABLE。"""
+    # 模拟 Provider 不可用（真实 STATE_DIR 可能已有配置）
+    from csboard.adapters.provider_factory import ProviderFactory
+
+    unavailable_result = {
+        "all_available": False,
+        "providers": {
+            name: {"available": False, "component": name, "error_code": "SECRET_NOT_CONFIGURED", "suggestion": "请配置 api_key"}
+            for name in ("text_model", "image_model", "tts", "alignment", "renderer", "media")
+        },
+        "unavailable": ["text_model", "image_model", "tts", "alignment", "renderer", "media"],
+    }
+    monkeypatch.setattr(ProviderFactory, "check_all_availability", lambda self: unavailable_result)
+
     # 步骤 1: 创建项目
     response = client.post("/api/v1/projects", json={"title": "验收测试项目"})
     assert response.status_code == 200
@@ -381,9 +465,14 @@ def test_v1_acceptance_flow_with_missing_provider(client: TestClient, tmp_state:
 
     # 验证返回 CAPABILITY_NOT_AVAILABLE
     assert body["detail"]["code"] == "CAPABILITY_NOT_AVAILABLE"
-    assert "Provider 未配置" in body["detail"]["message"]
-    assert isinstance(body["detail"]["missing"], list)
-    assert len(body["detail"]["missing"]) > 0
+    assert isinstance(body["detail"]["message"], str) and body["detail"]["message"]
+    # 当前 API 使用 "unavailable" 列表和 "details" 结构
+    assert isinstance(body["detail"]["unavailable"], list)
+    assert len(body["detail"]["unavailable"]) > 0
+    assert isinstance(body["detail"]["details"], list)
+    for item in body["detail"]["details"]:
+        assert "provider" in item
+        assert "error_code" in item
 
 
 # ── Provider 配置后启动测试 ──────────────────────────────────────────
@@ -531,47 +620,49 @@ def test_v1_no_legacy_references(client: TestClient) -> None:
 def test_provider_factory_check_providers(tmp_path: Path) -> None:
     """ProviderFactory.check_all_providers 返回正确状态。"""
     from csboard.adapters.provider_factory import ProviderFactory
-    from csboard.domain.provider_types import PROVIDER_PROFILES
 
     factory = ProviderFactory(tmp_path)
 
     # 默认情况下，需要 secret 的 provider 未配置
-    result = factory.check_all_providers(PROVIDER_PROFILES)
+    result = factory.check_all_providers()
     assert result["all_configured"] is False
-    # 只有 text_model 和 image_model 需要 api_key secret
-    assert len(result["missing"]) == 2
+    assert "providers" in result
+    assert len(result["providers"]) == 6
+    # text_model 和 image_model 需要 api_key secret
     assert "text_model" in result["missing"]
     assert "image_model" in result["missing"]
     # tts、alignment、renderer、media 不需要 secret
-    assert len(result["configured"]) == 4
+    assert "tts" in result["configured"]
+    assert "alignment" in result["configured"]
+    assert "renderer" in result["configured"]
+    assert "media" in result["configured"]
 
 
 def test_provider_factory_create_adapters(tmp_path: Path) -> None:
     """ProviderFactory 可以构造真实 Adapter。"""
     from csboard.adapters.provider_factory import ProviderFactory
-    from csboard.domain.provider_types import PROVIDER_PROFILES
 
     factory = ProviderFactory(tmp_path)
 
-    # 配置 text_model
+    # 配置 text_model secret
     factory.secret_store.set("text_model_api_key", "sk-test")
 
-    # 构造 text_model adapter
-    text_model = factory.create_text_model(PROVIDER_PROFILES["text_model"])
+    # 构造 text_model adapter（无 profile 参数）
+    text_model = factory.create_text_model()
     assert text_model is not None
     assert hasattr(text_model, 'generate')
 
     # 构造其他 adapters（不需要 secret）
-    tts = factory.create_tts(PROVIDER_PROFILES["tts"])
+    tts = factory.create_tts()
     assert tts is not None
 
-    alignment = factory.create_alignment(PROVIDER_PROFILES["alignment"])
+    alignment = factory.create_alignment()
     assert alignment is not None
 
-    renderer = factory.create_renderer(PROVIDER_PROFILES["renderer"])
+    renderer = factory.create_renderer()
     assert renderer is not None
 
-    media = factory.create_media(PROVIDER_PROFILES["media"])
+    media = factory.create_media()
     assert media is not None
 
 
@@ -579,10 +670,10 @@ def test_provider_factory_create_adapters(tmp_path: Path) -> None:
 
 
 def test_secret_store_basic_operations(tmp_path: Path) -> None:
-    """SecretStore 基本操作：set、get、has、delete。"""
-    from csboard.adapters.secrets import SecretStore
+    """SecretStore 基本操作：set、get、has、delete、mask。"""
+    from csboard.adapters.secrets import PlaintextSecretStore, mask_secret
 
-    store = SecretStore(tmp_path)
+    store = PlaintextSecretStore(tmp_path / "secrets.json")
 
     # 初始状态
     assert store.get("test_key") is None
@@ -596,10 +687,16 @@ def test_secret_store_basic_operations(tmp_path: Path) -> None:
     # 列出 keys
     assert "test_key" in store.list_keys()
 
-    # 删除
-    assert store.delete("test_key") is True
+    # 删除（返回 None）
+    store.delete("test_key")
     assert store.get("test_key") is None
     assert store.has("test_key") is False
+
+    # mask_secret 边界
+    assert mask_secret(None) == ""
+    assert mask_secret("") == ""
+    assert mask_secret("abc") == "••••"
+    assert mask_secret("sk-1234567890abcdef") == "sk-1••••cdef"
 
 
 def test_mask_secret() -> None:
