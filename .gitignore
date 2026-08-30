@@ -11,6 +11,8 @@ __pycache__/
 *.py[cod]
 
 # Web dependencies and build output
+node_modules/
+.vite/
 web/node_modules/
 web/.next/
 web/.vinext/
@@ -20,6 +22,8 @@ web/coverage/
 web/outputs/
 web/work/
 web/*.tsbuildinfo
+web-v2/vite.config.ts.timestamp-*.mjs
+web-v2/_rn.tgz
 
 # Remotion dependencies and downloaded alignment models
 video_renderer/node_modules/
