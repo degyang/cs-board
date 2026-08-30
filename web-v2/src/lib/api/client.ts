@@ -16,6 +16,11 @@ import type {
   CreateProjectRequest,
   CreateProjectResponse,
   ProjectDetail,
+  RunDetail,
+  UnitListResponse,
+  ArtifactListResponse,
+  EventsResponse,
+  LogsResponse,
   ApiError,
 } from './types'
 
@@ -148,4 +153,70 @@ export function createProject(
 
 export function fetchProject(id: string): Promise<ProjectDetail> {
   return get<ProjectDetail>(`/projects/${encodeURIComponent(id)}`)
+}
+
+// ── Runs ────────────────────────────────────────────────────────────────
+
+export function fetchRun(projectId: string, runId: string): Promise<RunDetail> {
+  return get<RunDetail>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`)
+}
+
+export function startRun(projectId: string, runId: string): Promise<unknown> {
+  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/start`)
+}
+
+export function cancelRun(projectId: string, runId: string): Promise<unknown> {
+  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`)
+}
+
+export function retryRun(projectId: string, runId: string): Promise<unknown> {
+  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/retry`)
+}
+
+// ── Stages ──────────────────────────────────────────────────────────────
+
+export function fetchStages(projectId: string, runId: string): Promise<{ items: Array<{ stage: string } & Record<string, unknown>> }> {
+  return get(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages`)
+}
+
+export function runStage(projectId: string, runId: string, stage: string): Promise<unknown> {
+  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/run`)
+}
+
+export function retryStage(projectId: string, runId: string, stage: string): Promise<unknown> {
+  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/retry`)
+}
+
+// ── Units ───────────────────────────────────────────────────────────────
+
+export function fetchUnits(projectId: string, runId: string): Promise<UnitListResponse> {
+  return get<UnitListResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/units`)
+}
+
+// ── Artifacts ───────────────────────────────────────────────────────────
+
+export function fetchArtifacts(projectId: string, runId: string): Promise<ArtifactListResponse> {
+  return get<ArtifactListResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/artifacts`)
+}
+
+// ── Events ──────────────────────────────────────────────────────────────
+
+export function fetchEvents(projectId: string, runId: string, after = 0): Promise<EventsResponse> {
+  return get<EventsResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/events?after=${after}`)
+}
+
+// ── Logs ────────────────────────────────────────────────────────────────
+
+export function fetchLogs(projectId: string, runId: string, filters?: { level?: string; stage?: string }): Promise<LogsResponse> {
+  const params = new URLSearchParams()
+  if (filters?.level) params.set('level', filters.level)
+  if (filters?.stage) params.set('stage', filters.stage)
+  const qs = params.toString()
+  return get<LogsResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/logs${qs ? '?' + qs : ''}`)
+}
+
+// ── Final Video ─────────────────────────────────────────────────────────
+
+export function getFinalUrl(projectId: string, runId: string): string {
+  return `${BASE}/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/final`
 }

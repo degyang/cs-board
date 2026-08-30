@@ -66,6 +66,20 @@
   --nt-shadow-md:0 4px 8px -2px rgba(20,20,19,.10), 0 2px 4px -2px rgba(20,20,19,.06);
   --nt-shadow-focus:0 0 0 3px rgba(217,119,87,.35);
 
+  /* ---- Status variants ---- */
+  --nt-st-stale-bg:#f0ece7;   --nt-st-stale-fg:#8a8580;
+  --nt-st-skipped-bg:#eae6e1;  --nt-st-skipped-fg:#6b6560;
+
+  /* ---- Typography tracking ---- */
+  --nt-tracking-h1:-0.01em;
+  --nt-tracking-h2:0em;
+  --nt-tracking-body:0em;
+
+  /* ---- Breakpoints (reference) ---- */
+  --nt-bp-md:768px;
+  --nt-bp-lg:1024px;
+  --nt-bp-xl:1280px;
+
   /* ---- 本地界面变量 ---- */
   --ui-sidebar-w:264px;
 }

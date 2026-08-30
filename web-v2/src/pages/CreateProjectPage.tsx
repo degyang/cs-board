@@ -1,28 +1,29 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { createProject } from '../lib/api/client'
+import { BackButton } from '../components/ui/BackButton'
 
 export function CreateProjectPage() {
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
+  const [script, setScript] = useState('')
+  const [engine, setEngine] = useState('whiteboard')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canSubmit = title.trim().length >= 2 && !submitting
-
-  const handleSubmit = async () => {
-    if (!canSubmit) return
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!title.trim()) {
+      setError('请输入任务名称')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
-      const res = await createProject({
-        title: title.trim(),
-        engine: 'whiteboard',
-        pipeline_id: 'mountain-av-v1',
-      })
+      const res = await createProject({ title: title.trim(), engine })
       navigate(`/projects/${res.project_id}`)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '创建失败')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建失败')
     } finally {
       setSubmitting(false)
     }
@@ -30,83 +31,78 @@ export function CreateProjectPage() {
 
   return (
     <div className="page page-narrow">
+      <BackButton to="/" label="返回任务队列" />
       <div className="page-head">
-        <h1 className="page-title">创建项目</h1>
-        <p className="page-desc">
-          填写项目信息，创建后可上传文案与参考音频，启动视频制作流程。
-        </p>
+        <h1 className="page-title">新建任务</h1>
+        <p className="page-desc">输入任务名称和视频文案，选择渲染引擎后提交</p>
       </div>
 
-      <div className="card">
-        <div className="card-title">项目信息</div>
-        <div className="card-sub">基础配置，引擎与 Pipeline 使用当前标准设置。</div>
-
-        <div className="field">
-          <label htmlFor="title">项目标题</label>
-          <input
-            id="title"
-            className="input"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="例如：量子计算十分钟科普"
-            disabled={submitting}
-            maxLength={200}
-          />
-          <div className="hint">至少 2 个字符</div>
-        </div>
-
-        <div className="field">
-          <label>引擎</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <span className="badge tag-info" style={{ padding: '4px 12px' }}>
-              白板动画 (whiteboard)
-            </span>
+      <form onSubmit={handleSubmit}>
+        <div className="card">
+          <div className="field">
+            <label htmlFor="title">任务名称</label>
+            <input
+              id="title"
+              className="input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="输入视频任务名称"
+              maxLength={120}
+              disabled={submitting}
+            />
           </div>
-          <div className="hint">当前仅支持白板动画引擎。</div>
-        </div>
 
-        <div className="field">
-          <label>Pipeline</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <span className="badge tag-neutral" style={{ padding: '4px 12px', fontFamily: 'var(--nt-font-mono)' }}>
-              mountain-av-v1
-            </span>
+          <div className="field">
+            <label htmlFor="script">视频文案</label>
+            <textarea
+              id="script"
+              className="textarea"
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              placeholder="粘贴完整文案或按句分割，每句将生成独立配音和画面"
+              rows={8}
+              disabled={submitting}
+            />
+            <p className="hint">长文案将自动分段；也可用空行手动分段</p>
           </div>
-        </div>
 
-        {error && (
-          <div className="error-card" style={{ marginTop: 12 }}>
-            <div className="code">创建失败</div>
-            <div className="sug">{error}</div>
+          <div className="field">
+            <label htmlFor="engine">渲染引擎</label>
+            <select
+              id="engine"
+              className="select"
+              value={engine}
+              onChange={(e) => setEngine(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="whiteboard">白板动画</option>
+              <option value="infographic-remotion">动态信息图</option>
+            </select>
+            <p className="hint">不同引擎适用于不同风格的视频内容</p>
           </div>
-        )}
-      </div>
 
-      <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!canSubmit}
-          onClick={handleSubmit}
-        >
-          {submitting ? (
-            <>
-              <span className="spinner" />
-              创建中…
-            </>
-          ) : (
-            '创建项目'
+          {error && (
+            <div className="error-card" style={{ marginTop: 12 }}>
+              <span className="code">{error}</span>
+            </div>
           )}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => navigate('/')}
-          disabled={submitting}
-        >
-          取消
-        </button>
-      </div>
+
+          <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <span className="spinner" /> 创建中…
+                </>
+              ) : (
+                '创建任务'
+              )}
+            </button>
+            <Link to="/" className="btn btn-ghost">
+              取消
+            </Link>
+          </div>
+        </div>
+      </form>
     </div>
   )
 }

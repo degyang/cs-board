@@ -39,11 +39,13 @@ VITE_API_BASE_URL=http://your-server:8000/api/v1
 
 | 路径 | 页面 | 说明 |
 |------|------|------|
-| `/` | ProjectsPage | 项目列表 |
-| `/projects/new` | CreateProjectPage | 创建项目 |
-| `/projects/:id` | ProjectDetailPage | 项目详情 |
+| `/` | ProjectsPage | 任务队列（状态筛选 + 搜索 + 15s 轮询） |
+| `/projects/new` | CreateProjectPage | 新建任务 |
+| `/projects/:projectId` | ProjectWorkbenchPage | 工作台（三栏布局：配音单元 / 阶段工作区 / 产物） |
+| `/projects/:projectId/runs/:runId/diagnostics` | RunDiagnosticsPage | 运行诊断（事件流 + 日志） |
 | `/settings/providers` | ProvidersPage | Provider 配置列表 |
 | `/settings/providers/:name` | ProviderDetailPage | Provider 详情与配置 |
+| `/help` | HelpPage | 帮助中心 |
 
 ## API 映射表
 
@@ -60,23 +62,15 @@ VITE_API_BASE_URL=http://your-server:8000/api/v1
 | 项目列表 | GET | `/projects` |
 | 创建项目 | POST | `/projects` |
 | 项目详情 | GET | `/projects/{id}` |
-
-## 开发代理
-
-开发模式下，Vite 会将 `/api` 请求代理到后端服务器。默认后端地址为 `http://127.0.0.1:8000`。
-
-如需修改代理目标，编辑 `vite.config.ts`：
-
-```ts
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://your-server:port',
-      changeOrigin: true,
-    },
-  },
-},
-```
+| 运行详情 | GET | `/projects/{id}/runs/{runId}` |
+| 取消运行 | POST | `/projects/{id}/runs/{runId}/cancel` |
+| 重试运行 | POST | `/projects/{id}/runs/{runId}/retry` |
+| 阶段列表 | GET | `/projects/{id}/runs/{runId}/stages` |
+| 配音单元 | GET | `/projects/{id}/runs/{runId}/units` |
+| 产物列表 | GET | `/projects/{id}/runs/{runId}/artifacts` |
+| 事件流 | GET | `/projects/{id}/runs/{runId}/events` |
+| 日志 | GET | `/projects/{id}/runs/{runId}/logs` |
+| 下载成片 | GET | `/projects/{id}/runs/{runId}/final` |
 
 ## 项目结构
 
@@ -85,24 +79,33 @@ web-v2/
 ├── src/
 │   ├── main.tsx              # 入口
 │   ├── app/
-│   │   ├── router.tsx        # 路由定义
-│   │   └── providers.tsx     # 全局 Provider
+│   │   ├── router.tsx        # 路由定义（createBrowserRouter）
+│   │   └── providers.tsx     # 全局 Provider（AppContext + Health 轮询）
 │   ├── components/
-│   │   └── layout/
-│   │       └── AppShell.tsx  # 布局骨架
+│   │   ├── layout/
+│   │   │   ├── AppShell.tsx  # 布局骨架（pin/rail 模式）
+│   │   │   └── Sidebar.tsx   # 侧边导航（原型结构 + 运行状态 footer）
+│   │   └── ui/
+│   │       ├── Tabs.tsx       # 状态筛选标签
+│   │       ├── StatusBadge.tsx# 状态徽章
+│   │       ├── CopyButton.tsx # 复制按钮
+│   │       └── BackButton.tsx # 返回按钮
 │   ├── pages/
-│   │   ├── ProjectsPage.tsx
-│   │   ├── CreateProjectPage.tsx
-│   │   ├── ProjectDetailPage.tsx
-│   │   ├── ProvidersPage.tsx
-│   │   └── ProviderDetailPage.tsx
+│   │   ├── ProjectsPage.tsx        # 任务队列
+│   │   ├── CreateProjectPage.tsx   # 新建任务
+│   │   ├── ProjectWorkbenchPage.tsx# 工作台（三栏布局）
+│   │   ├── RunDiagnosticsPage.tsx  # 运行诊断
+│   │   ├── HelpPage.tsx           # 帮助中心
+│   │   ├── ProvidersPage.tsx      # Provider 列表
+│   │   └── ProviderDetailPage.tsx # Provider 详情
 │   ├── lib/
 │   │   ├── api/
 │   │   │   ├── client.ts     # API 客户端
-│   │   │   └── types.ts      # TypeScript 类型
+│   │   │   ├── types.ts      # TypeScript 类型
+│   │   │   └── queries.ts    # useAsync Hook（轮询支持）
 │   │   └── formatting.ts     # 格式化工具
 │   └── styles/
-│       ├── tokens.css        # 设计 Token
+│       ├── tokens.css        # 设计 Token（NovaTech）
 │       └── app.css           # 组件样式
 └── tests/
     ├── setup.ts

@@ -30,33 +30,33 @@ describe('CreateProjectPage', () => {
 
   it('renders the create project form', () => {
     renderPage()
-    expect(screen.getByRole('heading', { name: '创建项目' })).toBeInTheDocument()
-    expect(screen.getByLabelText('项目标题')).toBeInTheDocument()
-    expect(screen.getByText('白板动画 (whiteboard)')).toBeInTheDocument()
-    expect(screen.getByText('mountain-av-v1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '新建任务' })).toBeInTheDocument()
+    expect(screen.getByLabelText('任务名称')).toBeInTheDocument()
+    expect(screen.getByText('白板动画')).toBeInTheDocument()
+    expect(screen.getByText('动态信息图')).toBeInTheDocument()
   })
 
-  it('disables submit when title is too short', () => {
+  it('shows error when title is empty', async () => {
     renderPage()
-    const btn = screen.getByRole('button', { name: '创建项目' })
-    expect(btn).toBeDisabled()
+    const btn = screen.getByRole('button', { name: '创建任务' })
+    fireEvent.click(btn)
 
-    fireEvent.change(screen.getByLabelText('项目标题'), { target: { value: 'a' } })
-    expect(btn).toBeDisabled()
+    await waitFor(() => {
+      expect(screen.getByText('请输入任务名称')).toBeInTheDocument()
+    })
   })
 
   it('calls API and navigates on success', async () => {
-    vi.mocked(api.createProject).mockResolvedValue({ id: 'proj-1', status: 'created' } as any)
+    vi.mocked(api.createProject).mockResolvedValue({ project_id: 'proj-1', run_id: 'run-1', trace_id: 'tr-1', command_id: 'cmd-1' })
     renderPage()
 
-    fireEvent.change(screen.getByLabelText('项目标题'), { target: { value: '量子计算科普' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建项目' }))
+    fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
+    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
 
     await waitFor(() => {
       expect(api.createProject).toHaveBeenCalledWith({
         title: '量子计算科普',
         engine: 'whiteboard',
-        pipeline_id: 'mountain-av-v1',
       })
     })
     await waitFor(() => {
@@ -68,8 +68,8 @@ describe('CreateProjectPage', () => {
     vi.mocked(api.createProject).mockRejectedValue(new Error('网络错误'))
     renderPage()
 
-    fireEvent.change(screen.getByLabelText('项目标题'), { target: { value: '量子计算科普' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建项目' }))
+    fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
+    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
 
     await waitFor(() => {
       expect(screen.getByText('网络错误')).toBeInTheDocument()
@@ -80,8 +80,8 @@ describe('CreateProjectPage', () => {
     vi.mocked(api.createProject).mockImplementation(() => new Promise(() => {}))
     renderPage()
 
-    fireEvent.change(screen.getByLabelText('项目标题'), { target: { value: '量子计算科普' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建项目' }))
+    fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
+    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
 
     await waitFor(() => {
       expect(screen.getByText('创建中…')).toBeInTheDocument()

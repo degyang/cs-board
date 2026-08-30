@@ -1,17 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { RouterProvider } from 'react-router-dom'
 import { AppProviders } from './app/providers'
-import { AppRouter } from './app/router'
+import { router } from './app/router'
 import './styles/tokens.css'
 import './styles/app.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AppProviders>
-        <AppRouter />
-      </AppProviders>
-    </BrowserRouter>
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
   </React.StrictMode>,
 )
