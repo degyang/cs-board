@@ -1,5 +1,7 @@
 # WebUI 原型设计基准
 
+> 术语说明：`source/` 是外部原型的原样镜像，可能保留旧的 Project/项目命名或历史交互；它不是现行产品术语权威。现行产品统一使用 Task/任务、任务队列和任务工作台，规则见 [`../14-task-and-script-preparation.md`](../14-task-and-script-preparation.md)。
+
 本目录是 Mountain 新 WebUI 的**唯一视觉、页面结构与交互层级基准**。
 
 ## 来源与快照

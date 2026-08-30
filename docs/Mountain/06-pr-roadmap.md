@@ -16,7 +16,7 @@ flowchart TD
     M04[M04 共享 CLI 与七个 Skills]
     M05[M05 AV 规划、单元配音与同步]
     M06[M06 标准白板：分镜、插画、渲染与合成]
-    M07[M07 Project API、Vite WebUI 与诊断]
+    M07[M07 Task API、Vite WebUI 与诊断]
     M08[M08 标准流程发布加固与桌面预留]
     M09[M09 自定义参考与动态信息图]
     M01 --> M02 --> M03 --> M04 --> M05 --> M06 --> M07 --> M08 --> M09
@@ -30,7 +30,7 @@ flowchart TD
 | M04 | 共享 CLI、七个 Skills | Agent 可驱动现有与新核心能力 | 中 |
 | M05 | AV Plan、Unit TTS、Whisper/fallback、母带、恢复 | 长文案可分单元同步 | 高 |
 | M06 | 标准白板的 Storyboard、插画、Renderer、合成 | 首个可交付新流程成片 | 高 |
-| M07 | Project API、React/Vite WebUI、Trace/诊断工作台 | 新工作台与可跟踪分析 | 中 |
+| M07 | Task API、React/Vite WebUI、Trace/诊断工作台 | 新任务工作台与可跟踪分析 | 中 |
 | M08 | 标准流程兼容、桌面预留、发布与安全加固 | 标准流程默认候选 | 中 |
 | M09 | 自定义参考、动态信息图扩展 | 最后接入两类视觉分支 | 高 |
 
@@ -39,7 +39,7 @@ flowchart TD
 ### 交付
 
 - 固化 Mountain 文档和决策；
-- `project/run/av-plan/voice/timeline/storyboard/illustration/render/final` Schema；
+- `task/run/script-preparation/visual-anchors/voice/timeline/storyboard/illustration/render/final` Schema；
 - Domain Event、Diagnostic Log、Audit Record Schema；
 - 当前创建、队列、prompt、图片重生成、重渲染、下载和 gallery 的特征测试；
 - legacy 脱敏 fixture、Secret canary 和 JSON/关联 ID fixture。
@@ -55,8 +55,8 @@ flowchart TD
 
 ### 交付
 
-- 中立 `csboard` 包：Project、Run、Stage、VoiceUnit、VisualItem、ArtifactRef、Error 和状态机；
-- filesystem Repository、Artifact Store、fingerprint、revision、stale 与项目锁；
+- 中立 `csboard` 包：Task、Run、Stage、VoiceUnit、VisualItem、ArtifactRef、Error 和状态机；
+- filesystem Repository、Artifact Store、fingerprint、revision、stale 与任务锁；
 - `CommandContext`、`trace_id/command_id/span_id`；
 - JSONL Event/Log/Audit、Redactor、metrics 和诊断包 port/adapters；
 - OpenAI-compatible Text/Image profile、TTS、Whisper Alignment、Media、Process、Toolchain、Secret Store ports/adapters；
@@ -90,7 +90,7 @@ flowchart TD
 
 ### 交付
 
-- `project/pipeline/stage/artifact/events/run/logs/diagnostics/service` CLI；
+- `task/pipeline/stage/artifact/events/run/logs/diagnostics/service` CLI；
 - JSON/JSONL stdout、stderr 人类进度和稳定退出码；
 - `video-workflow` 与六个能力 Skill；
 - `auto/gated/targeted` 策略、跨入口恢复和诊断说明；
@@ -108,7 +108,7 @@ flowchart TD
 
 ### 交付
 
-- `segment-script`：TTS 前创建 Voice Unit 与 Visual Item 的连续文字范围；
+- 文案整理：新建任务时确定 Voice Unit 连续文字范围；`generate-visual-anchors` 仅在开关开启时生成重点与原文范围；
 - `clone-voice`：Unit 级 TTS、probe、规范化、Whisper 对齐、等分 fallback、母带与恢复；
 - `av-plan.json`、`voice-manifest.json`、`timeline.json`；
 - Unit 调度、公平性、取消和 Unit/Provider/Whisper spans。
@@ -139,13 +139,15 @@ flowchart TD
 - 字幕不跨 Voice Unit，A/V 时长通过容差；
 - `validation.passed=false` 不能成功，所有媒体调用可由 Trace 定位。
 
-## 9. M07：Project API、Vite WebUI 与诊断工作台
+## 9. M07：Task API、Vite WebUI 与诊断工作台
 
 ### 交付
 
 - 纯 React + Vite SPA；生产由 FastAPI 同源托管 `dist`；
-- Project/Run/Stage/Unit/Visual/Artifact/Capability API；
-- `/create`、项目列表、工作台、设置、诊断页；
+- Task/Run/Stage/Unit/Visual/Artifact/Capability API；
+- `/tasks/new`、任务队列、任务工作台、设置、诊断页；
+- 在任何新增 Task API 前完成 `Project → Task` 的 Domain/API/CLI/WebUI/Skills/Schema 一次性迁移；
+- 文案整理作为 Task 创建期确定性输入，画面锚定重点作为可选 LLM 阶段；
 - Event cursor、Trace、日志筛选、指标、fallback 标签和诊断包；
 - legacy View、集中 query 和单 Unit/Visual 重试入口。
 
@@ -158,11 +160,11 @@ flowchart TD
 - 生产构建不需要 Vinext/RSC/Cloudflare Worker；
 - 日志/诊断包脱敏、基本可访问性和响应式测试通过。
 
-## 10. M08：标准流程兼容、桌面与发布加固
+## 10. M08：标准流程、桌面与发布加固
 
 ### 交付
 
-- legacy adapter 完整性、旧任务标签和显式迁移；
+- Task 术语、目录、API 与 CLI 的发布清理，不保留 Project 兼容 alias；
 - RuntimePaths、桌面 toolchain/sidecar/日志目录、Electron spike 准备；
 - 日志轮转、保留、诊断包、性能/安全审计和发布说明；
 - Windows/macOS smoke test 和升级/恢复策略。
@@ -172,7 +174,7 @@ flowchart TD
 - 标准白板新任务使用 `mountain-av-v1`，并达到默认发布门槛；
 - Web、Skill、CLI、Desktop 的同一 Run 可使用同一 Trace 分析；
 - 离线桌面可导出脱敏诊断包；
-- legacy 查看/下载回归通过，重渲染须显式迁移为新 Run；
+- Task 的查看、下载、重试、恢复和新建 Run 全链路通过；
 
 ## 11. M09：自定义参考与动态信息图扩展
 

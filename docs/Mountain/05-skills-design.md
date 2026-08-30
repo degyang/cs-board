@@ -4,7 +4,7 @@
 
 Skills 是共享内核的自然语言入口，负责收集参数、调用稳定 CLI、解释结构化结果、请求必要确认，以及选择完整执行、单阶段执行、恢复或返工。
 
-Skills 不实现 Provider、Prompt Builder、分割算法、Whisper fallback、文件恢复或媒体渲染。WebUI 与 Skills 必须看到同一 Project、Run、Artifact、事件、日志和 Trace。
+Skills 不实现 Provider、Prompt Builder、文案整理算法、Whisper fallback、文件恢复或媒体渲染。WebUI 与 Skills 必须看到同一 Task、Run、Artifact、事件、日志和 Trace。
 
 M04 的 Skills 先驱动标准制作；`custom-reference` 和 `infographic-remotion` 的参数归一化与能力 Skill 扩展在 M09 接入，在此之前必须由 Capability API 明确拒绝。
 
@@ -14,7 +14,7 @@ M04 的 Skills 先驱动标准制作；`custom-reference` 和 `infographic-remot
 skills/
 ├── video-workflow/
 │   └── SKILL.md
-├── script-segmenter/
+├── visual-anchor-generator/
 │   └── SKILL.md
 ├── voice-cloner/
 │   └── SKILL.md
@@ -43,7 +43,7 @@ python -m cli.csboard <resource> <action> [options] --json
 - stdout：最终 JSON，或显式选择的稳定 JSONL 事件流；
 - stderr：人类可读进度，不作为成功判断依据；
 - 退出码：稳定映射成功、校验失败、依赖缺失、可重试失败和取消；
-- 每个启动/恢复结果返回 `project_id/run_id/trace_id/command_id`；
+- 每个启动/恢复结果返回 `task_id/run_id/trace_id/command_id`；
 - Skill 保存关联 ID，用于后续查询、重试、跨入口恢复和诊断；
 - Skill 只能通过结构化事件、View 和 Error 判断状态，不能解析日志字符串。
 
@@ -53,11 +53,11 @@ python -m cli.csboard <resource> <action> [options] --json
 {
   "ok": true,
   "command": "stage.run",
-  "project_id": "project-123",
+  "task_id": "task-123",
   "run_id": "run-456",
   "trace_id": "trace-456",
   "command_id": "command-789",
-  "stage": "segment-script",
+  "stage": "generate-visual-anchors",
   "result": "succeeded",
   "cached": false,
   "artifacts": ["planning.av-plan"],
@@ -71,13 +71,13 @@ python -m cli.csboard <resource> <action> [options] --json
 ```json
 {
   "ok": false,
-  "project_id": "project-123",
+  "task_id": "task-123",
   "run_id": "run-456",
   "trace_id": "trace-456",
   "command_id": "command-790",
   "error": {
     "code": "SEGMENTATION_COVERAGE_INVALID",
-    "stage": "segment-script",
+    "stage": "generate-visual-anchors",
     "retryable": false,
     "message": "文案分割未完整覆盖原文"
   }
@@ -87,17 +87,17 @@ python -m cli.csboard <resource> <action> [options] --json
 诊断命令：
 
 ```bash
-python -m cli.csboard run trace --project <id> --run <run-id> --json
-python -m cli.csboard events list --project <id> --run <run-id> --after <cursor> --json
-python -m cli.csboard logs tail --project <id> --run <run-id> --follow --json
-python -m cli.csboard diagnostics export --project <id> --run <run-id> --json
+python -m cli.csboard run trace --task <id> --run <run-id> --json
+python -m cli.csboard events list --task <id> --run <run-id> --after <cursor> --json
+python -m cli.csboard logs tail --task <id> --run <run-id> --follow --json
+python -m cli.csboard diagnostics export --task <id> --run <run-id> --json
 ```
 
 ## 4. Skill 1：`video-workflow`
 
 ### 职责
 
-- 创建或选择 Project；
+- 创建或选择 Task；
 - 收集文案、参考音频、引擎、视觉来源和成片设置；
 - 校验 capability 并选择 execution policy；
 - 编排六个生产阶段；
@@ -108,7 +108,7 @@ python -m cli.csboard diagnostics export --project <id> --run <run-id> --json
 ### 非职责
 
 - 不自行拆分文案、生成 prompt 或执行 Provider/脚本；
-- 不将对话记录、终端输出或日志当成 Project 状态；
+- 不将对话记录、终端输出或日志当成 Task 状态；
 - 不维护不同于 WebUI 的进度或重试规则。
 
 ### 执行策略
@@ -122,37 +122,37 @@ python -m cli.csboard diagnostics export --project <id> --run <run-id> --json
 策略只控制是否继续，不改变领域结果或 fingerprint。
 
 ```bash
-python -m cli.csboard project create --request request.json --json
-python -m cli.csboard pipeline run --project <id> --policy auto --json --events jsonl
-python -m cli.csboard pipeline resume --project <id> --json --events jsonl
-python -m cli.csboard project show --project <id> --json
+python -m cli.csboard task create --request request.json --json
+python -m cli.csboard pipeline run --task <id> --policy auto --json --events jsonl
+python -m cli.csboard pipeline resume --task <id> --json --events jsonl
+python -m cli.csboard task show --task <id> --json
 ```
 
-## 5. Skill 2：`script-segmenter`
+## 5. Skill 2：`visual-anchor-generator`
 
 ### 输入与输出
 
-- 输入：Project、原始文案、分割策略版本和系统级 TTS 能力限制；
-- 输出：`planning.av-plan`、Voice Unit/Visual Item 摘要、覆盖率和规划告警。
+- 输入：保存的 Task 文案整理结果、可选画面锚定开关、风格约束；
+- 输出：`planning.visual-anchors`、重点/原文范围摘要和规划告警。
 
 ### 强制规则
 
-- 先按语义完整性、内容结构和 TTS 能力决定 Voice Unit；
-- 再在每个 Unit 内决定一个或多个 Visual Item 及连续原文范围；
-- 2–3 句话、1–2 张图只是常见目标，不是硬限制；
-- 不生成 Voice、图片构图或毫秒时间，不改写旁白；
-- 原文覆盖率不是 100%、范围重叠或越界时失败；
-- 重跑导致稳定 ID 或文字范围变化时，使全部下游失效。
+- 不重新分段、合并、改写或删除已保存 Voice Unit；
+- 每个重点必须引用所属 Unit 的连续原文范围；
+- 不生成 Voice、图片构图或毫秒时间；
+- 关闭开关时明确 skipped，不调用 LLM；
+- 锚点范围越界、重叠或不属于所属 Unit 时失败；
+- 锚点变化只使分镜及下游视觉产物失效，不重做 Voice 或对齐。
 
 ```bash
-python -m cli.csboard stage run --project <id> --stage segment-script --json
+python -m cli.csboard stage run --task <id> --stage generate-visual-anchors --json
 ```
 
 ## 6. Skill 3：`voice-cloner`
 
 ### 输入与输出
 
-- 输入：AV Plan、参考音频、TTS profile 和 Whisper profile；
+- 输入：Task 文案整理结果、参考音频、TTS profile 和 Whisper profile；
 - 输出：每个 Voice Unit 的规范化 WAV、`audio.voice-manifest`、`timing.timeline`、兼容母带和质量告警。
 
 ### 强制规则
@@ -166,8 +166,8 @@ python -m cli.csboard stage run --project <id> --stage segment-script --json
 - fallback 产生 warning 和事件，但不使任务失败。
 
 ```bash
-python -m cli.csboard stage run --project <id> --stage clone-voice --json
-python -m cli.csboard stage retry --project <id> --stage clone-voice --unit unit-003 --json
+python -m cli.csboard stage run --task <id> --stage clone-voice --json
+python -m cli.csboard stage retry --task <id> --stage clone-voice --unit unit-003 --json
 ```
 
 ## 7. Skill 4：`storyboard-planner`
@@ -186,8 +186,8 @@ python -m cli.csboard stage retry --project <id> --stage clone-voice --unit unit
 - WebUI 或 Skill 修改规划都必须通过共享 command 产生新 revision。
 
 ```bash
-python -m cli.csboard stage run --project <id> --stage plan-storyboard --json
-python -m cli.csboard artifact show --project <id> --key planning.storyboard --json
+python -m cli.csboard stage run --task <id> --stage plan-storyboard --json
+python -m cli.csboard artifact show --task <id> --key planning.storyboard --json
 ```
 
 ## 8. Skill 5：`illustration-generator`
@@ -206,8 +206,8 @@ python -m cli.csboard artifact show --project <id> --key planning.storyboard --j
 - 不根据 `web|skill` 入口改变 prompt 或 Provider profile。
 
 ```bash
-python -m cli.csboard stage run --project <id> --stage generate-illustrations --json
-python -m cli.csboard stage retry --project <id> --stage generate-illustrations --visual visual-003-01 --json
+python -m cli.csboard stage run --task <id> --stage generate-illustrations --json
+python -m cli.csboard stage retry --task <id> --stage generate-illustrations --visual visual-003-01 --json
 ```
 
 ## 9. Skill 6：`visual-renderer`
@@ -226,8 +226,8 @@ python -m cli.csboard stage retry --project <id> --stage generate-illustrations 
 - 不执行最终音画合成。
 
 ```bash
-python -m cli.csboard stage run --project <id> --stage render-visuals --json
-python -m cli.csboard stage retry --project <id> --stage render-visuals --visual visual-003-01 --json
+python -m cli.csboard stage run --task <id> --stage render-visuals --json
+python -m cli.csboard stage retry --task <id> --stage render-visuals --visual visual-003-01 --json
 ```
 
 ## 10. Skill 7：`av-compositor`
@@ -246,14 +246,14 @@ python -m cli.csboard stage retry --project <id> --stage render-visuals --visual
 - `validation.passed != true` 时不能报告完成。
 
 ```bash
-python -m cli.csboard stage run --project <id> --stage compose-video --json
+python -m cli.csboard stage run --task <id> --stage compose-video --json
 ```
 
 ## 11. Skill 间协作
 
 ```mermaid
 flowchart LR
-    O[video-workflow] --> S[script-segmenter]
+    O[video-workflow] --> S[visual-anchor-generator]
     O --> V[voice-cloner]
     O --> P[storyboard-planner]
     O --> I[illustration-generator]
@@ -287,7 +287,7 @@ flowchart LR
 
 - 七个 Skill 中只有 workflow skill 包含跨阶段编排；
 - Skill 文件不含服务 URL/API Key、IndexTTS 参数、FFmpeg 命令、Whisper 算法或完整 prompt；
-- 每个能力 Skill 可对已有 Project 独立运行；
+- 每个能力 Skill 可对已有 Task 独立运行；
 - CLI JSON 包含稳定 code、Stage、retryable 和四个关联 ID；
 - Web 创建的 Run 可由 Skill 使用同一 `trace_id` 继续，反向亦然；
 - `auto/gated/targeted` 不改变已执行阶段 fingerprint；

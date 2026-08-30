@@ -9,7 +9,8 @@
 标准制作、自定义参考和动态信息图统一采用同一套时间策略：
 
 ```text
-智能划分 Voice Unit
+新建任务时完成文案整理并保存 Voice Unit
+→ 可选 LLM 生成画面锚定重点
 → 每个单元独立生成 Voice
 → Whisper 优先解析图片对应原文的真实时间
 → 对齐失败时在该单元内按图片数等分实际 Voice 时长
@@ -30,22 +31,24 @@ Whisper 是首选时间源，但不再是任务必须成功的单点依赖。fal
 
 - Voice Unit 是 TTS、恢复和时间 fallback 的边界；
 - Visual Item 是一张图片、一个 PPT 页面或一个页面状态；
-- 智能分割在 TTS 前决定每个 Visual Item 对应的连续原文范围；
+- 文案整理在 Task 创建时决定 Voice Unit 的连续原文范围；
+- 画面锚定重点为分镜提供可追溯的重点与原文范围，不能重新分段或改写 Unit；
 - 2–3 句话和 1–2 张图片只能作为规划提示，不是硬限制。
 
 ## 3. 统一生产流程
 
 ```mermaid
 flowchart LR
-    Copy[完整文案] --> Split[规划 Voice Unit 与 Visual Item]
-    Split --> TTS[逐单元生成 Voice]
+    Copy[完整文案] --> Prepare[新建任务：文案整理并保存 Voice Unit]
+    Prepare --> Anchor[可选：LLM 生成画面锚定重点]
+    Prepare --> TTS[逐单元生成 Voice]
     TTS --> Probe[读取实际时长]
     Probe --> Align[逐单元 Whisper 对齐]
     Align -->|成功| Exact[真实语音边界]
     Align -->|失败| Equal[单元内等分]
     Exact --> Timeline[统一时间轴]
     Equal --> Timeline
-    Split --> Visual[生成视觉内容]
+    Anchor --> Visual[分镜决定 Visual Item 与生成视觉内容]
     Visual --> Render[按引擎渲染]
     Timeline --> Render
     Render --> Compose[合成完整视频]
@@ -59,31 +62,21 @@ flowchart LR
 | 自定义参考 | 参考风格/人物图片 | 白板绘制渲染器 |
 | 动态信息图 | PPT 页面、插图或页面状态 | Remotion |
 
-## 4. 文案规划契约
+## 4. 文案整理与画面锚定契约
 
-`av-plan.json` 示例：
+Task Input 中的 `script-preparation` 保存 Voice Unit；它不是运行时 LLM 的分割产物。`generate-visual-anchors` 的输出只补充锚点，`plan-storyboard` 再决定 Visual Item 数量与视觉计划。
 
 ```json
 {
   "schema_version": 1,
-  "units": [
+  "task_id": "task-123",
+  "voice_units": [
     {
       "unit_id": "unit-001",
       "order": 1,
       "source_range": {"start": 0, "end": 41},
       "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。",
-      "visual_items": [
-        {
-          "visual_id": "unit-001-image-001",
-          "source_range": {"start": 0, "end": 29},
-          "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。"
-        },
-        {
-          "visual_id": "unit-001-image-002",
-          "source_range": {"start": 29, "end": 41},
-          "text": "市场有风险，投资需谨慎。"
-        }
-      ]
+      "anchors": [{"anchor_text": "市场有风险", "source_range": {"start": 29, "end": 34}}]
     }
   ]
 }
@@ -93,8 +86,8 @@ flowchart LR
 
 1. 所有 Unit 按顺序 100% 覆盖完整原文；
 2. Unit 与 Visual Item 只能引用连续原文，不能改写、遗漏或重复；
-3. 一个 Unit 至少有一个 Visual Item；
-4. Visual Item 的原文范围按顺序完整覆盖 Unit；
+3. 锚点（如启用）只能引用所属 Unit 内连续原文，不能重叠、越界或改变 Unit；
+4. Storyboard 可为一个 Unit 决定一张或多张 Visual Item；图片数量不由文案整理硬编码；
 5. 文本模型不能直接输出毫秒时间。
 
 ## 5. Voice 与恢复
@@ -121,7 +114,7 @@ flowchart LR
 
 ## 6. Whisper 成功路径
 
-Whisper 对每个 Unit 的 Voice 生成 token 时间，然后将 Visual Item 的 `source_range/text` 按顺序绑定到真实语音范围。
+Whisper 对每个 Unit 的 Voice 生成 token 时间，然后将 Storyboard 的 Visual Item 所绑定锚点/原文范围按顺序绑定到真实语音范围。
 
 对齐结果必须满足：
 
@@ -248,7 +241,7 @@ WebUI 与 Skills 读取同一事件和 Trace，因此同一个 fallback 不能�
 
 ## 11. 产物与状态
 
-每个项目至少保留：
+每个任务至少保留：
 
 ```text
 runs/<run-id>/artifacts/av-plan.json

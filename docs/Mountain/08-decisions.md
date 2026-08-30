@@ -140,6 +140,18 @@ macOS/Windows APP 不复制业务逻辑。桌面壳只负责窗口、进程监�
 
 Provider 密钥、Authorization、Cookie、完整 Prompt、完整原文和媒体不进入默认日志。所有日志先经过统一 Redactor；WebUI 和 CLI/Skills 均可导出相同的脱敏诊断包。首版本地 JSONL 为权威存储，同时保留 OpenTelemetry trace 字段供未来扩展。
 
+### D-024：当前制作聚合根统一命名为 Task
+
+状态：接受；替代当前设计中把单条视频制作对象称为 Project 的表述。
+
+新产品不考虑旧接口或目录兼容。Domain、Repository、API、CLI、Skills、WebUI、Schema、文档和目录统一使用 Task/`task_id`/`tasks/`。Project 暂不引入；未来若需要，它只能组织多个 Task，不能作为 Task 的别名。
+
+### D-025：文案整理前置，LLM 仅生成画面锚定重点
+
+状态：接受；替代 D-016 中“智能文案分割直接产生 AV Plan”的表述。
+
+新建任务时以确定性规则完成“文案整理”，保存 Voice Unit 及其原文范围为任务输入。运行时可选 `generate-visual-anchors` 使用 LLM 生成重点、原文范围和画面意图；它不得重新整理或改写旁白。Storyboard 基于 Unit、锚点和 Voice/Whisper 结果决定 Visual Item 数量；对齐失败仍按 Unit 内图片数等分实际 Voice 时长。
+
 ## 2. 暂缓决策
 
 ### P-001：允许用户编辑 Voice Unit 或 Visual Item 边界

@@ -32,13 +32,13 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 ```text
 /create                    新建任务
-/projects                  项目与共享队列
-/projects/:projectId       项目工作台
-/projects/:projectId/runs/:runId/diagnostics  运行诊断
+/tasks                     任务队列
+/tasks/:taskId             任务工作台
+/tasks/:taskId/runs/:runId/diagnostics  运行诊断
 /settings                  服务、模型、存储与诊断设置
 ```
 
-顶层导航保持新建、项目、设置、帮助四项。当前 Run 可以作为全局小型状态条展示。
+顶层导航保持新建任务、任务队列、设置、帮助四项。当前 Run 可以作为全局小型状态条展示；不展示“项目”这一当前不存在的产品对象。
 
 ## 4. 新建任务 `/create`
 
@@ -74,20 +74,21 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 ```text
 客户端校验
-→ POST /api/projects
-→ 保存输入并返回 project_id
-→ POST /api/projects/{id}/runs
+→ 确定性文案整理，生成并确认 Voice Unit
+→ POST /api/tasks
+→ 保存任务制作输入并返回 task_id
+→ POST /api/tasks/{id}/runs
 → 返回 run_id / trace_id / command_id
-→ 跳转项目工作台
+→ 跳转任务工作台
 ```
 
-上传成功和启动执行是两个明确动作。启动失败时 Project 仍然存在，不需要重新上传大文件。
+上传成功和启动执行是两个明确动作。启动失败时 Task 仍然存在，不需要重新上传大文件。文案整理结果随任务输入保存，刷新后必须可恢复。
 
-## 5. 项目列表 `/projects`
+## 5. 任务队列 `/tasks`
 
-筛选包括状态、输出引擎、入口和任务名。项目卡片固定展示：
+筛选包括状态、输出引擎、入口和任务名。任务卡片固定展示：
 
-- 项目名称、时间、引擎、视觉来源和 pipeline version；
+- 任务名称、时间、引擎、视觉来源和 pipeline version；
 - 汇总状态、当前 Stage、Voice Unit/Visual Item 进度；
 - 同步质量：Whisper 成功单元数、等分 fallback 单元数；
 - 最近入口 `web|desktop|cli|skill` 和短 `trace_id`；
@@ -96,13 +97,13 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 取消、重试和下载使用独立按钮，不能与整卡点击冲突。
 
-## 6. 项目工作台 `/projects/:projectId`
+## 6. 任务工作台 `/tasks/:taskId`
 
 ### 6.1 页面框架
 
 ```text
-┌ 项目标题 / Run 状态 / 启停操作 / trace_id ──────────────────┐
-│ 阶段时间线：分割 → 配音 → 分镜 → 插画 → 动画 → 合成          │
+┌ 任务标题 / Run 状态 / 启停操作 / trace_id ──────────────────┐
+│ 阶段时间线：画面锚定重点 → 配音 → 分镜 → 插画 → 动画 → 合成  │
 ├────────────────┬──────────────────────────┬──────────────────┤
 │ Unit/Visual 列表│ 当前阶段预览、错误和重试 │ 产物、版本与下载 │
 ├────────────────┴──────────────────────────┴──────────────────┤
@@ -112,7 +113,7 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 ### 6.2 六个生产阶段
 
-1. 文案智能分割；
+1. 生成画面锚定重点（可选；文案整理已在新建任务时完成）；
 2. 克隆参考音色；
 3. 拆分文案分镜；
 4. 生成统一插画；
@@ -181,9 +182,9 @@ web-v2/src/
 │   ├── router.tsx
 │   └── providers.tsx
 ├── pages/
-│   ├── CreateProjectPage.tsx
-│   ├── ProjectsPage.tsx
-│   ├── ProjectWorkbenchPage.tsx
+│   ├── CreateTaskPage.tsx
+│   ├── TasksPage.tsx
+│   ├── TaskWorkbenchPage.tsx
 │   ├── RunDiagnosticsPage.tsx
 │   └── SettingsPage.tsx
 ├── features/
@@ -208,19 +209,19 @@ web-v2/src/
 
 ## 9. 状态同步
 
-第一阶段保留轮询，但集中到统一 query 层：列表只轮询列表 View，工作台只轮询当前项目 View，活动面板以事件 cursor 增量读取，日志面板按需加载。页面隐藏时降频，terminal 状态停止高频轮询。
+第一阶段保留轮询，但集中到统一 query 层：列表只轮询列表 View，工作台只轮询当前任务 View，活动面板以事件 cursor 增量读取，日志面板按需加载。页面隐藏时降频，terminal 状态停止高频轮询。
 
 事件稳定后增加 SSE：
 
 ```text
-GET /api/projects/{project_id}/runs/{run_id}/events?after=<cursor>
+GET /api/tasks/{task_id}/runs/{run_id}/events?after=<cursor>
 ```
 
-断线后用最后 cursor 恢复；发生 cursor 过期时重新获取 Project/Run View。SSE 只优化及时性，页面刷新仍以服务器投影为权威。
+断线后用最后 cursor 恢复；发生 cursor 过期时重新获取 Task/Run View。SSE 只优化及时性，页面刷新仍以服务器投影为权威。
 
 ## 10. API View 与诊断 API
 
-- `ProjectSummaryView`、`ProjectDetailView`、`RunView`；
+- `TaskSummaryView`、`TaskDetailView`、`RunView`；
 - `StageDetailView`、`VoiceUnitView`、`VisualItemView`；
 - `ArtifactView`、`CapabilityView`、`ServiceHealthView`；
 - `TraceView`、`LogEntryView`、`RunMetricsView`、`DiagnosticBundleView`。
@@ -228,18 +229,18 @@ GET /api/projects/{project_id}/runs/{run_id}/events?after=<cursor>
 建议端点：
 
 ```text
-GET  /api/projects/{project_id}/runs/{run_id}/events?after=<cursor>
-GET  /api/projects/{project_id}/runs/{run_id}/logs?level=&component=&after=
-GET  /api/projects/{project_id}/runs/{run_id}/trace
-POST /api/projects/{project_id}/runs/{run_id}/diagnostics
-GET  /api/projects/{project_id}/runs/{run_id}/diagnostics/{bundle_id}
+GET  /api/tasks/{task_id}/runs/{run_id}/events?after=<cursor>
+GET  /api/tasks/{task_id}/runs/{run_id}/logs?level=&component=&after=
+GET  /api/tasks/{task_id}/runs/{run_id}/trace
+POST /api/tasks/{task_id}/runs/{run_id}/diagnostics
+GET  /api/tasks/{task_id}/runs/{run_id}/diagnostics/{bundle_id}
 ```
 
 ## 11. 渐进迁移
 
 1. 抽出当前 API client、types 和查询逻辑，不改变视觉。
-2. 引入共享 Project/Run View、关联 ID 和统一事件读取。
-3. 建立项目列表、工作台、Voice Unit/Visual Item View。
+2. 引入共享 Task/Run View、关联 ID 和统一事件读取。
+3. 建立任务队列、任务工作台、Voice Unit/Visual Item View。
 4. 新创建流程接入 `mountain-av-v1`。
 5. 增加活动/诊断面板、日志筛选和诊断包。
 6. 旧任务通过 Legacy Adapter 展示，并明确标记旧版同步精度。
@@ -255,6 +256,6 @@ GET  /api/projects/{project_id}/runs/{run_id}/diagnostics/{bundle_id}
 - 错误展示稳定 code、失败对象、`trace_id` 和可执行建议；
 - Web 创建的 Run 可由 Skill 通过同一 `trace_id` 继续，反向亦然；
 - 刷新、浏览器关闭或服务重启后状态和事件 cursor 可恢复；
-- 页面没有多个组件重复轮询同一 Project；
+- 页面没有多个组件重复轮询同一 Task；
 - 日志、Trace 和诊断包经过自动脱敏测试；
 - 旧任务仍可查看和下载，需重渲染时显式迁移为新 Run。

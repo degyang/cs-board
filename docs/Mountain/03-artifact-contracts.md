@@ -1,5 +1,7 @@
 # Artifact 与状态契约
 
+> **目标契约迁移。** 当前代码中的 `Project/project_id/projects/` 和 `segment-script/av-plan` 为待删除的中期实现术语。本文件从 Task 迁移完成起以 `Task/task_id/tasks/`、保存的文案整理计划和 `generate-visual-anchors` 为权威；不保留旧兼容读取。
+
 ## 1. 契约目标
 
 Artifact 是 WebUI、Skills、CLI、桌面端和各 Stage 之间唯一可持久交换的业务结果。实现不得依赖临时文件名、页面状态或自然语言日志推断任务是否完成。
@@ -7,7 +9,7 @@ Artifact 是 WebUI、Skills、CLI、桌面端和各 Stage 之间唯一可持久�
 所有 JSON Artifact 必须包含：
 
 - `schema_version`、`artifact_type`、`artifact_id`、`artifact_key`；
-- `project_id`、`run_id`、`pipeline_id`、`engine`；
+- `task_id`、`run_id`、`pipeline_id`、`engine`；
 - `created_at`、`producer_stage`、`producer_version`；
 - `input_fingerprint` 和文件引用的相对路径/hash；
 - 稳定 ID 引用，不复制或重写上游事实。
@@ -24,13 +26,14 @@ Artifact 是 WebUI、Skills、CLI、桌面端和各 Stage 之间唯一可持久�
 | `render-manifest.json` | `render.manifest` |
 | `final-manifest.json` | `output.final-manifest` |
 
-## 2. 项目目录
+## 2. 任务目录
 
 ```text
-projects/<project_id>/
-├── project.json
+tasks/<task_id>/
+├── task.json
 ├── inputs/
 │   ├── source-script.txt
+│   ├── script-preparation.json
 │   ├── reference-audio.*
 │   └── reference-images/
 ├── runs/<run_id>/
@@ -57,17 +60,17 @@ projects/<project_id>/
 └── latest-run.json
 ```
 
-所有 manifest 中的文件路径都相对 Project 根目录。Stage 先写同文件系统临时目录，校验后原子移动到最终路径，再通过 Domain Event 和 Artifact 索引完成逻辑提交；未注册文件视为孤立候选并由恢复流程处理。`observability/` 不是业务 Artifact 的输入，不能改变 fingerprint。
+所有 manifest 中的文件路径都相对 Task 根目录。`script-preparation.json` 是文案整理的权威输入，保存 Voice Unit 与整理规则；它不是 LLM 阶段产物。Stage 先写同文件系统临时目录，校验后原子移动到最终路径，再通过 Domain Event 和 Artifact 索引完成逻辑提交；未注册文件视为孤立候选并由恢复流程处理。`observability/` 不是业务 Artifact 的输入，不能改变 fingerprint。
 
-## 3. Project 与 Run 状态
+## 3. Task 与 Run 状态
 
-### 3.1 `project.json`
+### 3.1 `task.json`
 
 ```json
 {
   "schema_version": 1,
-  "project_id": "project-123",
-  "title": "示例项目",
+  "task_id": "task-123",
+  "title": "示例任务",
   "status": "running",
   "pipeline_id": "mountain-av-v1",
   "engine": "whiteboard",
@@ -84,7 +87,7 @@ projects/<project_id>/
 {
   "schema_version": 1,
   "run_id": "run-456",
-  "project_id": "project-123",
+  "task_id": "task-123",
   "trace_id": "trace-456",
   "entrypoint": "web",
   "command_ids": ["command-789"],
@@ -93,7 +96,7 @@ projects/<project_id>/
   "started_at": "2026-08-29T10:00:00+08:00",
   "finished_at": null,
   "stages": {
-    "segment-script": {"status": "succeeded", "attempt": 1},
+    "generate-visual-anchors": {"status": "skipped", "attempt": 0},
     "clone-voice": {"status": "running", "attempt": 1},
     "plan-storyboard": {"status": "pending", "attempt": 0}
   },
@@ -109,22 +112,22 @@ projects/<project_id>/
 
 Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_id`。
 
-## 4. `av-plan.json`
+## 4. 文案整理与画面锚点
 
-`segment-script` 在任何 TTS 前确定 Voice Unit 和 Visual Item 的原文边界。
+新建 Task 时完成文案整理并写入 `inputs/script-preparation.json`，在任何 TTS 前确定 Voice Unit 原文边界。`generate-visual-anchors` 可选地产生重点文字和其原文范围；`plan-storyboard` 再决定 Visual Item。
 
 ```json
 {
   "schema_version": 1,
-  "artifact_type": "av-plan",
-  "artifact_id": "artifact-av-plan-001",
-  "artifact_key": "planning.av-plan",
-  "project_id": "project-123",
+  "artifact_type": "script-preparation",
+  "artifact_id": "input-script-preparation-001",
+  "artifact_key": "input.script-preparation",
+  "task_id": "task-123",
   "run_id": "run-456",
   "pipeline_id": "mountain-av-v1",
   "engine": "whiteboard",
-  "producer_stage": "segment-script",
-  "producer_version": "1.0.0",
+  "producer_stage": "task-input",
+  "producer_version": "deterministic-v1",
   "created_at": "2026-08-29T10:01:00+08:00",
   "input_fingerprint": "sha256:...",
   "source_text_sha256": "sha256:...",
@@ -134,20 +137,7 @@ Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_
       "order": 1,
       "source_range": {"start": 0, "end": 41},
       "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。",
-      "visual_items": [
-        {
-          "visual_id": "visual-001-01",
-          "order": 1,
-          "source_range": {"start": 0, "end": 29},
-          "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。"
-        },
-        {
-          "visual_id": "visual-001-02",
-          "order": 2,
-          "source_range": {"start": 29, "end": 41},
-          "text": "市场有风险，投资需谨慎。"
-        }
-      ]
+      "anchors": []
     }
   ]
 }
@@ -157,10 +147,10 @@ Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_
 
 - Voice Unit 按顺序、无重叠地覆盖全部有效原文；
 - 每个 Voice Unit 独立生成一条 Voice；
-- Visual Item 按顺序、无重叠地完整覆盖父单元文字；
-- Visual Item 不能跨 Voice Unit；一个 Visual Item 对应一张主图；
+- 画面锚点若存在，必须引用所属 Unit 内连续原文；
+- Visual Item 由分镜阶段产生，不能跨 Voice Unit；一个 Visual Item 对应一张主图；
 - “2–3 句话”和“1–2 张图”都是规划提示，不是 schema 限制；
-- 后续阶段只能引用 `unit_id`、`visual_id` 和不可变 `source_range`，不得重新分割原文。
+- 后续阶段只能引用 `unit_id` 和不可变 `source_range`，不得重新整理原文；分镜产生稳定 `visual_id` 后，下游只引用该 ID。
 
 ## 5. `voice-manifest.json`
 
