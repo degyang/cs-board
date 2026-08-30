@@ -21,6 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from gradio_client import Client, handle_file
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# LEGACY ARCHIVE — 以下导入为旧 WebUI (mountain_api, mountain_stages,
+# LegacyJobBridge, /api/jobs/..., 127.0.0.1:8000) 的遗留兼容。
+# Mountain M07+ 新功能禁止依赖这些模块；新代码只使用 /api/v1 端点。
+# 待旧 WebUI 完全下线后，以下三行及 mountain_router/mountain_stages_router
+# 注册可整体移除。
+# ═══════════════════════════════════════════════════════════════════════════════
 from csboard.application import LegacyJobBridge
 from webapp.mountain_api import mountain_router
 from webapp.mountain_v1_api import mountain_v1_router

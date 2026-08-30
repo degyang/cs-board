@@ -354,7 +354,7 @@ class TestCompositionServiceFFmpegAcceptance(unittest.TestCase):
             store.commit_bytes("proj-real", "run-real", "render.manifest", "render/render-manifest.json", json.dumps({"total_duration_ms": 1000, "clips": [{"visual_id": "v-01", "unit_id": "u-01", "clip_path": "render/clips/v-01.mp4", "duration_ms": 1000}]}).encode(), "render-visuals")
             store.commit_bytes("proj-real", "run-real", "audio.voice-manifest", "audio/voice-manifest.json", json.dumps({"voices": [{"unit_id": "u-01", "audio_path": "artifacts/media/voices/u-01.wav", "duration_ms": 1000}]}).encode(), "clone-voice")
             store.commit_bytes("proj-real", "run-real", "timing.timeline", "timing/timeline.json", json.dumps({"units": [{"unit_id": "u-01", "duration_ms": 1000}]}).encode(), "clone-voice")
-            store.commit_bytes("proj-real", "run-real", "planning.av-plan", "planning/av-plan.json", json.dumps({"voice_units": [{"unit_id": "u-01", "text": "验收字幕"}]}).encode(), "segment-script")
+            store.commit_bytes("proj-real", "run-real", "planning.av-plan", "planning/av-plan.json", json.dumps({"voice_units": [{"unit_id": "u-01", "text": "验收字幕"}]}).encode(), "generate-visual-anchors")
 
             result = CompositionService(FFmpegMediaAdapter(), repo).run("proj-real", "run-real")
             probe = FFmpegMediaAdapter().probe(Path(result["output_path"]))

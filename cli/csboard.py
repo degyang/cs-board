@@ -98,7 +98,7 @@ def parser() -> argparse.ArgumentParser:
     stage_run.add_argument("--task", required=True)
     stage_run.add_argument("--run")
     stage_run.add_argument("--stage", required=True)
-    stage_run.add_argument("--script", help="segment-script 的文案内容")
+    stage_run.add_argument("--script", help="generate-visual-anchors 的文案内容")
     stage_run.add_argument("--reference", type=Path, help="clone-voice 的参考音频")
     stage_run.add_argument("--tts-url", default="http://127.0.0.1:7860", help="TTS 服务地址")
     stage_run.add_argument("--tts-mode", default="gradio", choices=["gradio", "fastapi"], help="TTS 模式")
@@ -193,12 +193,12 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     # ── stage ────────────────────────────────────────────────────────
     if (args.resource, args.action) == ("stage", "run"):
         # Route to specific stage handler or pipeline
-        if args.stage == "segment-script":
+        if args.stage == "generate-visual-anchors":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
             if not run_id or not args.script:
-                raise ValueError("segment-script 需要 --run 与 --script")
-            return commands.segment_script(args.task, run_id, args.script)
+                raise ValueError("generate-visual-anchors 需要 --run 与 --script")
+            return commands.generate_visual_anchors(args.task, run_id, args.script)
         elif args.stage == "clone-voice":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id

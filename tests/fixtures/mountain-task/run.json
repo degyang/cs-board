@@ -10,7 +10,7 @@
   "started_at": "2026-08-29T09:01:00Z",
   "finished_at": null,
   "stages": {
-    "segment-script": {"status": "succeeded", "attempt": 1},
+    "generate-visual-anchors": {"status": "succeeded", "attempt": 1},
     "clone-voice": {"status": "running", "attempt": 1}
   },
   "warnings": []

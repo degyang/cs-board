@@ -18,7 +18,7 @@ from csboard.domain.errors import DomainError
 
 # Stage dependency graph for mountain-av-v1 (linear pipeline).
 STAGE_ORDER: list[str] = [
-    "segment-script",
+    "generate-visual-anchors",
     "clone-voice",
     "plan-storyboard",
     "generate-illustrations",

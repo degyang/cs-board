@@ -1,7 +1,8 @@
 """Mountain v1 API — 纯净的 /api/v1 端点。
 
-不依赖 legacy mountain_stages、legacy_execution_id 或 127.0.0.1:8000。
+不依赖 legacy mountain_stages、LegacyJobBridge、legacy_execution_id 或 127.0.0.1:8000。
 所有操作通过 MountainCommands 和 PipelineOrchestrator 完成。
+M07+ 新功能只使用本模块，不引用 mountain_api 或 mountain_stages。
 """
 
 from __future__ import annotations
@@ -18,8 +19,10 @@ from csboard.adapters.observability import JsonlTelemetry
 from csboard.adapters.provider_factory import ProviderFactory
 from csboard.adapters.secrets import mask_secret
 from csboard.application.commands import MountainCommands
+from csboard.application.pipeline import STAGE_ORDER
+from csboard.domain.script_preparation import prepare_script
 from csboard.application.context import CommandContext
-from csboard.domain.enums import Engine, Entrypoint
+from csboard.domain.enums import Engine, Entrypoint, RunStatus, StageStatus
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.provider_types import PROVIDER_PROFILES
 
@@ -202,31 +205,103 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             raise HTTPException(400, str(error)) from error
 
     @router.get("/tasks")
-    def list_tasks(limit: int = 50):
-        """列出任务。"""
+    def list_tasks(
+        limit: int = 50,
+        cursor: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+    ):
+        """列出任务，支持 cursor/status/q 过滤。"""
         items = []
         tasks_dir = data_dir / "tasks"
-        if tasks_dir.exists():
-            for path in sorted(tasks_dir.glob("*/task.json"), reverse=True)[
-                : max(1, min(limit, 100))
-            ]:
-                try:
-                    items.append(repository.get_task(path.parent.name).to_dict())
-                except NotFoundError:
+        if not tasks_dir.exists():
+            return {"items": [], "next_cursor": None}
+
+        all_paths = sorted(tasks_dir.glob("*/task.json"), reverse=True)
+
+        # cursor: skip tasks until we find the cursor task_id
+        if cursor:
+            cursor_idx = -1
+            for idx, p in enumerate(all_paths):
+                if p.parent.name == cursor:
+                    cursor_idx = idx + 1
+                    break
+            if cursor_idx > 0:
+                all_paths = all_paths[cursor_idx:]
+
+        for path in all_paths:
+            if len(items) >= max(1, min(limit, 100)):
+                break
+            try:
+                task = repository.get_task(path.parent.name)
+                task_dict = task.to_dict()
+
+                # status filter
+                if status and task_dict.get("status") != status:
                     continue
-        return {"items": items}
+                # search filter
+                if q and q.lower() not in task_dict.get("title", "").lower():
+                    continue
+
+                # Build active_run summary if run exists
+                active_run = None
+                if task.active_run_id:
+                    try:
+                        run = repository.get_run(task.task_id, task.active_run_id)
+                        # Determine current_stage: last non-terminal stage
+                        current_stage = None
+                        for stage_name in reversed(STAGE_ORDER):
+                            stage_state = run.stages.get(stage_name)
+                            if stage_state and stage_state.status in (StageStatus.RUNNING, StageStatus.FAILED):
+                                current_stage = stage_name
+                                break
+                            if stage_state and stage_state.status == StageStatus.SUCCEEDED:
+                                # All stages succeeded — no current stage
+                                break
+                        # If no current_stage found and run is running, use first pending
+                        if current_stage is None and run.status == RunStatus.RUNNING:
+                            for stage_name in STAGE_ORDER:
+                                stage_state = run.stages.get(stage_name)
+                                if not stage_state or stage_state.status == StageStatus.PENDING:
+                                    current_stage = stage_name
+                                    break
+
+                        # Check if final video is available
+                        final_path = repository.run_dir(task.task_id, task.active_run_id) / "artifacts" / "final.mp4"
+                        final_available = final_path.is_file()
+
+                        active_run = {
+                            "run_id": run.run_id,
+                            "status": run.status.value,
+                            "current_stage": current_stage,
+                            "started_at": run.started_at,
+                            "retryable": run.status == RunStatus.FAILED,
+                            "error_code": run.error_code if hasattr(run, 'error_code') else None,
+                            "final_available": final_available,
+                            "fallback_unit_count": 0,
+                        }
+                    except NotFoundError:
+                        pass
+
+                task_dict["active_run"] = active_run
+                items.append(task_dict)
+            except NotFoundError:
+                continue
+
+        next_cursor = items[-1]["task_id"] if len(items) >= max(1, min(limit, 100)) else None
+        return {"items": items, "next_cursor": next_cursor}
 
     @router.get("/tasks/{task_id}")
     def get_task(task_id: str):
         """获取任务详情。"""
         try:
-            project = repository.get_task(task_id)
+            task = repository.get_task(task_id)
             run = (
-                repository.get_run(task_id, project.active_run_id)
-                if project.active_run_id
+                repository.get_run(task_id, task.active_run_id)
+                if task.active_run_id
                 else None
             )
-            return _task_detail_view(project, run)
+            return _task_detail_view(task, run)
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
@@ -294,6 +369,20 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+        # ── 文案整理：deterministic script preparation ──
+        try:
+            preparation = prepare_script(script.strip())
+            task_json_path = repository.task_dir(task_id) / "task.json"
+            task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+            task_data["script_preparation"] = preparation
+            task_data["visual_anchor_enabled"] = True
+            task_json_path.write_text(
+                json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except ValueError:
+            # Script too short for preparation — skip silently
+            pass
+
         return {"ok": True, "task_id": task_id, "input_saved": True}
 
     @router.get("/tasks/{task_id}/inputs")
@@ -329,6 +418,12 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 }
                 break
 
+        # Read script_preparation from task.json if available
+        task_json_path = repository.task_dir(task_id) / "task.json"
+        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+        preparation = task_data.get("script_preparation")
+        visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
+
         return {
             "task_id": task_id,
             "saved": True,
@@ -340,6 +435,8 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 "stroke_detail": request_data.get("stroke_detail", "detailed"),
             },
             "reference_audio": audio_meta,
+            "script_preparation": preparation,
+            "visual_anchor_enabled": visual_anchor_enabled,
         }
 
     # ── Run Operations ──────────────────────────────────────────────────
@@ -755,10 +852,10 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Helper Functions ──────────────────────────────────────────────────
 
-    def _task_detail_view(project, run) -> dict[str, Any]:
+    def _task_detail_view(task, run) -> dict[str, Any]:
         """构建 Task 详情视图。"""
         result = {
-            "task": project.to_dict(),
+            "task": task.to_dict(),
             "active_run": run.to_dict() if run else None,
             "stages": [],
             "warnings": [],
@@ -777,7 +874,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             }
             # 获取产物列表
             index_path = (
-                repository.run_dir(project.task_id, run.run_id)
+                repository.run_dir(task.task_id, run.run_id)
                 / "artifacts"
                 / "index.json"
             )

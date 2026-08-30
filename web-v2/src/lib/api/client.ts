@@ -195,7 +195,7 @@ export function deleteProviderSecret(
   )
 }
 
-// ── Projects ────────────────────────────────────────────────────────────
+// ── Tasks ────────────────────────────────────────────────────────────
 
 export function fetchTasks(limit = 50): Promise<TaskListResponse> {
   return get<TaskListResponse>(`/tasks?limit=${limit}`)

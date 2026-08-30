@@ -16,7 +16,7 @@ description: Create, resume, inspect, or diagnose a standard whiteboard video pr
 ## 非职责
 
 - 不自行拆分文案、生成 prompt 或执行 Provider/脚本；
-- 不将对话记录、终端输出或日志当成 Project 状态；
+- 不将对话记录、终端输出或日志当成 Task 状态；
 - 不维护不同于 WebUI 的进度或重试规则。
 
 ## 执行策略
@@ -33,7 +33,7 @@ description: Create, resume, inspect, or diagnose a standard whiteboard video pr
 
 ```bash
 # 创建任务
-python -m cli.csboard project create --request request.json --json
+python -m cli.csboard task create --request request.json --json
 
 # 运行流水线
 python -m cli.csboard pipeline run --task <id> --policy auto --json
@@ -42,7 +42,7 @@ python -m cli.csboard pipeline run --task <id> --policy auto --json
 python -m cli.csboard pipeline resume --task <id> --json
 
 # 查看任务状态
-python -m cli.csboard project show --task <id> --json
+python -m cli.csboard task show --task <id> --json
 
 # 查看运行追踪
 python -m cli.csboard run trace --task <id> --run <run-id> --json

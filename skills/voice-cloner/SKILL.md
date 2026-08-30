@@ -54,7 +54,7 @@ python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice -
 
 ## 错误处理
 
-- av-plan 缺失 → 先运行 segment-script
+- av-plan 缺失 → 先运行 generate-visual-anchors
 - TTS 服务不可用 → `TTS_SERVICE_UNAVAILABLE`（可重试）
 - Whisper 对齐失败 → 使用等分 fallback + warning
 - 参考音频缺失 → `VALIDATION_ERROR`

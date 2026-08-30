@@ -33,8 +33,8 @@ class TestStageOrder(unittest.TestCase):
     def test_stage_order_has_six_stages(self) -> None:
         self.assertEqual(len(STAGE_ORDER), 6)
 
-    def test_stage_order_starts_with_segment_script(self) -> None:
-        self.assertEqual(STAGE_ORDER[0], "segment-script")
+    def test_stage_order_starts_with_generate_visual_anchors(self) -> None:
+        self.assertEqual(STAGE_ORDER[0], "generate-visual-anchors")
 
     def test_stage_order_ends_with_compose_video(self) -> None:
         self.assertEqual(STAGE_ORDER[-1], "compose-video")
@@ -46,11 +46,11 @@ class TestGetNextStage(unittest.TestCase):
     def test_all_pending_returns_first(self) -> None:
         orch = PipelineOrchestrator(get_run=MagicMock(), save_run=MagicMock(), append_event=MagicMock())
         run = _make_run()
-        self.assertEqual(orch.get_next_stage(run), "segment-script")
+        self.assertEqual(orch.get_next_stage(run), "generate-visual-anchors")
 
     def test_first_done_returns_second(self) -> None:
         orch = PipelineOrchestrator(get_run=MagicMock(), save_run=MagicMock(), append_event=MagicMock())
-        run = _make_run({"segment-script": "succeeded"})
+        run = _make_run({"generate-visual-anchors": "succeeded"})
         self.assertEqual(orch.get_next_stage(run), "clone-voice")
 
     def test_all_done_returns_none(self) -> None:
@@ -60,7 +60,7 @@ class TestGetNextStage(unittest.TestCase):
 
     def test_failed_stage_returns_it(self) -> None:
         orch = PipelineOrchestrator(get_run=MagicMock(), save_run=MagicMock(), append_event=MagicMock())
-        run = _make_run({"segment-script": "succeeded", "clone-voice": "failed"})
+        run = _make_run({"generate-visual-anchors": "succeeded", "clone-voice": "failed"})
         self.assertEqual(orch.get_next_stage(run), "clone-voice")
 
 
@@ -75,7 +75,7 @@ class TestGetPendingStages(unittest.TestCase):
 
     def test_first_done(self) -> None:
         orch = PipelineOrchestrator(get_run=MagicMock(), save_run=MagicMock(), append_event=MagicMock())
-        run = _make_run({"segment-script": "succeeded"})
+        run = _make_run({"generate-visual-anchors": "succeeded"})
         pending = orch.get_pending_stages(run)
         self.assertEqual(pending, STAGE_ORDER[1:])
 
@@ -83,7 +83,7 @@ class TestGetPendingStages(unittest.TestCase):
         orch = PipelineOrchestrator(get_run=MagicMock(), save_run=MagicMock(), append_event=MagicMock())
         run = _make_run()
         pending = orch.get_pending_stages(run, target="clone-voice")
-        self.assertEqual(pending, ["segment-script", "clone-voice"])
+        self.assertEqual(pending, ["generate-visual-anchors", "clone-voice"])
 
     def test_all_done_returns_empty(self) -> None:
         orch = PipelineOrchestrator(get_run=MagicMock(), save_run=MagicMock(), append_event=MagicMock())
@@ -126,13 +126,13 @@ class TestRunPipeline(unittest.TestCase):
         result = orch.run_pipeline("project-test", "run-test", policy="gated")
         self.assertTrue(result["ok"])
         self.assertEqual(len(result["stages_executed"]), 1)
-        self.assertEqual(result["stages_executed"][0], "segment-script")
+        self.assertEqual(result["stages_executed"][0], "generate-visual-anchors")
 
     def test_targeted_runs_target_with_missing_dependencies(self) -> None:
         orch, _, _ = self._make_orchestrator()
         result = orch.run_pipeline("project-test", "run-test", policy="targeted", target_stage="clone-voice")
         self.assertTrue(result["ok"])
-        self.assertEqual(result["stages_executed"], ["segment-script", "clone-voice"])
+        self.assertEqual(result["stages_executed"], ["generate-visual-anchors", "clone-voice"])
 
     def test_targeted_requires_stage(self) -> None:
         orch, _, _ = self._make_orchestrator()
@@ -150,13 +150,13 @@ class TestRunPipeline(unittest.TestCase):
         orch, _, _ = self._make_orchestrator()
         # Don't register any stages
         orch._executors.clear()
-        result = orch.run_pipeline("project-test", "run-test", policy="targeted", target_stage="segment-script")
+        result = orch.run_pipeline("project-test", "run-test", policy="targeted", target_stage="generate-visual-anchors")
         self.assertFalse(result["ok"])
         self.assertEqual(result["results"][0]["error"]["code"], "CAPABILITY_NOT_AVAILABLE")
 
     def test_stage_failure_stops_pipeline(self) -> None:
         orch, _, _ = self._make_orchestrator({
-            "segment-script": {"ok": True, "command": "stage.run", "stage": "segment-script", "task_id": "p", "run_id": "r"},
+            "generate-visual-anchors": {"ok": True, "command": "stage.run", "stage": "generate-visual-anchors", "task_id": "p", "run_id": "r"},
             "clone-voice": {"ok": False, "command": "stage.run", "stage": "clone-voice", "task_id": "p", "run_id": "r",
                             "error": {"code": "TTS_FAILED", "message": "TTS failed", "retryable": True}},
         })
@@ -170,7 +170,7 @@ class TestResumePipeline(unittest.TestCase):
 
     def test_resume_from_failed(self) -> None:
         run = _make_run(
-            {"segment-script": "succeeded", "clone-voice": "failed"},
+            {"generate-visual-anchors": "succeeded", "clone-voice": "failed"},
             status="failed",
         )
         get_run = MagicMock(return_value=run)
@@ -207,7 +207,7 @@ class TestNextStageAfter(unittest.TestCase):
     """Test PipelineOrchestrator._next_stage_after()."""
 
     def test_first_returns_second(self) -> None:
-        self.assertEqual(PipelineOrchestrator._next_stage_after("segment-script"), "clone-voice")
+        self.assertEqual(PipelineOrchestrator._next_stage_after("generate-visual-anchors"), "clone-voice")
 
     def test_last_returns_none(self) -> None:
         self.assertIsNone(PipelineOrchestrator._next_stage_after("compose-video"))

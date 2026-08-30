@@ -11,7 +11,7 @@ from csboard.domain.enums import Engine
 
 def av_plan_document(task_id: str, run_id: str, units: tuple[VoiceUnit, ...], source_text: str, engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
     return {
-        **_metadata("av-plan", "planning.av-plan", task_id, run_id, "segment-script", engine),
+        **_metadata("av-plan", "planning.av-plan", task_id, run_id, "generate-visual-anchors", engine),
         "source_text_sha256": _sha(source_text),
         "voice_units": [{
             "unit_id": unit.unit_id, "order": unit.order, "source_range": _range(unit.source_range), "text": unit.text,

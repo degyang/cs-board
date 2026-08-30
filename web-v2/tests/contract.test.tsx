@@ -78,7 +78,7 @@ const RUNNING_TASK = {
     progress: 0.6,
     current_stage: 'render-visuals',
     stages: [
-      { stage: 'segment-script', status: 'succeeded', attempt: 0 },
+      { stage: 'generate-visual-anchors', status: 'succeeded', attempt: 0 },
       { stage: 'clone-voice', status: 'succeeded', attempt: 0 },
       { stage: 'plan-storyboard', status: 'succeeded', attempt: 0 },
       { stage: 'generate-illustrations', status: 'succeeded', attempt: 0 },
@@ -91,7 +91,7 @@ const RUNNING_TASK = {
     warnings: [],
   },
   stages: [
-    { stage: 'segment-script', status: 'succeeded', attempt: 0 },
+    { stage: 'generate-visual-anchors', status: 'succeeded', attempt: 0 },
     { stage: 'clone-voice', status: 'succeeded', attempt: 0 },
     { stage: 'plan-storyboard', status: 'succeeded', attempt: 0 },
     { stage: 'generate-illustrations', status: 'succeeded', attempt: 0 },
@@ -104,7 +104,7 @@ const RUNNING_TASK = {
       relative_path: 'tasks/proj-abc123def456/artifacts/segments.json',
       status: 'succeeded',
       size_bytes: 2048,
-      producer_stage: 'segment-script',
+      producer_stage: 'generate-visual-anchors',
       produced_at: '2025-06-01T08:02:00Z',
       event_sequence: 5,
     },
@@ -156,15 +156,15 @@ const UNITS_RESPONSE = {
 const EVENTS_RESPONSE = {
   items: [
     { event_type: 'run_started', stage: null, timestamp: '2025-06-01T08:01:00Z', sequence: 1 },
-    { event_type: 'stage_started', stage: 'segment-script', timestamp: '2025-06-01T08:01:01Z', sequence: 2 },
-    { event_type: 'stage_completed', stage: 'segment-script', timestamp: '2025-06-01T08:02:00Z', sequence: 5 },
+    { event_type: 'stage_started', stage: 'generate-visual-anchors', timestamp: '2025-06-01T08:01:01Z', sequence: 2 },
+    { event_type: 'stage_completed', stage: 'generate-visual-anchors', timestamp: '2025-06-01T08:02:00Z', sequence: 5 },
   ],
   next_cursor: 5,
 }
 
 const LOGS_RESPONSE = {
   items: [
-    { timestamp: '2025-06-01T08:01:01Z', level: 'INFO', component: 'segment-script', message: 'Starting script segmentation' },
+    { timestamp: '2025-06-01T08:01:01Z', level: 'INFO', component: 'generate-visual-anchors', message: 'Starting script segmentation' },
     { timestamp: '2025-06-01T08:01:05Z', level: 'WARN', component: 'clone-voice', message: 'Reference audio quality low' },
     { timestamp: '2025-06-01T08:02:00Z', level: 'ERROR', component: 'render-visuals', message: 'GPU timeout' },
   ],
@@ -375,8 +375,8 @@ describe('Workbench contract: stage timeline', () => {
 
   it('renders all 6 stage nodes', async () => {
     renderWorkbench()
-    await screen.findAllByText('文案分割')
-    const stageNames = ['文案分割', '克隆配音', '拆分分镜', '生成插画', '白板渲染', '合成成片']
+    await screen.findAllByText('生成画面锚定重点')
+    const stageNames = ['生成画面锚定重点', '克隆配音', '拆分分镜', '生成插画', '白板渲染', '合成成片']
     for (const name of stageNames) {
       const els = screen.getAllByText(name)
       expect(els.length).toBeGreaterThanOrEqual(1)
@@ -385,7 +385,7 @@ describe('Workbench contract: stage timeline', () => {
 
   it('shows succeeded stage badges', async () => {
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     const succeeded = screen.getAllByText(/已成功/)
     expect(succeeded.length).toBeGreaterThanOrEqual(1)
   })
@@ -416,7 +416,7 @@ describe('Workbench contract: artifacts table', () => {
     renderWorkbench()
     await screen.findByText('segments')
     // producer_stage appears in artifacts table — may have duplicates from workspace
-    const stages = screen.getAllByText('segment-script')
+    const stages = screen.getAllByText('generate-visual-anchors')
     expect(stages.length).toBeGreaterThanOrEqual(1)
   })
 })
@@ -467,7 +467,7 @@ describe('Workbench contract: events & logs', () => {
 
   it('renders event entries', async () => {
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     // The activity panel toggle should be visible
     await waitFor(() => {
       expect(screen.getByText(/运行日志 & 事件/)).toBeDefined()
@@ -484,7 +484,7 @@ describe('Workbench contract: events & logs', () => {
 
   it('renders log entries with level', async () => {
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     const toggle = screen.getByText(/运行日志 & 事件/)
     await userEvent.click(toggle)
     // Log section header with count
@@ -496,7 +496,7 @@ describe('Workbench contract: events & logs', () => {
 
   it('renders event cursor info', async () => {
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     const toggle = screen.getByText(/运行日志 & 事件/)
     await userEvent.click(toggle)
     await waitFor(() => {
@@ -829,7 +829,7 @@ describe('Workbench contract: stage run/retry', () => {
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-stage-1',
     })
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     const stageNames = screen.getAllByText('合成成片')
     expect(stageNames.length).toBeGreaterThanOrEqual(1)
     const executeBtns = screen.getAllByText('执行')
@@ -849,7 +849,7 @@ describe('Workbench contract: stage run/retry', () => {
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-retry-stage-1',
     })
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     const stageNames = screen.getAllByText('白板渲染')
     expect(stageNames.length).toBeGreaterThanOrEqual(1)
     const retryBtns = screen.getAllByText('重试')
@@ -869,7 +869,7 @@ describe('Workbench contract: log filters', () => {
 
   it('renders log filter controls', async () => {
     renderWorkbench()
-    await screen.findAllByText('文案分割')
+    await screen.findAllByText('生成画面锚定重点')
     await waitFor(() => {
       expect(screen.getByText('全部级别')).toBeDefined()
     }, { timeout: 3000 })
@@ -894,7 +894,7 @@ describe('Diagnostics contract', () => {
       finished_at: null,
       error: null,
       stages: {
-        'segment-script': { status: 'succeeded', attempt: 0 },
+        'generate-visual-anchors': { status: 'succeeded', attempt: 0 },
         'clone-voice': { status: 'succeeded', attempt: 0 },
         'plan-storyboard': { status: 'succeeded', attempt: 0 },
         'generate-illustrations': { status: 'succeeded', attempt: 0 },

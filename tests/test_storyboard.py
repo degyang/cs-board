@@ -50,7 +50,7 @@ def _setup_project(root: Path) -> tuple[str, str, FilesystemTaskRepository]:
         target_stage="compose-video",
         started_at=utc_now(),
         stages={
-            "segment-script": StageState(StageStatus.SUCCEEDED, 1),
+            "generate-visual-anchors": StageState(StageStatus.SUCCEEDED, 1),
             "clone-voice": StageState(StageStatus.SUCCEEDED, 1),
         },
     )
@@ -73,7 +73,7 @@ def _setup_project(root: Path) -> tuple[str, str, FilesystemTaskRepository]:
     store = FilesystemArtifactStore(repo)
     store.commit_bytes(
         task_id, run_id, "planning.av-plan", "planning/av-plan.json",
-        json_bytes(av_plan), "segment-script",
+        json_bytes(av_plan), "generate-visual-anchors",
     )
 
     # Create timeline artifact

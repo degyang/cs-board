@@ -23,16 +23,16 @@ export function TasksPage() {
   const loader = useCallback(() => fetchTasks(50), [])
   const { data, loading, error } = useAsync(loader, [], 15_000)
 
-  const projects = data?.items ?? []
-  const filtered = projects.filter((p) => {
-    if (tab !== 'all' && p.status !== tab) return false
-    if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false
+  const tasks = data?.items ?? []
+  const filtered = tasks.filter((t) => {
+    if (tab !== 'all' && t.status !== tab) return false
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
-  const tabItems = STATUS_TABS.map((t) => ({
-    ...t,
-    count: t.key === 'all' ? projects.length : projects.filter((p) => p.status === t.key).length,
+  const tabItems = STATUS_TABS.map((tabDef) => ({
+    ...tabDef,
+    count: tabDef.key === 'all' ? tasks.length : tasks.filter((t) => t.status === tabDef.key).length,
   }))
 
   return (
@@ -77,34 +77,34 @@ export function TasksPage() {
         </div>
       )}
 
-      {filtered.map((p) => (
-        <TaskCard key={p.task_id} task={p} onOpen={() => navigate(`/tasks/${p.task_id}`)} />
+      {filtered.map((t) => (
+        <TaskCard key={t.task_id} task={t} onOpen={() => navigate(`/tasks/${t.task_id}`)} />
       ))}
     </div>
   )
 }
 
-function TaskCard({ task: p, onOpen }: { task: Task; onOpen: () => void }) {
+function TaskCard({ task: t, onOpen }: { task: Task; onOpen: () => void }) {
   return (
-    <div className="proj-card">
-      <div className="proj-top">
-        <h3 className="proj-name">{p.title || `任务 ${shortId(p.task_id)}`}</h3>
-        <StatusBadge status={p.status} />
-        <span className="proj-time">{formatTime(p.updated_at)}</span>
+    <div className="task-card">
+      <div className="task-top">
+        <h3 className="task-name">{t.title || `任务 ${shortId(t.task_id)}`}</h3>
+        <StatusBadge status={t.status} />
+        <span className="task-time">{formatTime(t.updated_at)}</span>
       </div>
-      <div className="proj-meta">
-        <span className="m">ID: {shortId(p.task_id)}</span>
-        {p.engine && <span className="m">引擎: {p.engine}</span>}
-        {p.pipeline_id && <span className="m">流水线: {p.pipeline_id}</span>}
+      <div className="task-meta">
+        <span className="m">ID: {shortId(t.task_id)}</span>
+        {t.engine && <span className="m">引擎: {t.engine}</span>}
+        {t.pipeline_id && <span className="m">流水线: {t.pipeline_id}</span>}
       </div>
-      <div className="proj-actions">
+      <div className="task-actions">
         <button className="btn btn-primary btn-sm" onClick={onOpen}>
           进入工作台
         </button>
         <Link
-          to={`/tasks/${p.task_id}/runs/${p.active_run_id ?? ''}/diagnostics`}
+          to={`/tasks/${t.task_id}/runs/${t.active_run_id ?? ''}/diagnostics`}
           className="btn btn-ghost btn-sm"
-          style={!p.active_run_id ? { pointerEvents: 'none', opacity: 0.4 } : undefined}
+          style={!t.active_run_id ? { pointerEvents: 'none', opacity: 0.4 } : undefined}
         >
           诊断
         </Link>

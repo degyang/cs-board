@@ -1,56 +1,82 @@
 ---
-name: script-segmenter
-description: Segment narration script into Voice Units and Visual Items for video production. Use for the first stage of the standard pipeline.
+name: visual-anchor-generator
+slug: visual-anchor-generator
+description: Generate visual anchor points for storyboard planning
 ---
 
-## 输入与输出
+# Visual Anchor Generator Skill
 
-- 输入：Project、原始文案、分割策略版本和系统级 TTS 能力限制；
-- 输出：`planning.av-plan`、Voice Unit/Visual Item 摘要、覆盖率和规划告警。
+Generate visual anchor points from script text for downstream storyboard planning.
 
-## 强制规则
+## 目标
 
-- 先按语义完整性、内容结构和 TTS 能力决定 Voice Unit；
-- 再在每个 Unit 内决定一个或多个 Visual Item 及连续原文范围；
-- 2–3 句话、1–2 张图只是常见目标，不是硬限制；
-- 不生成 Voice、图片构图或毫秒时间，不改写旁白；
-- 原文覆盖率不是 100%、范围重叠或越界时失败；
-- 重跑导致稳定 ID 或文字范围变化时，使全部下游失效。
+为 `plan-storyboard` 生成 av-plan.json 输入文件。
 
-## CLI 命令
+## 前置条件
+
+- 任务已创建（`task create`）
+- 文案已保存（`POST /api/v1/tasks/{task_id}/inputs`）
+- 文案整理（script_preparation）已自动完成
+- Provider 连通（`provider.check`）
+
+## 输出
+
+- `planning/av-plan.json`：voice_units（含 visual_items）
+
+## 执行方式
 
 ```bash
-# 运行文案分割
-python -m cli.csboard stage run --task <id> --run <run-id> --stage segment-script --script "旁白文案" --json
+# CLI
+python -m cli.csboard stage run \
+  --task <task-id> \
+  --run <run-id> \
+  --stage generate-visual-anchors \
+  --script "完整文案内容" \
+  --json
 
-# 查看生成的 AV Plan
-python -m cli.csboard artifact show --task <id> --run <run-id> --key planning.av-plan --json
+# API
+curl -X POST /api/v1/tasks/{task_id}/runs/{run_id}/start
 ```
 
-## 输出格式
-
-成功时返回：
+## av-plan.json 格式
 
 ```json
 {
-  "ok": true,
-  "command": "stage.run",
-  "task_id": "project-xxx",
-  "run_id": "run-xxx",
-  "stage": "segment-script",
-  "result": "succeeded",
-  "artifacts": ["planning.av-plan"],
-  "next_stage": "clone-voice"
+  "task_id": "...",
+  "run_id": "...",
+  "engine": "whiteboard",
+  "voice_units": [
+    {
+      "unit_id": "unit-001",
+      "order": 1,
+      "source_range": {"start": 0, "end": 42},
+      "text": "旁白原文",
+      "visual_items": [
+        {
+          "visual_id": "visual-001-01",
+          "order": 1,
+          "source_range": {"start": 0, "end": 20},
+          "text": "画面描述"
+        }
+      ]
+    }
+  ]
 }
 ```
 
-## 与其他 Skill 的协作
+## 验证规则
 
-- **上游**：video-workflow 创建任务并提供文案
-- **下游**：voice-cloner 使用 av-plan 生成语音
+- voice_units 非空
+- source_range 覆盖完整文案
+- visual_items 顺序连续
+
+## 约束
+
+- 确定性算法（deterministic-v1），相同输入相同输出
+- 不依赖 LLM（LLM 增强在 M09 开放）
+- 不读取、缓存或打印参考音频
 
 ## 错误处理
 
-- 文案为空或缺失 → `VALIDATION_ERROR`
-- 覆盖率不是 100% → `SEGMENTATION_COVERAGE_INVALID`
-- 任务 pipeline 不是 mountain-av-v1 → `VALIDATION_ERROR`
+- Provider 不可用 → `PROVIDER_UNAVAILABLE`
+- 文案为空 → `VALIDATION_ERROR`

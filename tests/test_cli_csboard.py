@@ -44,9 +44,9 @@ class CliCsboardTest(unittest.TestCase):
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(events["items"][0]["event_type"], "TaskCreated")
 
-    def test_segment_script_persists_av_plan_and_other_stage_is_rejected(self) -> None:
+    def test_generate_visual_anchors_persists_av_plan_and_other_stage_is_rejected(self) -> None:
         _, created = self.invoke("task", "create", "--title", "分割任务", "--json")
-        code, segmented = self.invoke("stage", "run", "--task", created["task_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "第一句话。第二句话。", "--json")
+        code, segmented = self.invoke("stage", "run", "--task", created["task_id"], "--run", created["run_id"], "--stage", "generate-visual-anchors", "--script", "第一句话。第二句话。", "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(segmented["artifacts"], ["planning.av-plan"])
         # Use an unregistered stage (custom-stage is not implemented)
@@ -61,7 +61,7 @@ class CliCsboardTest(unittest.TestCase):
 
     def test_artifact_show_returns_content(self) -> None:
         _, created = self.invoke("task", "create", "--title", "Artifact 测试", "--json")
-        self.invoke("stage", "run", "--task", created["task_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "测试文案。", "--json")
+        self.invoke("stage", "run", "--task", created["task_id"], "--run", created["run_id"], "--stage", "generate-visual-anchors", "--script", "测试文案。", "--json")
         code, result = self.invoke("artifact", "show", "--task", created["task_id"], "--run", created["run_id"], "--key", "planning.av-plan", "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertTrue(result["ok"])
@@ -87,7 +87,7 @@ class CliCsboardTest(unittest.TestCase):
 
     def test_stage_retry_missing_stage_returns_not_found(self) -> None:
         _, created = self.invoke("task", "create", "--title", "Retry 测试", "--json")
-        code, result = self.invoke("stage", "retry", "--task", created["task_id"], "--run", created["run_id"], "--stage", "segment-script", "--json")
+        code, result = self.invoke("stage", "retry", "--task", created["task_id"], "--run", created["run_id"], "--stage", "generate-visual-anchors", "--json")
         self.assertEqual(code, EXIT_NOT_FOUND)
         self.assertEqual(result["error"]["code"], "NOT_FOUND")
 

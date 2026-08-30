@@ -7,7 +7,7 @@
   "run_id": "run-fixture-001",
   "pipeline_id": "mountain-av-v1",
   "engine": "whiteboard",
-  "producer_stage": "segment-script",
+  "producer_stage": "generate-visual-anchors",
   "producer_version": "1.0.0",
   "created_at": "2026-08-29T09:02:00Z",
   "input_fingerprint": "sha256:0123456789abcdef",

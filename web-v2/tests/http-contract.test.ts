@@ -166,13 +166,13 @@ describe('HTTP contract: stage actions', () => {
   it('encodes stage key in URL path', async () => {
     mockFetch.mockResolvedValue(jsonResponse({
       ok: true, command: 'run-stage', task_id: 'p1', run_id: 'r1',
-      trace_id: 't1', command_id: 'c1', stage: 'segment-script',
+      trace_id: 't1', command_id: 'c1', stage: 'generate-visual-anchors',
     }))
 
-    await runStage('p1', 'r1', 'segment-script')
+    await runStage('p1', 'r1', 'generate-visual-anchors')
 
     const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('/stages/segment-script/run')
+    expect(url).toContain('/stages/generate-visual-anchors/run')
   })
 })
 
@@ -232,10 +232,10 @@ describe('HTTP contract: fetchLogs', () => {
   it('appends component query param when filter provided', async () => {
     mockFetch.mockResolvedValue(jsonResponse({ items: [] }))
 
-    await fetchLogs('p1', 'r1', { component: 'segment-script' })
+    await fetchLogs('p1', 'r1', { component: 'generate-visual-anchors' })
 
     const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('component=segment-script')
+    expect(url).toContain('component=generate-visual-anchors')
   })
 
   it('appends stage query param when filter provided', async () => {

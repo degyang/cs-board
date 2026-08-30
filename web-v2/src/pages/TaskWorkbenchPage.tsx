@@ -379,7 +379,7 @@ export function TaskWorkbenchPage() {
               className="textarea"
               value={script}
               onChange={(e) => { setScript(e.target.value); setInputsSaved(false) }}
-              placeholder="粘贴完整文案，将由 segment-script 阶段自动分段"
+              placeholder="粘贴完整文案，保存时自动整理为 Voice Units"
               rows={6}
               disabled={actionLoading === 'inputs'}
             />

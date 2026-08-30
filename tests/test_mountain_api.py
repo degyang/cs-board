@@ -112,7 +112,7 @@ class TestTaskEndpoints(unittest.TestCase):
 class TestStageEndpoints(unittest.TestCase):
     """Test stage operation endpoints."""
 
-    def test_segment_script(self):
+    def test_generate_visual_anchors(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
             _setup_task(repo)
@@ -124,7 +124,7 @@ class TestStageEndpoints(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertTrue(data["ok"])
-            self.assertEqual(data["stage"], "segment-script")
+            self.assertEqual(data["stage"], "generate-visual-anchors")
 
     def test_plan_storyboard(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -167,7 +167,7 @@ class TestStageEndpoints(unittest.TestCase):
             (artifacts_dir / "timing" / "timeline.json").parent.mkdir(parents=True, exist_ok=True)
             (artifacts_dir / "timing" / "timeline.json").write_text(json.dumps(timeline))
             store = FilesystemArtifactStore(repo)
-            store.commit_bytes("proj-1", "run-1", "planning.av-plan", "planning/av-plan.json", json.dumps(av_plan).encode(), "segment-script")
+            store.commit_bytes("proj-1", "run-1", "planning.av-plan", "planning/av-plan.json", json.dumps(av_plan).encode(), "generate-visual-anchors")
             store.commit_bytes("proj-1", "run-1", "timing.timeline", "timing/timeline.json", json.dumps(timeline).encode(), "clone-voice")
 
             client = TestClient(app)

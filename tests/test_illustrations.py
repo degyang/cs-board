@@ -49,7 +49,7 @@ def _setup_project_with_storyboard(root: Path) -> tuple[str, str, FilesystemTask
         target_stage="compose-video",
         started_at=utc_now(),
         stages={
-            "segment-script": StageState(StageStatus.SUCCEEDED, 1),
+            "generate-visual-anchors": StageState(StageStatus.SUCCEEDED, 1),
             "clone-voice": StageState(StageStatus.SUCCEEDED, 1),
             "plan-storyboard": StageState(StageStatus.SUCCEEDED, 1),
         },

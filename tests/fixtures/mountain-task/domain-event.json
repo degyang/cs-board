@@ -10,6 +10,6 @@
   "trace_id": "trace-fixture-001",
   "command_id": "command-fixture-001",
   "span_id": "span-segment-001",
-  "stage": "segment-script",
+  "stage": "generate-visual-anchors",
   "artifact_key": "planning.av-plan"
 }

@@ -18,6 +18,7 @@ from csboard.application.pipeline import PipelineOrchestrator
 from csboard.application.storyboard import StoryboardService
 from csboard.application.voice_units import VoiceUnitService
 from csboard.domain.av_timing import VoiceUnit, segment_script
+from csboard.domain.script_preparation import prepare_script
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.models import Task, Run, StageState
@@ -43,7 +44,7 @@ class MountainCommands:
             append_event=self.telemetry.append_event,
         )
         # Register implemented stage executors
-        self.pipeline.register_stage("segment-script", self._exec_segment_script)
+        self.pipeline.register_stage("generate-visual-anchors", self._exec_generate_visual_anchors)
         self.pipeline.register_stage("clone-voice", self._exec_clone_voice)
         self.pipeline.register_stage("plan-storyboard", self._exec_plan_storyboard)
         self.pipeline.register_stage("generate-illustrations", self._exec_generate_illustrations)
@@ -92,6 +93,18 @@ class MountainCommands:
         if request:
             request_path = self.repository.task_dir(task_id) / "request.json"
             request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 文案整理：auto-prepare script if present
+            script_text = request.get("script", "").strip()
+            if script_text:
+                try:
+                    preparation = prepare_script(script_text)
+                    task_json_path = self.repository.task_dir(task_id) / "task.json"
+                    task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+                    task_data["script_preparation"] = preparation
+                    task_data["visual_anchor_enabled"] = True
+                    task_json_path.write_text(json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                except ValueError:
+                    pass  # Script too short — skip
         event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "TaskCreated",
             "command": "task.create",
@@ -128,24 +141,27 @@ class MountainCommands:
         path = self.telemetry.export_diagnostic_bundle(task_id, run_id)
         return {"ok": True, "task_id": task_id, "run_id": run_id, "bundle": str(path)}
 
-    def segment_script(self, task_id: str, run_id: str, script: str, context: CommandContext | None = None) -> dict[str, Any]:
+    def generate_visual_anchors(self, task_id: str, run_id: str, script: str, context: CommandContext | None = None) -> dict[str, Any]:
         run = self.repository.get_run(task_id, run_id)
         task = self.repository.get_task(task_id)
         if task.pipeline_id != "mountain-av-v1":
-            raise ValueError("仅 mountain-av-v1 可运行标准文案分割")
+            raise ValueError("仅 mountain-av-v1 可运行 generate-visual-anchors")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         run.status = RunStatus.RUNNING
         units = segment_script(script)
         document = av_plan_document(task_id, run_id, units, script, task.engine)
         artifact = FilesystemArtifactStore(self.repository).commit_bytes(
-            task_id, run_id, "planning.av-plan", "planning/av-plan.json", json_bytes(document), "segment-script"
+            task_id, run_id, "planning.av-plan", "planning/av-plan.json", json_bytes(document), "generate-visual-anchors"
         )
         run.command_ids.append(context.command_id)
-        run.stages["segment-script"] = StageState(StageStatus.SUCCEEDED, 1)
+        run.stages["generate-visual-anchors"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
-        event = self.telemetry.append_event(task_id, run_id, {"event_type": "ScriptSegmented", "unit_count": len(units), "visual_count": sum(len(unit.visual_items) for unit in units)})
-        self.telemetry.append_audit(task_id, run_id, {"action": "stage.run", "stage": "segment-script", "command_id": context.command_id})
-        return {"ok": True, "command": "stage.run", "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "command_id": context.command_id, "stage": "segment-script", "result": "succeeded", "artifacts": [artifact.artifact_key], "event_sequence": event["sequence"], "warnings": [], "next_stage": "clone-voice"}
+        event = self.telemetry.append_event(task_id, run_id, {"event_type": "VisualAnchorsGenerated", "unit_count": len(units), "visual_count": sum(len(unit.visual_items) for unit in units)})
+        self.telemetry.append_audit(task_id, run_id, {"action": "stage.run", "stage": "generate-visual-anchors", "command_id": context.command_id})
+        return {"ok": True, "command": "stage.run", "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "command_id": context.command_id, "stage": "generate-visual-anchors", "result": "succeeded", "artifacts": [artifact.artifact_key], "event_sequence": event["sequence"], "warnings": [], "next_stage": "clone-voice"}
+
+    # Backward-compatible alias for legacy mountain_api.py
+    segment_script = generate_visual_anchors
 
     def clone_voice(
         self,
@@ -166,7 +182,7 @@ class MountainCommands:
         # Read av-plan artifact to get voice units
         av_plan_ref = FilesystemArtifactStore(self.repository).get(task_id, run_id, "planning.av-plan")
         if not av_plan_ref:
-            raise ValueError("请先运行 segment-script 生成 av-plan")
+            raise ValueError("请先运行 generate-visual-anchors 生成 av-plan")
         import json
         av_plan_path = self.repository.run_dir(task_id, run_id) / "artifacts" / av_plan_ref["relative_path"]
         av_plan = json.loads(av_plan_path.read_text(encoding="utf-8"))
@@ -363,13 +379,13 @@ class MountainCommands:
 
     # ── Stage executor wrappers ──────────────────────────────────────
 
-    def _exec_segment_script(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for segment-script. Reads script from task request."""
+    def _exec_generate_visual_anchors(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+        """Stage executor for generate-visual-anchors. Reads script from task request."""
         request = self._read_request(task_id)
         script = request.get("script", "")
         if not script:
             raise DomainError("VALIDATION_ERROR", "任务请求中缺少 script 字段")
-        return self.segment_script(task_id, run_id, script, context)
+        return self.generate_visual_anchors(task_id, run_id, script, context)
 
     def _exec_clone_voice(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for clone-voice. Uses ProviderFactory for adapters."""

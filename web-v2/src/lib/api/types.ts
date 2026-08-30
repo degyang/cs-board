@@ -6,7 +6,7 @@
 // ── Stage Keys & Names ──────────────────────────────────────────────────
 
 export type StageKey =
-  | 'segment-script'
+  | 'generate-visual-anchors'
   | 'clone-voice'
   | 'plan-storyboard'
   | 'generate-illustrations'
@@ -14,7 +14,7 @@ export type StageKey =
   | 'compose-video'
 
 export const STAGE_KEYS: StageKey[] = [
-  'segment-script',
+  'generate-visual-anchors',
   'clone-voice',
   'plan-storyboard',
   'generate-illustrations',
@@ -23,7 +23,7 @@ export const STAGE_KEYS: StageKey[] = [
 ]
 
 export const STAGE_NAMES: Record<StageKey, string> = {
-  'segment-script': '文案分割',
+  'generate-visual-anchors': '生成画面锚定重点',
   'clone-voice': '克隆配音',
   'plan-storyboard': '拆分分镜',
   'generate-illustrations': '生成插画',

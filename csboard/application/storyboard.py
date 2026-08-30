@@ -58,7 +58,7 @@ class StoryboardService:
         timeline = self._read_artifact(task_id, run_id, "timing.timeline")
 
         if not av_plan:
-            raise ValueError("请先运行 segment-script 生成 av-plan")
+            raise ValueError("请先运行 generate-visual-anchors 生成 av-plan")
         if not timeline:
             raise ValueError("请先运行 clone-voice 生成 timeline")
 

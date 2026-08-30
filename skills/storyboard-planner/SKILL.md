@@ -48,6 +48,6 @@ python -m cli.csboard artifact show --task <id> --run <run-id> --key planning.st
 
 ## 错误处理
 
-- av-plan 缺失 → 先运行 segment-script
+- av-plan 缺失 → 先运行 generate-visual-anchors
 - timeline 缺失 → 先运行 clone-voice
 - 任务 pipeline 不是 mountain-av-v1 → `VALIDATION_ERROR`
