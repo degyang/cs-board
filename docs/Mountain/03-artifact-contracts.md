@@ -114,7 +114,7 @@ Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_
 
 ## 4. 文案整理与画面锚点
 
-新建 Task 时完成文案整理并写入 `inputs/script-preparation.json`，在任何 TTS 前确定 Voice Unit 原文边界。`generate-visual-anchors` 可选地产生重点文字和其原文范围；`plan-storyboard` 再决定 Visual Item。
+新建 Task 时完成文案整理并写入 `inputs/script-preparation.json`，在任何 TTS 前确定 Voice Unit 原文边界、每个 Unit 的 `Visual Item` 数量和每张图片的 `shot_count`。`generate-visual-anchors` 可选地产生每张图片的重点文字和其原文范围；`plan-storyboard` 只补充 Prompt、构图和 Shot 动作，不得重新决定图片数量。
 
 ```json
 {
@@ -137,6 +137,10 @@ Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_
       "order": 1,
       "source_range": {"start": 0, "end": 41},
       "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。",
+      "visual_items": [
+        {"visual_id": "visual-001-01", "order": 1, "shot_count": 2},
+        {"visual_id": "visual-001-02", "order": 2, "shot_count": 1}
+      ],
       "anchors": []
     }
   ]
@@ -148,7 +152,8 @@ Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_
 - Voice Unit 按顺序、无重叠地覆盖全部有效原文；
 - 每个 Voice Unit 独立生成一条 Voice；
 - 画面锚点若存在，必须引用所属 Unit 内连续原文；
-- Visual Item 由分镜阶段产生，不能跨 Voice Unit；一个 Visual Item 对应一张主图；
+- Visual Item 在文案整理期按已保存规则产生，不能跨 Voice Unit；一个 Visual Item 对应一张主图；
+- 每个 Visual Item 有 1–4 个 Shot。Shot 是同一张主图的渲染片段，不是另一张图片；
 - “2–3 句话”和“1–2 张图”都是规划提示，不是 schema 限制；
 - 后续阶段只能引用 `unit_id` 和不可变 `source_range`，不得重新整理原文；分镜产生稳定 `visual_id` 后，下游只引用该 ID。
 
@@ -187,7 +192,7 @@ Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_
 
 ## 6. `timeline.json`
 
-`clone-voice` 在每条 Voice 完成后运行 Whisper 对齐。对齐结果合法则映射到预先确定的 Visual Item；执行失败、文字覆盖不合格、时间不单调或边界越界时，整个单元使用等分 fallback。
+`clone-voice` 在每条 Voice 完成后运行 Whisper 对齐。对齐结果合法则映射到预先确定的 Visual Item；执行失败、文字覆盖不合格、时间不单调或边界越界时，整个单元先对图片使用等分 fallback，再对每张图片内的 Shot 按权重或数量等分。
 
 ```json
 {
