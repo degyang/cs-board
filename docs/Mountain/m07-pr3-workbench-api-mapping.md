@@ -15,7 +15,7 @@
 | `retryRun(projectId, runId)` | POST | `/api/v1/projects/{projectId}/runs/{runId}/retry` | — | `PipelineRunResponse` |
 | `runStage(projectId, runId, stage)` | POST | `/api/v1/projects/{projectId}/runs/{runId}/stages/{stage}/run` | — | `PipelineRunResponse` |
 | `retryStage(projectId, runId, stage)` | POST | `/api/v1/projects/{projectId}/runs/{runId}/stages/{stage}/retry` | — | `PipelineRunResponse` |
-| `getFinalUrl(projectId, runId)` | GET | `/api/v1/projects/{projectId}/runs/{runId}/artifacts/final.mp4` | — | (video binary) |
+| `getFinalUrl(projectId, runId)` | GET | `/api/v1/projects/{projectId}/runs/{runId}/final` | — | (video binary) |
 
 ## 前端组件与 API 的对应关系
 
@@ -25,14 +25,14 @@
 |---------|---------|------|
 | 顶部标题/状态 | `fetchProject` → `project.title`, `active_run.status` | 10s 轮询，terminal 停止 |
 | ID 芯片 | `fetchProject` → `project.project_id`, `active_run.run_id`, `active_run.trace_id` | 支持复制 |
-| 能力警告 | `fetchCapabilities` → `providers.unavailable` | 显示 CAPABILITY_NOT_AVAILABLE + 链接 |
+| 能力警告 | `fetchCapabilities` → `providers.unavailable` + `providers.providers[name].{error_code,suggestion}` | 显示 provider 名称、error_code、suggestion + 链接 |
 | 制作输入表单 | 用户输入 → `uploadInputs` | FormData 上传，浏览器自动设置 Content-Type |
-| Start/Cancel/Retry | `startRun` / `cancelRun` / `retryRun` | Start 按钮 disabled 当 inputs 未保存或 capability 不可用 |
+| Start/Cancel/Retry | `startRun` / `cancelRun` / `retryRun` | Start 按钮 disabled 当 inputs 未保存或 capData 未加载或 capability 不可用 |
 | 阶段时间线 | `fetchProject` → `stages[]` | 6 阶段节点，状态着色 |
 | 阶段工作区 | `fetchProject` → `stages[]` | 每阶段显示状态 + attempt，支持单阶段执行/重试 |
 | 配音单元 | `fetchUnits` → `items[]` | 显示 timing.duration_ms, alignment_source, fallback |
 | 产物表格 | `fetchProject` → `artifacts[]` | artifact_key, producer_stage, status, size_bytes |
-| 成片预览 | `getFinalUrl` → `<video controls>` | 当 final.mp4 artifact 存在时显示 |
+| 成片预览 | `getFinalUrl` → `<video controls>` | 当 compose-video 阶段 succeeded 时显示 |
 | 事件列表 | `fetchEvents` → `items[]` | cursor 分页，首次 after=0 |
 | 日志列表 | `fetchLogs` → `items[]` | level/component/stage 筛选 |
 

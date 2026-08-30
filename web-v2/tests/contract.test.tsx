@@ -185,6 +185,13 @@ const CAPABILITIES_RESPONSE = {
     available: ['fish-speech'],
     unavailable: [],
     all_available: true,
+    providers: {
+      'fish-speech': {
+        available: true,
+        error_code: null,
+        suggestion: null,
+      },
+    },
   },
 }
 
@@ -256,6 +263,13 @@ const CAPABILITY_UNAVAILABLE = {
     available: [],
     unavailable: ['fish-speech'],
     all_available: false,
+    providers: {
+      'fish-speech': {
+        available: false,
+        error_code: 'SECRET_NOT_CONFIGURED',
+        suggestion: '请在设置中配置 fish-speech 的 API Key',
+      },
+    },
   },
 }
 
@@ -594,6 +608,18 @@ describe('Workbench contract: capability warning', () => {
     const link = screen.getByText('fish-speech')
     expect(link.getAttribute('href')).toBe('/settings/providers/fish-speech')
   })
+
+  it('shows error_code from providers.providers[name]', async () => {
+    renderWorkbench()
+    await screen.findByText(/SECRET_NOT_CONFIGURED/)
+    expect(screen.getByText(/SECRET_NOT_CONFIGURED/)).toBeDefined()
+  })
+
+  it('shows suggestion from providers.providers[name]', async () => {
+    renderWorkbench()
+    await screen.findByText(/请在设置中配置 fish-speech 的 API Key/)
+    expect(screen.getByText(/请在设置中配置 fish-speech 的 API Key/)).toBeDefined()
+  })
 })
 
 describe('Workbench contract: Start button disabled', () => {
@@ -613,6 +639,15 @@ describe('Workbench contract: Start button disabled', () => {
   })
 
   it('Start button is disabled when inputs not saved', async () => {
+    renderWorkbench()
+    await screen.findByText('启动运行')
+    const btn = screen.getByText('启动运行')
+    expect(btn.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('Start button is disabled when capability data is loading', async () => {
+    // Never resolve capabilities — simulates loading state
+    mockFetchCapabilities.mockReturnValue(new Promise(() => {}))
     renderWorkbench()
     await screen.findByText('启动运行')
     const btn = screen.getByText('启动运行')

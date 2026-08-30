@@ -11,7 +11,6 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
 import { BackButton } from '../components/ui/BackButton'
 import { STAGE_KEYS, STAGE_NAMES } from '../lib/api/types'
-import type { CapabilityItem } from '../lib/api/types'
 
 // ── Polling helper ──────────────────────────────────────────────────────
 
@@ -48,8 +47,7 @@ export function ProjectWorkbenchPage() {
   const { data: capData } = useAsync(capLoader, [])
 
   const unavailableProviders = capData?.providers.unavailable ?? []
-  const capItems = capData?.items ?? []
-  const hasCapability = capData?.providers.all_available !== false
+  const hasCapability = capData !== null && capData.providers.all_available === true
 
   // ── Units (poll with project) ────────────────────────────────────────
   const unitsLoader = useCallback(() => {
@@ -283,15 +281,16 @@ export function ProjectWorkbenchPage() {
         </div>
 
         {/* Capability warning */}
-        {!hasCapability && (
+        {!hasCapability && capData && (
           <div className="notice notice-warn" style={{ marginTop: 8 }}>
             <strong>Provider 不可用：</strong>
             {unavailableProviders.map((name) => {
-              const item = capItems.find((c: CapabilityItem) => c.reason_code === 'CAPABILITY_NOT_AVAILABLE')
+              const info = capData.providers.providers[name]
               return (
                 <span key={name} style={{ display: 'block', marginTop: 4 }}>
                   <Link to={`/settings/providers/${name}`} style={{ fontWeight: 600 }}>{name}</Link>
-                  {item?.reason_code && <span> — {item.reason_code}</span>}
+                  {info?.error_code && <span> — {info.error_code}</span>}
+                  {info?.suggestion && <span style={{ display: 'block', fontSize: 12, color: 'var(--nt-text-muted)', marginLeft: 16 }}>💡 {info.suggestion}</span>}
                 </span>
               )
             })}
