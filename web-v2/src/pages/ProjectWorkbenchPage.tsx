@@ -4,7 +4,7 @@ import { useAsync } from '../lib/api/queries'
 import {
   fetchProject, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
   startRun, cancelRun, retryRun, runStage, retryStage,
-  uploadInputs, getFinalUrl,
+  uploadInputs, fetchInputs, getFinalUrl,
 } from '../lib/api/client'
 import { formatTime, shortId, formatBytes, formatMs } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
@@ -48,6 +48,13 @@ export function ProjectWorkbenchPage() {
 
   const unavailableProviders = capData?.providers.unavailable ?? []
   const hasCapability = capData !== null && capData.providers.all_available === true
+
+  // ── Saved inputs readback ──────────────────────────────────────────────
+  const inputsLoader = useCallback(() => {
+    if (!projectId) return Promise.resolve(null)
+    return fetchInputs(projectId)
+  }, [projectId])
+  const { data: inputsData } = useAsync(inputsLoader, [projectId])
 
   // ── Units (poll with project) ────────────────────────────────────────
   const unitsLoader = useCallback(() => {
@@ -101,10 +108,29 @@ export function ProjectWorkbenchPage() {
   const [inputsSaved, setInputsSaved] = useState(false)
   const [script, setScript] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
+  const [savedAudioFilename, setSavedAudioFilename] = useState<string | null>(null)
+  const [savedAudioSize, setSavedAudioSize] = useState<number | null>(null)
   const [style, setStyle] = useState('')
   const [includeSubtitles, setIncludeSubtitles] = useState(false)
   const [penText, setPenText] = useState('')
   const [strokeDetail, setStrokeDetail] = useState('')
+
+  // Restore saved inputs when readback data arrives.
+  // Only initializes on first load (inputsSaved is false) to avoid overwriting edits.
+  useEffect(() => {
+    if (!inputsData?.saved || !inputsData.inputs || inputsSaved) return
+    setScript(inputsData.inputs.script)
+    setStyle(inputsData.inputs.style)
+    setIncludeSubtitles(inputsData.inputs.include_subtitles)
+    setPenText(inputsData.inputs.pen_text)
+    setStrokeDetail(inputsData.inputs.stroke_detail)
+    if (inputsData.reference_audio.uploaded) {
+      setSavedAudioFilename(inputsData.reference_audio.filename)
+      setSavedAudioSize(inputsData.reference_audio.size_bytes)
+    }
+    setInputsSaved(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputsData])
 
   // ── Action state ─────────────────────────────────────────────────────
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -121,6 +147,10 @@ export function ProjectWorkbenchPage() {
     if (!projectId) return
     if (!script.trim()) {
       setActionError('请输入视频文案')
+      return
+    }
+    if (!referenceFile && !savedAudioFilename) {
+      setActionError('请上传参考音频')
       return
     }
     setActionLoading('inputs')
@@ -306,7 +336,7 @@ export function ProjectWorkbenchPage() {
               disabled={!inputsSaved || !hasCapability || actionLoading === 'start'}
               title={!inputsSaved ? '请先保存制作输入' : !hasCapability ? 'Provider 不可用' : undefined}
             >
-              {actionLoading === 'start' ? <><span className="spinner" />启动中…</> : '启动运行'}
+              {actionLoading === 'start' ? <><span className="spinner" />启动中…</> : '开始制作'}
             </button>
           )}
           {isRunning && (
@@ -348,7 +378,7 @@ export function ProjectWorkbenchPage() {
               id="input-script"
               className="textarea"
               value={script}
-              onChange={(e) => setScript(e.target.value)}
+              onChange={(e) => { setScript(e.target.value); setInputsSaved(false) }}
               placeholder="粘贴完整文案，将由 segment-script 阶段自动分段"
               rows={6}
               disabled={actionLoading === 'inputs'}
@@ -361,12 +391,20 @@ export function ProjectWorkbenchPage() {
               id="input-reference"
               type="file"
               accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac"
-              onChange={(e) => setReferenceFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null
+                setReferenceFile(file)
+                setInputsSaved(false)
+                if (file) { setSavedAudioFilename(null); setSavedAudioSize(null) }
+              }}
               disabled={actionLoading === 'inputs'}
               style={{ fontSize: 13 }}
             />
             {referenceFile && (
               <p className="hint">已选择：{referenceFile.name} ({formatBytes(referenceFile.size)})</p>
+            )}
+            {!referenceFile && savedAudioFilename && (
+              <p className="hint">已保存参考音频：{savedAudioFilename}{savedAudioSize != null ? `（${formatBytes(savedAudioSize)}）` : ''}</p>
             )}
             <p className="hint">用于克隆配音的声音参考，支持 WAV/MP3/M4A/OGG/FLAC</p>
           </div>
@@ -374,22 +412,22 @@ export function ProjectWorkbenchPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
               <label htmlFor="input-style">风格</label>
-              <input id="input-style" className="input" value={style} onChange={(e) => setStyle(e.target.value)} placeholder="如：手绘、水彩" disabled={actionLoading === 'inputs'} />
+              <input id="input-style" className="input" value={style} onChange={(e) => { setStyle(e.target.value); setInputsSaved(false) }} placeholder="如：手绘、水彩" disabled={actionLoading === 'inputs'} />
             </div>
             <div className="field">
               <label htmlFor="input-pen">画笔文字</label>
-              <input id="input-pen" className="input" value={penText} onChange={(e) => setPenText(e.target.value)} placeholder="白板动画中的手写文字" disabled={actionLoading === 'inputs'} />
+              <input id="input-pen" className="input" value={penText} onChange={(e) => { setPenText(e.target.value); setInputsSaved(false) }} placeholder="白板动画中的手写文字" disabled={actionLoading === 'inputs'} />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
               <label htmlFor="input-stroke">笔触细节</label>
-              <input id="input-stroke" className="input" value={strokeDetail} onChange={(e) => setStrokeDetail(e.target.value)} placeholder="笔触粗细、颜色等" disabled={actionLoading === 'inputs'} />
+              <input id="input-stroke" className="input" value={strokeDetail} onChange={(e) => { setStrokeDetail(e.target.value); setInputsSaved(false) }} placeholder="笔触粗细、颜色等" disabled={actionLoading === 'inputs'} />
             </div>
             <div className="field" style={{ display: 'flex', alignItems: 'center', paddingTop: 20 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input type="checkbox" checked={includeSubtitles} onChange={(e) => setIncludeSubtitles(e.target.checked)} disabled={actionLoading === 'inputs'} />
+                <input type="checkbox" checked={includeSubtitles} onChange={(e) => { setIncludeSubtitles(e.target.checked); setInputsSaved(false) }} disabled={actionLoading === 'inputs'} />
                 <span>包含字幕</span>
               </label>
             </div>

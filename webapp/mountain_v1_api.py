@@ -236,13 +236,16 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
     async def upload_inputs(
         project_id: str,
         script: str = Form(...),
-        reference: UploadFile = File(...),
+        reference: UploadFile | None = File(None),
         style: str = Form("极简粗线简笔白板风"),
         include_subtitles: bool = Form(True),
         pen_text: str = Form(""),
         stroke_detail: str = Form("detailed"),
     ):
-        """上传项目输入（文案和参考音频）。"""
+        """上传项目输入（文案和参考音频）。
+
+        reference 可选：首次保存必须提供；后续编辑文案/参数时可省略，保留已有音频。
+        """
         try:
             repository.get_project(project_id)
         except NotFoundError as error:
@@ -251,19 +254,29 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         if len(script.strip()) < 10:
             raise HTTPException(400, "文案至少需要 10 个字")
 
-        suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
-        if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
-            raise HTTPException(400, "参考音频格式不支持")
-
-        # 保存参考音频
         input_dir = repository.project_dir(project_id) / "inputs"
-        input_dir.mkdir(parents=True, exist_ok=True)
-        target = input_dir / f"reference{suffix}"
-        temporary = target.with_suffix(f"{suffix}.partial")
-        with temporary.open("wb") as output:
-            while chunk := await reference.read(1024 * 1024):
-                output.write(chunk)
-        temporary.replace(target)
+
+        # 首次保存必须提供参考音频
+        if reference is not None:
+            suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
+            if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
+                raise HTTPException(400, "参考音频格式不支持")
+
+            input_dir.mkdir(parents=True, exist_ok=True)
+            target = input_dir / f"reference{suffix}"
+            temporary = target.with_suffix(f"{suffix}.partial")
+            with temporary.open("wb") as output:
+                while chunk := await reference.read(1024 * 1024):
+                    output.write(chunk)
+            temporary.replace(target)
+        else:
+            # 无新文件时，检查是否已有音频
+            has_audio = any(
+                (input_dir / f"reference{ext}").is_file()
+                for ext in (".wav", ".mp3", ".m4a", ".ogg", ".flac")
+            )
+            if not has_audio:
+                raise HTTPException(400, "首次保存必须提供参考音频")
 
         # 保存 request.json（新 Project request）
         request_data = {
@@ -282,6 +295,52 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         )
 
         return {"ok": True, "project_id": project_id, "input_saved": True}
+
+    @router.get("/projects/{project_id}/inputs")
+    def get_inputs(project_id: str):
+        """读取已保存的任务制作输入。"""
+        try:
+            repository.get_project(project_id)
+        except NotFoundError as error:
+            raise HTTPException(404, error.message) from error
+
+        request_path = repository.project_dir(project_id) / "request.json"
+        if not request_path.exists():
+            return {
+                "project_id": project_id,
+                "saved": False,
+                "inputs": None,
+                "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
+            }
+
+        request_data = json.loads(request_path.read_text(encoding="utf-8"))
+
+        # 查找已保存的参考音频文件
+        input_dir = repository.project_dir(project_id) / "inputs"
+        audio_meta: dict[str, Any] = {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None}
+        for suffix in (".wav", ".mp3", ".m4a", ".ogg", ".flac"):
+            candidate = input_dir / f"reference{suffix}"
+            if candidate.is_file():
+                audio_meta = {
+                    "uploaded": True,
+                    "filename": f"reference{suffix}",
+                    "content_type": f"audio/{suffix.lstrip('.')}",
+                    "size_bytes": candidate.stat().st_size,
+                }
+                break
+
+        return {
+            "project_id": project_id,
+            "saved": True,
+            "inputs": {
+                "script": request_data.get("script", ""),
+                "style": request_data.get("style", "极简粗线简笔白板风"),
+                "include_subtitles": request_data.get("include_subtitles", True),
+                "pen_text": request_data.get("pen_text", ""),
+                "stroke_detail": request_data.get("stroke_detail", "detailed"),
+            },
+            "reference_audio": audio_meta,
+        }
 
     # ── Run Operations ──────────────────────────────────────────────────
 

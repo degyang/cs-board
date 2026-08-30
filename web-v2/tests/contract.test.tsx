@@ -8,7 +8,7 @@
  * Zero fake data, zero /api/mountain, zero localStorage.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ProjectWorkbenchPage } from '../src/pages/ProjectWorkbenchPage'
@@ -29,13 +29,14 @@ vi.mock('../src/lib/api/client', () => ({
   runStage: vi.fn(),
   retryStage: vi.fn(),
   uploadInputs: vi.fn(),
+  fetchInputs: vi.fn(),
   getFinalUrl: vi.fn(),
 }))
 
 import {
   fetchProject, fetchRun, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
   startRun, cancelRun, retryRun, runStage, retryStage,
-  uploadInputs, getFinalUrl,
+  uploadInputs, fetchInputs, getFinalUrl,
 } from '../src/lib/api/client'
 
 const mockFetchProject = vi.mocked(fetchProject)
@@ -50,6 +51,7 @@ const mockRetryRun = vi.mocked(retryRun)
 const mockRunStage = vi.mocked(runStage)
 const mockRetryStage = vi.mocked(retryStage)
 const mockUploadInputs = vi.mocked(uploadInputs)
+const mockFetchInputs = vi.mocked(fetchInputs)
 const mockGetFinalUrl = vi.mocked(getFinalUrl)
 
 // ── Fixtures ────────────────────────────────────────────────────────────
@@ -285,12 +287,38 @@ const FAILED_PROJECT = {
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
+const UNSAVED_INPUTS = {
+  project_id: 'proj-abc123def456',
+  saved: false,
+  inputs: null,
+  reference_audio: { uploaded: false, filename: null, content_type: null, size_bytes: null },
+}
+
+const SAVED_INPUTS = {
+  project_id: 'proj-abc123def456',
+  saved: true,
+  inputs: {
+    script: '这是一段已保存的测试文案，包含多个句子用于验证回填功能。',
+    style: '极简粗线简笔白板风',
+    include_subtitles: true,
+    pen_text: '',
+    stroke_detail: 'detailed',
+  },
+  reference_audio: {
+    uploaded: true,
+    filename: 'reference.wav',
+    content_type: 'audio/wav',
+    size_bytes: 204800,
+  },
+}
+
 function setupDefaultMocks() {
   mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
   mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
   mockFetchUnits.mockResolvedValue(UNITS_RESPONSE)
   mockFetchEvents.mockResolvedValue(EVENTS_RESPONSE)
   mockFetchLogs.mockResolvedValue(LOGS_RESPONSE)
+  mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
   mockGetFinalUrl.mockReturnValue('/api/v1/projects/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
 }
 
@@ -486,6 +514,7 @@ describe('Workbench contract: empty state (no run)', () => {
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
     mockFetchLogs.mockResolvedValue({ items: [] })
+    mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
   })
 
   it('shows empty state message', async () => {
@@ -517,6 +546,7 @@ describe('Workbench contract: run not found', () => {
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
     mockFetchLogs.mockResolvedValue({ items: [] })
+    mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
   })
 
   it('shows error state', async () => {
@@ -594,6 +624,7 @@ describe('Workbench contract: capability warning', () => {
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
     mockFetchLogs.mockResolvedValue({ items: [] })
+    mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
   })
 
   it('shows capability unavailable notice', async () => {
@@ -630,18 +661,19 @@ describe('Workbench contract: Start button disabled', () => {
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
     mockFetchLogs.mockResolvedValue({ items: [] })
+    mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
   })
 
   it('shows Start button when run is pending', async () => {
     renderWorkbench()
-    await screen.findByText('启动运行')
-    expect(screen.getByText('启动运行')).toBeDefined()
+    await screen.findByText('开始制作')
+    expect(screen.getByText('开始制作')).toBeDefined()
   })
 
   it('Start button is disabled when inputs not saved', async () => {
     renderWorkbench()
-    await screen.findByText('启动运行')
-    const btn = screen.getByText('启动运行')
+    await screen.findByText('开始制作')
+    const btn = screen.getByText('开始制作')
     expect(btn.hasAttribute('disabled')).toBe(true)
   })
 
@@ -649,8 +681,8 @@ describe('Workbench contract: Start button disabled', () => {
     // Never resolve capabilities — simulates loading state
     mockFetchCapabilities.mockReturnValue(new Promise(() => {}))
     renderWorkbench()
-    await screen.findByText('启动运行')
-    const btn = screen.getByText('启动运行')
+    await screen.findByText('开始制作')
+    const btn = screen.getByText('开始制作')
     expect(btn.hasAttribute('disabled')).toBe(true)
   })
 })
@@ -663,16 +695,20 @@ describe('Workbench contract: uploadInputs FormData', () => {
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
     mockFetchLogs.mockResolvedValue({ items: [] })
+    mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
     mockUploadInputs.mockResolvedValue({ ok: true, project_id: 'proj-abc123def456', input_saved: true })
   })
 
-  it('calls uploadInputs with FormData', async () => {
+  it('calls uploadInputs with FormData when saved audio exists', async () => {
+    // Use SAVED_INPUTS so there's already a reference audio
+    mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
     renderWorkbench()
     await screen.findByText('保存制作输入')
 
-    // Fill script
+    // Edit script to trigger unsaved state
     const scriptInput = screen.getByPlaceholderText(/粘贴完整文案/)
-    await userEvent.type(scriptInput, '测试文案内容')
+    await userEvent.clear(scriptInput)
+    await userEvent.type(scriptInput, '新的测试文案内容用于验证 FormData 上传')
 
     // Click save
     const saveBtn = screen.getByText('保存制作输入')
@@ -687,11 +723,13 @@ describe('Workbench contract: uploadInputs FormData', () => {
   })
 
   it('shows success after save', async () => {
+    mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
     renderWorkbench()
     await screen.findByText('保存制作输入')
 
     const scriptInput = screen.getByPlaceholderText(/粘贴完整文案/)
-    await userEvent.type(scriptInput, '测试文案')
+    await userEvent.clear(scriptInput)
+    await userEvent.type(scriptInput, '新的测试文案')
 
     const saveBtn = screen.getByText('保存制作输入')
     await userEvent.click(saveBtn)
@@ -709,6 +747,20 @@ describe('Workbench contract: uploadInputs FormData', () => {
 
     await screen.findByText('请输入视频文案')
     expect(screen.getByText('请输入视频文案')).toBeDefined()
+  })
+
+  it('shows error when no reference audio', async () => {
+    renderWorkbench()
+    await screen.findByText('保存制作输入')
+
+    const scriptInput = screen.getByPlaceholderText(/粘贴完整文案/)
+    await userEvent.type(scriptInput, '测试文案内容')
+
+    const saveBtn = screen.getByText('保存制作输入')
+    await userEvent.click(saveBtn)
+
+    await screen.findByText('请上传参考音频')
+    expect(screen.getByText('请上传参考音频')).toBeDefined()
   })
 })
 
@@ -866,5 +918,58 @@ describe('Diagnostics contract', () => {
     )
     await screen.findByText('阶段状态')
     expect(screen.getByText('阶段状态')).toBeDefined()
+  })
+})
+
+describe('Workbench contract: inputs readback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFetchProject.mockResolvedValue(PENDING_PROJECT)
+    mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
+    mockFetchUnits.mockResolvedValue({ items: [] })
+    mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
+    mockFetchLogs.mockResolvedValue({ items: [] })
+  })
+
+  it('restores saved inputs from fetchInputs', async () => {
+    mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
+    renderWorkbench()
+    await screen.findByText('这是一段已保存的测试文案，包含多个句子用于验证回填功能。')
+    expect(screen.getByText('这是一段已保存的测试文案，包含多个句子用于验证回填功能。')).toBeDefined()
+  })
+
+  it('shows saved audio filename and size', async () => {
+    mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
+    renderWorkbench()
+    await screen.findByText(/已保存参考音频：reference\.wav/)
+    expect(screen.getByText(/已保存参考音频：reference\.wav/)).toBeDefined()
+    expect(screen.getByText(/200\.0 KB/)).toBeDefined()
+  })
+
+  it('Start button enabled when inputs saved and capability available', async () => {
+    mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
+    renderWorkbench()
+    await screen.findByText('开始制作')
+    const btn = screen.getByText('开始制作')
+    expect(btn.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('Start button disabled after editing saved inputs', async () => {
+    mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
+    renderWorkbench()
+    await screen.findByText('这是一段已保存的测试文案，包含多个句子用于验证回填功能。')
+    // Edit the script textarea to trigger inputsSaved=false
+    const textarea = screen.getByRole('textbox', { name: /文案/ })
+    fireEvent.change(textarea, { target: { value: '修改后的文案' } })
+    const btn = screen.getByText('开始制作')
+    expect(btn.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('Start button disabled when fetchInputs returns unsaved', async () => {
+    mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
+    renderWorkbench()
+    await screen.findByText('开始制作')
+    const btn = screen.getByText('开始制作')
+    expect(btn.hasAttribute('disabled')).toBe(true)
   })
 })

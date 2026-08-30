@@ -343,6 +343,26 @@ export interface SaveInputsResponse {
   input_saved: boolean
 }
 
+// GET /projects/{id}/inputs
+
+export interface InputsReadback {
+  project_id: string
+  saved: boolean
+  inputs: {
+    script: string
+    style: string
+    include_subtitles: boolean
+    pen_text: string
+    stroke_detail: string
+  } | null
+  reference_audio: {
+    uploaded: boolean
+    filename: string | null
+    content_type: string | null
+    size_bytes: number | null
+  }
+}
+
 // ── API Error ───────────────────────────────────────────────────────────
 
 export interface ApiError {

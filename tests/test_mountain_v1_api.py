@@ -412,6 +412,105 @@ def test_v1_run_view(client: TestClient, tmp_state: Path) -> None:
     assert "warnings" in body
 
 
+# ── 任务制作输入读取测试 ────────────────────────────────────────────────
+
+
+def test_v1_get_inputs_saved(client: TestClient, tmp_state: Path) -> None:
+    """保存任务输入后 GET /inputs 返回正确非敏感 DTO。"""
+    # 创建任务
+    resp = client.post("/api/v1/projects", json={"title": "输入读取测试"})
+    assert resp.status_code == 200
+    project_id = resp.json()["project_id"]
+
+    # 保存输入
+    script = "这是一段用于测试输入读取的文案，足够长以满足最小要求。"
+    resp = client.post(
+        f"/api/v1/projects/{project_id}/inputs",
+        data={
+            "script": script,
+            "style": "极简粗线简笔白板风",
+            "include_subtitles": "true",
+            "pen_text": "",
+            "stroke_detail": "detailed",
+        },
+        files={"reference": ("reference.wav", b"RIFF" + b"\x00" * 100, "audio/wav")},
+    )
+    assert resp.status_code == 200
+
+    # 读取输入
+    resp = client.get(f"/api/v1/projects/{project_id}/inputs")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    assert body["project_id"] == project_id
+    assert body["saved"] is True
+    assert body["inputs"]["script"] == script
+    assert body["inputs"]["style"] == "极简粗线简笔白板风"
+    assert body["inputs"]["include_subtitles"] is True
+    assert body["inputs"]["stroke_detail"] == "detailed"
+    assert body["reference_audio"]["uploaded"] is True
+    assert body["reference_audio"]["filename"] == "reference.wav"
+    assert body["reference_audio"]["content_type"] == "audio/wav"
+    assert body["reference_audio"]["size_bytes"] > 0
+
+
+def test_v1_get_inputs_unsaved(client: TestClient, tmp_state: Path) -> None:
+    """未保存输入时 GET /inputs 返回 saved:false。"""
+    resp = client.post("/api/v1/projects", json={"title": "未保存输入"})
+    project_id = resp.json()["project_id"]
+
+    resp = client.get(f"/api/v1/projects/{project_id}/inputs")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    assert body["project_id"] == project_id
+    assert body["saved"] is False
+    assert body["inputs"] is None
+    assert body["reference_audio"]["uploaded"] is False
+
+
+def test_v1_get_inputs_not_found(client: TestClient, tmp_state: Path) -> None:
+    """任务不存在时 GET /inputs 返回 404。"""
+    resp = client.get("/api/v1/projects/nonexistent/inputs")
+    assert resp.status_code == 404
+
+
+def test_v1_get_inputs_no_secrets_or_paths(client: TestClient, tmp_state: Path) -> None:
+    """GET /inputs 响应不含路径、音频内容、api_key、secret、token、password、credential。"""
+    resp = client.post("/api/v1/projects", json={"title": "安全测试"})
+    project_id = resp.json()["project_id"]
+
+    script = "这是一段用于安全测试的文案，足够长以满足最小要求。包含多个句子。"
+    resp = client.post(
+        f"/api/v1/projects/{project_id}/inputs",
+        data={
+            "script": script,
+            "style": "极简粗线简笔白板风",
+            "include_subtitles": "true",
+            "pen_text": "",
+            "stroke_detail": "detailed",
+        },
+        files={"reference": ("reference.wav", b"RIFF" + b"\x00" * 100, "audio/wav")},
+    )
+    assert resp.status_code == 200
+
+    resp = client.get(f"/api/v1/projects/{project_id}/inputs")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # 递归序列化检查
+    serialized = json.dumps(body, ensure_ascii=False).lower()
+    forbidden = ["api_key", "secret", "token", "password", "credential", "/tmp/", "/home/", "\\\\"]
+    for word in forbidden:
+        assert word not in serialized, f"Forbidden '{word}' found in response"
+
+    # reference_audio 只有元数据，不含二进制
+    assert "content" not in body["reference_audio"]
+    assert "data" not in body["reference_audio"]
+    assert "path" not in body["reference_audio"]
+    assert "url" not in body["reference_audio"]
+
+
 # ── 验收测试：完整流程（Provider 未配置场景） ──────────────────────────────
 
 

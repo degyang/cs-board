@@ -24,6 +24,7 @@ import type {
   PipelineRunResponse,
   CancelRunResponse,
   SaveInputsResponse,
+  InputsReadback,
   ApiError,
 } from './types'
 
@@ -132,6 +133,14 @@ export function uploadInputs(projectId: string, form: FormData): Promise<SaveInp
     `/projects/${encodeURIComponent(projectId)}/inputs`,
     form,
   )
+}
+
+/**
+ * 读取已保存的任务制作输入。
+ * 返回 saved:false + inputs:null 表示尚未保存。
+ */
+export function fetchInputs(projectId: string): Promise<InputsReadback> {
+  return get<InputsReadback>(`/projects/${encodeURIComponent(projectId)}/inputs`)
 }
 
 // ── Health ──────────────────────────────────────────────────────────────
