@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { ProviderDetailPage } from '../src/pages/ProviderDetailPage'
 
-// Mock API client
+// ── Mock API client ─────────────────────────────────────────────────────
+
 vi.mock('../src/lib/api/client', () => ({
   fetchProvider: vi.fn(),
   updateProviderConfig: vi.fn(),
@@ -57,16 +58,12 @@ const IMAGE_MODEL_DETAIL = {
 
 const TEXT_MODEL_SECRETS = {
   provider: 'text_model',
-  secrets: {
-    api_key: { configured: true, masked_value: 'sk-***2345' },
-  },
+  secrets: { api_key: { configured: true, masked_value: 'sk-***2345' } },
 }
 
 const IMAGE_MODEL_SECRETS = {
   provider: 'image_model',
-  secrets: {
-    api_key: { configured: true, masked_value: 'sk-***6789' },
-  },
+  secrets: { api_key: { configured: true, masked_value: 'sk-***6789' } },
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -85,12 +82,25 @@ function setupMocks() {
   mockUpdateProviderConfig.mockResolvedValue({ ok: true, provider: '', config: {} })
 }
 
-function renderAt(initialPath: string) {
-  return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+/** Thin wrapper that exposes a navigate button for tests. */
+function TestNav() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <button onClick={() => navigate('/settings/providers/image_model')}>
+        go-image
+      </button>
       <Routes>
         <Route path="/settings/providers/:name" element={<ProviderDetailPage />} />
       </Routes>
+    </>
+  )
+}
+
+function renderAt(initialPath: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <TestNav />
     </MemoryRouter>,
   )
 }
@@ -107,58 +117,69 @@ describe('ProviderDetailPage: draft lifecycle', () => {
     renderAt('/settings/providers/text_model')
 
     await waitFor(() => {
-      // base_url input should show text_model's value
-      const baseInput = screen.getByDisplayValue('https://api.openai.com/v1')
-      expect(baseInput).toBeInTheDocument()
+      expect(screen.getByDisplayValue('https://api.openai.com/v1')).toBeInTheDocument()
     })
-    // model input should show gpt-4o
     expect(screen.getByDisplayValue('gpt-4o')).toBeInTheDocument()
   })
 
-  it('clears draft when switching from text_model to image_model', async () => {
-    const { unmount } = renderAt('/settings/providers/text_model')
+  it('clears draft when navigating from text_model to image_model', async () => {
+    renderAt('/settings/providers/text_model')
 
     // Wait for text_model to load
     await waitFor(() => {
       expect(screen.getByDisplayValue('gpt-4o')).toBeInTheDocument()
     })
 
-    unmount()
+    // Modify the model field to a custom value
+    const modelInput = screen.getByDisplayValue('gpt-4o')
+    await userEvent.clear(modelInput)
+    await userEvent.type(modelInput, 'my-custom-edit')
 
-    // Now render at image_model
-    renderAt('/settings/providers/image_model')
+    // Verify the edit took effect
+    expect(screen.getByDisplayValue('my-custom-edit')).toBeInTheDocument()
 
-    // Wait for image_model to load
+    // Navigate to image_model within the same Router instance
+    await userEvent.click(screen.getByText('go-image'))
+
+    // image_model should show its own model, not the edited value or gpt-4o
     await waitFor(() => {
-      // model should show gpt-image-1, NOT gpt-4o
       expect(screen.getByDisplayValue('gpt-image-1')).toBeInTheDocument()
     })
-
-    // gpt-4o should NOT be present
     expect(screen.queryByDisplayValue('gpt-4o')).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('my-custom-edit')).not.toBeInTheDocument()
   })
 
-  it('saves only current provider config', async () => {
+  it('saves only current provider config after navigation', async () => {
     renderAt('/settings/providers/text_model')
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('gpt-4o')).toBeInTheDocument()
     })
 
-    // Click save
+    // Navigate to image_model
+    await userEvent.click(screen.getByText('go-image'))
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('gpt-image-1')).toBeInTheDocument()
+    })
+
+    // Save on image_model page
     const saveBtn = screen.getByText('保存配置')
     await userEvent.click(saveBtn)
 
     await waitFor(() => {
       expect(mockUpdateProviderConfig).toHaveBeenCalledWith(
-        'text_model',
+        'image_model',
         expect.objectContaining({
           base_url: 'https://api.openai.com/v1',
-          model: 'gpt-4o',
-          api_mode: 'chat-completions',
+          model: 'gpt-image-1',
         }),
       )
     })
+
+    // image_model has no api_mode field — request body must not contain it
+    const savedConfig = mockUpdateProviderConfig.mock.calls[0][1] as Record<string, unknown>
+    expect(savedConfig).not.toHaveProperty('api_mode')
   })
 
   it('shows category badge from provider_type', async () => {

@@ -58,11 +58,13 @@ export function ProviderDetailPage() {
   const [secretSaving, setSecretSaving] = useState<Record<string, boolean>>({})
   const [secretError, setSecretError] = useState<string | null>(null)
 
-  // Initialize config draft when detail loads or provider name changes.
-  // Uses detail identity (JSON of config keys+values) so refetch after save
-  // does NOT overwrite user edits that haven't changed.
+  // Initialize config draft when a detail response arrives that matches the
+  // current route param.  Guard: detail.name !== name prevents a stale
+  // response (e.g. from a previous route) from overwriting the draft for the
+  // new provider.  Refetch within the same provider does NOT re-initialise
+  // because the guard still passes — only a route change resets the draft.
   useEffect(() => {
-    if (!detail) return
+    if (!detail || detail.name !== name) return
     const draft: Record<string, string> = {}
     for (const [k, v] of Object.entries(detail.config)) {
       draft[k] = String(v ?? '')
