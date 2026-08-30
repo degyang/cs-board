@@ -5,6 +5,7 @@ import { useAsync } from '../../lib/api/queries'
 import { fetchCapability, fetchServiceHealth, submitCommand } from '../../lib/api/client'
 import { ENGINE_NAMES, VISUAL_SOURCE_NAMES } from '../../lib/api/types'
 import { useSettingsStore, validateSections, type SettingItem, type SettingSection } from './settingsStore'
+import { ModelsTab } from './ModelsTab'
 
 /* 设置 /settings：模型 / 语音与对齐 / 工具链 / 存储 / 诊断 五页签。
    前四类为可编辑配置（字段按类型渲染控件，脏检测 + 保存/重置 + 本地持久化）；
@@ -187,7 +188,10 @@ export function SettingsPage() {
       <Tabs items={TAB_ITEMS} active={tab} onChange={(k) => setTab(k as SettingsTab)} />
 
       <div style={{ marginTop: 18, paddingBottom: 80 }}>
-        {section && (
+        {/* 模型页签：模型服务商列表（CRUD），不走通用键值配置渲染 */}
+        {tab === 'models' && <ModelsTab />}
+
+        {section && tab !== 'models' && (
           <div className="card">
             <h2 className="card-title">{section.title}</h2>
             <p className="card-sub">修改后请点击页面底部的「保存」生效；「重置」可放弃本次更改。</p>

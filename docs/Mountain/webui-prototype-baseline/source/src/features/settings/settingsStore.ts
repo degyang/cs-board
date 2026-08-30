@@ -86,17 +86,10 @@ interface SectionSeed {
   items: FieldSeed[]
 }
 
-/* 权威字段定义（类型与可选项在此控制，mock 仅提供初始值） */
+/* 权威字段定义（类型与可选项在此控制，mock 仅提供初始值）
+ * 注：「模型」页签已升级为独立的模型服务商列表（modelProvidersStore + ModelsTab），
+ * 不再使用通用键值配置，故 SEED 中不再包含 models 区块。 */
 const SEED: SectionSeed[] = [
-  {
-    key: 'models',
-    title: '模型',
-    items: [
-      { key: 'text_profile', label: '文本模型 profile', type: 'select', options: ['profile-a（OpenAI 兼容）', 'profile-b（Azure OpenAI）', 'profile-c（本地 vLLM）'] },
-      { key: 'image_profile', label: '图片模型 profile', type: 'select', options: ['profile-img-1（本地 SDXL）', 'profile-img-2（云端 Flux）'] },
-      { key: 'api_key', label: '文本模型 API Key', type: 'secret', secret_ref: 'keyring://mountain/text-model', rule: { pattern: /^\S{16,}$/, message: '密钥长度至少 16 位且不能包含空格' } },
-    ],
-  },
   {
     key: 'speech',
     title: '语音与对齐',
@@ -169,7 +162,8 @@ function load(): { sections: SettingSection[]; logLevel: string } {
       const p = JSON.parse(raw)
       if (p && Array.isArray(p.sections)) {
         return {
-          sections: p.sections as SettingSection[],
+          /* 过滤已迁移的 models 区块（旧版本数据可能残留） */
+          sections: (p.sections as SettingSection[]).filter((s) => s.key !== 'models'),
           logLevel: typeof p.logLevel === 'string' ? p.logLevel : 'info',
         }
       }
