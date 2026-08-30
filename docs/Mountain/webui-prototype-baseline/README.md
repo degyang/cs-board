@@ -28,6 +28,18 @@
 4. 原型不等于后端契约。遇到字段、命令或交互不匹配时，先记录 API gap，不得在前端伪造业务状态。
 5. 每个 WebUI PR 都必须在 `docs/Mountain/` 增加“原型文件 → web-v2 文件/API”的映射，并在审查中逐项核对。
 
+## 设置－模型基准更新（2026-08-30）
+
+本次同步了原型新增的模型服务商列表设计：
+
+- `source/src/features/settings/ModelsTab.tsx`
+- `source/src/features/settings/modelProvidersStore.ts`
+- `source/src/features/settings/SettingsPage.tsx`
+- `source/src/features/settings/settingsStore.ts`
+- `source/src/styles/app.css` 中的 `.mp-*` 样式
+
+这些文件定义的是列表卡片、模型类别、多模型 chip、内联新增/编辑和删除确认的**交互与视觉基准**。原型中的 `localStorage`、`SEED_PROVIDERS`、示例 API Key、明文显示 Key 的眼睛按钮都属于原型假数据实现，严禁迁移到 `web-v2/`。正式实现必须使用 `/api/v1/providers`、Provider Profile API 与 SecretStore；Secret 只能提交、删除或显示后端掩码值，永不由前端持久化或回显明文。
+
 ## 重点页面
 
 - `source/src/pages/ProjectsPage.tsx`：项目入口与过滤。

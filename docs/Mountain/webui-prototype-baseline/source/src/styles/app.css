@@ -841,3 +841,55 @@ a { color: var(--nt-primary-700); }
   .topbar { padding: 10px 14px; }
 }
 
+/* ---------------- 设置 · 模型服务商列表（ModelsTab） ---------------- */
+.mp-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.mp-list { display: flex; flex-direction: column; gap: 10px; }
+.mp-card {
+  background: var(--nt-bg-sunken);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 12px 14px;
+}
+.mp-card.mp-form { background: var(--nt-bg); border-color: var(--nt-primary-500); }
+.mp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mp-name { font-weight: 600; font-size: 14px; }
+.mp-cats { display: flex; gap: 4px; flex-wrap: wrap; }
+.mp-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+.mp-confirm-text { font-size: 12px; color: #B2421F; }
+.mp-models { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.mp-models .badge { font-family: var(--nt-font-mono); }
+.mp-meta { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 12.5px; color: var(--nt-text-muted); }
+.mp-meta-item { display: flex; align-items: center; gap: 6px; }
+.mp-eye {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex: none;
+  border: 1px solid var(--nt-border-strong);
+  border-radius: var(--nt-radius-sm, 6px);
+  background: var(--nt-bg);
+  color: var(--nt-text-muted);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.mp-eye:hover { color: var(--nt-primary-700); border-color: var(--nt-primary-700); }
+.mp-key-row { display: flex; align-items: center; gap: 8px; }
+.mp-key-row .input { flex: 1; }
+.mp-form-title { font-weight: 600; margin-bottom: 10px; }
+.mp-cat-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.mp-cat {
+  padding: 4px 14px;
+  border: 1px solid var(--nt-border-strong);
+  border-radius: 999px;
+  background: var(--nt-bg);
+  color: var(--nt-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.mp-cat:hover { border-color: var(--nt-primary-500); }
+.mp-cat.on {
+  background: var(--nt-primary-700);
+  border-color: var(--nt-primary-700);
+  color: #fff;
+}
+.mp-form-actions { display: flex; gap: 8px; margin-top: 4px; }
+.mp-empty { padding: 24px 0; text-align: center; color: var(--nt-text-muted); font-size: 13px; }
