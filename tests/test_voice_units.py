@@ -7,29 +7,29 @@ import unittest
 from pathlib import Path
 
 from csboard.adapters.fakes import FakeAlignment, FakeMedia, FakeTTS
-from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.application.voice_units import VoiceUnitService
 from csboard.domain.av_timing import segment_script
-from csboard.domain.enums import Engine, Entrypoint, ProjectStatus, RunStatus
-from csboard.domain.models import Project, Run
+from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus
+from csboard.domain.models import Task, Run
 
 
-def _setup_repo(tmp: str) -> tuple[FilesystemProjectRepository, str, str]:
-    """Create a repo with a project and run, return (repo, project_id, run_id)."""
-    repo = FilesystemProjectRepository(Path(tmp))
-    project = Project(
-        "project-1", "测试", "mountain-av-v1",
-        Engine.WHITEBOARD, ProjectStatus.READY,
+def _setup_repo(tmp: str) -> tuple[FilesystemTaskRepository, str, str]:
+    """Create a repo with a task and run, return (repo, task_id, run_id)."""
+    repo = FilesystemTaskRepository(Path(tmp))
+    task = Task(
+        "task-1", "测试", "mountain-av-v1",
+        Engine.WHITEBOARD, TaskStatus.READY,
         "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
     )
     run = Run(
-        "run-1", "project-1", "trace-1",
+        "run-1", "task-1", "trace-1",
         Entrypoint.CLI, ["command-1"],
         RunStatus.PENDING, "compose-video", "2026-01-01T00:00:00Z",
     )
-    repo.create_project(project)
+    repo.create_task(task)
     repo.create_run(run)
-    return repo, "project-1", "run-1"
+    return repo, "task-1", "run-1"
 
 
 class VoiceUnitsTest(unittest.TestCase):

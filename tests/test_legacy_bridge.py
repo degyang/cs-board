@@ -29,9 +29,9 @@ class LegacyBridgeTest(unittest.TestCase):
     def test_sync_creates_stable_read_compatible_link(self) -> None:
         first = self.bridge.sync("legacy-job-1", self.job)
         second = self.bridge.sync("legacy-job-1", self.job)
-        project = self.bridge.repository.get_project(first.project_id)
-        run = self.bridge.repository.get_run(first.project_id, first.run_id)
-        events = self.bridge.telemetry.read_events(first.project_id, first.run_id)
+        project = self.bridge.repository.get_task(first.task_id)
+        run = self.bridge.repository.get_run(first.task_id, first.run_id)
+        events = self.bridge.telemetry.read_events(first.task_id, first.run_id)
 
         self.assertEqual(first, second)
         self.assertEqual(project.engine, Engine.WHITEBOARD)
@@ -44,8 +44,8 @@ class LegacyBridgeTest(unittest.TestCase):
         link = self.bridge.sync("legacy-job-1", self.job)
         self.job.update(status="running", stage="语音生成中", progress=8, current_phase="voice")
         self.bridge.sync("legacy-job-1", self.job, action="legacy.voice.start")
-        run = self.bridge.repository.get_run(link.project_id, link.run_id)
-        events = self.bridge.telemetry.read_events(link.project_id, link.run_id)
+        run = self.bridge.repository.get_run(link.task_id, link.run_id)
+        events = self.bridge.telemetry.read_events(link.task_id, link.run_id)
 
         self.assertEqual(run.status, RunStatus.RUNNING)
         self.assertEqual([event["sequence"] for event in events], [1, 2])
@@ -56,7 +56,7 @@ class LegacyBridgeTest(unittest.TestCase):
     def test_infographic_job_uses_explicit_legacy_pipeline(self) -> None:
         self.job.update(job_type="infographic", reference_mode="infographic")
         link = self.bridge.sync("legacy-job-1", self.job)
-        project = self.bridge.repository.get_project(link.project_id)
+        project = self.bridge.repository.get_task(link.task_id)
 
         self.assertEqual(link.pipeline_id, "infographic-remotion-v8")
         self.assertEqual(project.engine, Engine.INFOGRAPHIC_REMOTION)

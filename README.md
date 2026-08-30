@@ -44,7 +44,7 @@
 | 模板 | 预览 | 画面特征 | 推荐内容 |
 | --- | --- | --- | --- |
 | **极简粗线简笔白板风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/minimal-whiteboard.webp" alt="极简粗线简笔白板风预览" width="140" /> | 粗黑线、少量配色、清爽留白 | 知识讲解、个人表达、复盘总结 |
-| **极简商务涂鸦风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/business-doodle.webp" alt="极简商务涂鸦风预览" width="140" /> | 几何图表、蓝绿配色、专业克制 | 产品介绍、商业分析、项目汇报 |
+| **极简商务涂鸦风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/business-doodle.webp" alt="极简商务涂鸦风预览" width="140" /> | 几何图表、蓝绿配色、专业克制 | 产品介绍、商业分析、任务汇报 |
 | **暖米黄素描白板风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/warm-pencil.webp" alt="暖米黄素描白板风预览" width="140" /> | 铅笔排线、纸张质感、温暖细腻 | 人物故事、个人成长、品牌叙事 |
 | **粗线扁平国风卡通** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/guofeng-flat.webp" alt="粗线扁平国风卡通预览" width="140" /> | 朱红玉绿、国风纹样、生动平涂 | 传统文化、国风品牌、中文创意 |
 | **爆款高热吸睛风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/viral-pop.webp" alt="爆款高热吸睛风预览" width="140" /> | 高饱和、强对比、夸张动势 | 短视频开场、强观点、热点表达 |
@@ -76,11 +76,11 @@ ffmpeg -version
 ffprobe -version
 ```
 
-所有运行时依赖必须安装在实际启动项目的系统中。例如在 WSL 中启动时，Python、Node、FFmpeg 和字体都应安装在该 WSL 发行版中；不要混用 Windows 的 `.venv` 或 `node_modules`。**推荐每个系统使用各自的 Git 克隆目录**；若必须共用目录，在切换系统前删除 `.venv`、`web/node_modules` 与 `video_renderer/node_modules` 后重新安装，避免原生依赖互相污染。
+所有运行时依赖必须安装在实际启动任务的系统中。例如在 WSL 中启动时，Python、Node、FFmpeg 和字体都应安装在该 WSL 发行版中；不要混用 Windows 的 `.venv` 或 `node_modules`。**推荐每个系统使用各自的 Git 克隆目录**；若必须共用目录，在切换系统前删除 `.venv`、`web/node_modules` 与 `video_renderer/node_modules` 后重新安装，避免原生依赖互相污染。
 
 ### Windows
 
-在项目根目录执行一次安装：
+在任务根目录执行一次安装：
 
 ```powershell
 python scripts/prepare_env.py
@@ -101,7 +101,7 @@ Pop-Location
 
 ### WSL 2 / Linux
 
-在 WSL 终端进入项目目录后执行（Ubuntu/Debian 的字体包名如下）：
+在 WSL 终端进入任务目录后执行（Ubuntu/Debian 的字体包名如下）：
 
 ```bash
 sudo apt update
@@ -113,7 +113,7 @@ python3 scripts/prepare_env.py
 ./start-webapp.sh
 ```
 
-如果项目当前位于 `/mnt/c/...`，可以运行，但视频渲染涉及大量小文件，建议将项目放到 WSL 的 Linux 文件系统（如 `~/Projects/cs-board`）以获得更稳定、更快的 I/O。WSL 启动后可直接在 Windows 浏览器打开 `http://127.0.0.1:13000/`；局域网访问还需按你的 WSL 网络模式或 Windows 防火墙规则放行端口。
+如果任务当前位于 `/mnt/c/...`，可以运行，但视频渲染涉及大量小文件，建议将任务放到 WSL 的 Linux 文件系统（如 `~/Tasks/cs-board`）以获得更稳定、更快的 I/O。WSL 启动后可直接在 Windows 浏览器打开 `http://127.0.0.1:13000/`；局域网访问还需按你的 WSL 网络模式或 Windows 防火墙规则放行端口。
 
 ### macOS
 
@@ -188,14 +188,14 @@ Windows PowerShell 请将最后一行替换为：
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-## 项目结构
+## 任务结构
 
 ```text
 ├── assets/               # 画笔、视觉风格与参考素材
 ├── docs/                 # 动态信息图与工作流文档
 ├── examples/             # 白板动画示例
 ├── scripts/              # 白板渲染、时间线与维护脚本
-├── schemas/mountain/     # Mountain Project、Artifact、Event、Log 与 Audit JSON Schema
+├── schemas/mountain/     # Mountain Task、Artifact、Event、Log 与 Audit JSON Schema
 ├── tests/                # 队列、恢复、语义时间与 Mountain 契约测试
 ├── video_renderer/       # Remotion 动态信息图渲染器
 ├── web/                  # 当前 legacy Vinext 前端
@@ -212,4 +212,4 @@ Windows PowerShell 请将最后一行替换为：
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE)。
+本任务采用 [MIT License](LICENSE)。

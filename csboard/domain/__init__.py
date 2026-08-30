@@ -1,3 +1,3 @@
-from csboard.domain.models import ArtifactRef, Project, Run
+from csboard.domain.models import ArtifactRef, Task, Run
 
-__all__ = ["ArtifactRef", "Project", "Run"]
+__all__ = ["ArtifactRef", "Task", "Run"]

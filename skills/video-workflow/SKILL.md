@@ -32,35 +32,35 @@ description: Create, resume, inspect, or diagnose a standard whiteboard video pr
 ## CLI 命令
 
 ```bash
-# 创建项目
+# 创建任务
 python -m cli.csboard project create --request request.json --json
 
 # 运行流水线
-python -m cli.csboard pipeline run --project <id> --policy auto --json
+python -m cli.csboard pipeline run --task <id> --policy auto --json
 
 # 恢复流水线
-python -m cli.csboard pipeline resume --project <id> --json
+python -m cli.csboard pipeline resume --task <id> --json
 
-# 查看项目状态
-python -m cli.csboard project show --project <id> --json
+# 查看任务状态
+python -m cli.csboard project show --task <id> --json
 
 # 查看运行追踪
-python -m cli.csboard run trace --project <id> --run <run-id> --json
+python -m cli.csboard run trace --task <id> --run <run-id> --json
 
 # 查看事件
-python -m cli.csboard events list --project <id> --run <run-id> --after <cursor> --json
+python -m cli.csboard events list --task <id> --run <run-id> --after <cursor> --json
 
 # 导出诊断包
-python -m cli.csboard diagnostics export --project <id> --run <run-id> --json
+python -m cli.csboard diagnostics export --task <id> --run <run-id> --json
 ```
 
 ## 请求格式
 
-创建项目时通过 `--request` 传入 JSON 文件：
+创建任务时通过 `--request` 传入 JSON 文件：
 
 ```json
 {
-  "title": "项目标题",
+  "title": "任务标题",
   "script": "旁白文案内容...",
   "reference_audio": "/path/to/reference.wav",
   "tts_url": "http://127.0.0.1:7860",

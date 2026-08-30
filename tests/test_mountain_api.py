@@ -10,35 +10,35 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemProjectRepository
-from csboard.domain.enums import Engine, Entrypoint, ProjectStatus, RunStatus
-from csboard.domain.models import Project, Run
+from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
+from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus
+from csboard.domain.models import Task, Run
 from webapp.mountain_api import mountain_router
 
 
-def _create_test_app(tmpdir: Path) -> tuple[FastAPI, FilesystemProjectRepository]:
+def _create_test_app(tmpdir: Path) -> tuple[FastAPI, FilesystemTaskRepository]:
     """Create a test FastAPI app with mountain router."""
     app = FastAPI()
     router = mountain_router(tmpdir)
     app.include_router(router)
-    return app, FilesystemProjectRepository(tmpdir)
+    return app, FilesystemTaskRepository(tmpdir)
 
 
-def _setup_project(repo: FilesystemProjectRepository, project_id: str = "proj-1", run_id: str = "run-1"):
-    """Create a test project and run."""
-    project = Project(
-        project_id=project_id,
-        title="Test Project",
+def _setup_task(repo: FilesystemTaskRepository, task_id: str = "proj-1", run_id: str = "run-1"):
+    """Create a test task and run."""
+    task = Task(
+        task_id=task_id,
+        title="Test Task",
         pipeline_id="mountain-av-v1",
         engine=Engine.WHITEBOARD,
-        status=ProjectStatus.READY,
+        status=TaskStatus.READY,
         created_at="2025-01-01T00:00:00Z",
         updated_at="2025-01-01T00:00:00Z",
         active_run_id=run_id,
     )
     run = Run(
         run_id=run_id,
-        project_id=project_id,
+        task_id=task_id,
         trace_id="trace-1",
         entrypoint=Entrypoint.WEB,
         command_ids=["cmd-1"],
@@ -46,9 +46,9 @@ def _setup_project(repo: FilesystemProjectRepository, project_id: str = "proj-1"
         target_stage="compose-video",
         started_at="2025-01-01T00:00:00Z",
     )
-    repo.create_project(project)
+    repo.create_task(task)
     repo.create_run(run)
-    return project, run
+    return task, run
 
 
 class TestCapabilitiesEndpoint(unittest.TestCase):
@@ -65,47 +65,47 @@ class TestCapabilitiesEndpoint(unittest.TestCase):
             self.assertTrue(len(data["items"]) > 0)
 
 
-class TestProjectEndpoints(unittest.TestCase):
-    """Test project CRUD endpoints."""
+class TestTaskEndpoints(unittest.TestCase):
+    """Test task CRUD endpoints."""
 
-    def test_create_project(self):
+    def test_create_task(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, _ = _create_test_app(Path(tmpdir))
             client = TestClient(app)
-            response = client.post("/api/mountain/projects", json={"title": "Test Project"})
+            response = client.post("/api/mountain/tasks", json={"title": "Test Task"})
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertTrue(data["ok"])
-            self.assertIn("project_id", data)
+            self.assertIn("task_id", data)
             self.assertIn("run_id", data)
 
-    def test_list_projects(self):
+    def test_list_tasks(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             client = TestClient(app)
-            response = client.get("/api/mountain/projects")
+            response = client.get("/api/mountain/tasks")
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertIn("items", data)
             self.assertEqual(len(data["items"]), 1)
 
-    def test_get_project(self):
+    def test_get_task(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             client = TestClient(app)
-            response = client.get("/api/mountain/projects/proj-1")
+            response = client.get("/api/mountain/tasks/proj-1")
             self.assertEqual(response.status_code, 200)
             data = response.json()
-            self.assertIn("project", data)
+            self.assertIn("task", data)
             self.assertIn("active_run", data)
 
-    def test_get_project_not_found(self):
+    def test_get_task_not_found(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, _ = _create_test_app(Path(tmpdir))
             client = TestClient(app)
-            response = client.get("/api/mountain/projects/nonexistent")
+            response = client.get("/api/mountain/tasks/nonexistent")
             self.assertEqual(response.status_code, 404)
 
 
@@ -115,10 +115,10 @@ class TestStageEndpoints(unittest.TestCase):
     def test_segment_script(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             client = TestClient(app)
             response = client.post(
-                "/api/mountain/projects/proj-1/runs/run-1/stages/segment-script",
+                "/api/mountain/tasks/proj-1/runs/run-1/stages/segment-script",
                 json={"script": "第一句话。第二句话。"},
             )
             self.assertEqual(response.status_code, 200)
@@ -129,7 +129,7 @@ class TestStageEndpoints(unittest.TestCase):
     def test_plan_storyboard(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             # 先运行 segment-script
             run_dir = repo.run_dir("proj-1", "run-1")
             artifacts_dir = run_dir / "artifacts"
@@ -171,7 +171,7 @@ class TestStageEndpoints(unittest.TestCase):
             store.commit_bytes("proj-1", "run-1", "timing.timeline", "timing/timeline.json", json.dumps(timeline).encode(), "clone-voice")
 
             client = TestClient(app)
-            response = client.post("/api/mountain/projects/proj-1/runs/run-1/stages/plan-storyboard")
+            response = client.post("/api/mountain/tasks/proj-1/runs/run-1/stages/plan-storyboard")
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertTrue(data["ok"])
@@ -180,15 +180,15 @@ class TestStageEndpoints(unittest.TestCase):
     def test_pipeline_run(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             # 保存 request.json
-            project_dir = repo.project_dir("proj-1")
-            request_path = project_dir / "request.json"
+            task_dir = repo.task_dir("proj-1")
+            request_path = task_dir / "request.json"
             request_path.write_text(json.dumps({"script": "测试文案用于分割。"}))
 
             client = TestClient(app)
             response = client.post(
-                "/api/mountain/projects/proj-1/runs/run-1/pipeline/run",
+                "/api/mountain/tasks/proj-1/runs/run-1/pipeline/run",
                 params={"policy": "gated"},
             )
             self.assertEqual(response.status_code, 200)
@@ -199,7 +199,7 @@ class TestStageEndpoints(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, _ = _create_test_app(Path(tmpdir))
             client = TestClient(app)
-            response = client.post("/api/mountain/projects/nonexistent/runs/run-1/stages/segment-script/retry")
+            response = client.post("/api/mountain/tasks/nonexistent/runs/run-1/stages/segment-script/retry")
             self.assertEqual(response.status_code, 404)
 
 
@@ -209,7 +209,7 @@ class TestArtifactEndpoints(unittest.TestCase):
     def test_list_artifacts(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             # 创建 artifact index
             run_dir = repo.run_dir("proj-1", "run-1")
             artifacts_dir = run_dir / "artifacts"
@@ -227,7 +227,7 @@ class TestArtifactEndpoints(unittest.TestCase):
             (artifacts_dir / "index.json").write_text(json.dumps(index))
 
             client = TestClient(app)
-            response = client.get("/api/mountain/projects/proj-1/runs/run-1/artifacts")
+            response = client.get("/api/mountain/tasks/proj-1/runs/run-1/artifacts")
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertIn("items", data)
@@ -236,7 +236,7 @@ class TestArtifactEndpoints(unittest.TestCase):
     def test_artifact_content(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             # 创建 artifact
             run_dir = repo.run_dir("proj-1", "run-1")
             artifacts_dir = run_dir / "artifacts"
@@ -257,7 +257,7 @@ class TestArtifactEndpoints(unittest.TestCase):
             (artifacts_dir / "index.json").write_text(json.dumps(index))
 
             client = TestClient(app)
-            response = client.get("/api/mountain/projects/proj-1/runs/run-1/artifacts/planning.av-plan/content")
+            response = client.get("/api/mountain/tasks/proj-1/runs/run-1/artifacts/planning.av-plan/content")
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertEqual(data["artifact_key"], "planning.av-plan")
@@ -270,9 +270,9 @@ class TestDiagnosticsEndpoints(unittest.TestCase):
     def test_get_trace(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             client = TestClient(app)
-            response = client.get("/api/mountain/projects/proj-1/runs/run-1/trace")
+            response = client.get("/api/mountain/tasks/proj-1/runs/run-1/trace")
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertIn("trace_id", data)
@@ -281,14 +281,14 @@ class TestDiagnosticsEndpoints(unittest.TestCase):
     def test_get_events(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app, repo = _create_test_app(Path(tmpdir))
-            _setup_project(repo)
+            _setup_task(repo)
             # 写入一些事件
             from csboard.adapters.observability import JsonlTelemetry
             telemetry = JsonlTelemetry(repo)
             telemetry.append_event("proj-1", "run-1", {"event_type": "TestEvent"})
 
             client = TestClient(app)
-            response = client.get("/api/mountain/projects/proj-1/runs/run-1/events")
+            response = client.get("/api/mountain/tasks/proj-1/runs/run-1/events")
             self.assertEqual(response.status_code, 200)
             data = response.json()
             self.assertIn("items", data)

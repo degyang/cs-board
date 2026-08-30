@@ -1,34 +1,34 @@
 /**
- * M07 PR-2 — CreateProjectPage tests
+ * M07 PR-2 — CreateTaskPage tests
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { CreateProjectPage } from '../src/pages/CreateProjectPage'
+import { CreateTaskPage } from '../src/pages/CreateTaskPage'
 import * as api from '../src/lib/api/client'
 
 vi.mock('../src/lib/api/client', () => ({
-  createProject: vi.fn(),
+  createTask: vi.fn(),
 }))
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/projects/new']}>
+    <MemoryRouter initialEntries={['/tasks/new']}>
       <Routes>
-        <Route path="/projects/new" element={<CreateProjectPage />} />
-        <Route path="/projects/:id" element={<div>project-detail</div>} />
-        <Route path="/" element={<div>project-list</div>} />
+        <Route path="/tasks/new" element={<CreateTaskPage />} />
+        <Route path="/tasks/:id" element={<div>task-detail</div>} />
+        <Route path="/" element={<div>task-list</div>} />
       </Routes>
     </MemoryRouter>,
   )
 }
 
-describe('CreateProjectPage', () => {
+describe('CreateTaskPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('renders the create project form', () => {
+  it('renders the create task form', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: '新建任务' })).toBeInTheDocument()
     expect(screen.getByLabelText('任务名称')).toBeInTheDocument()
@@ -47,25 +47,25 @@ describe('CreateProjectPage', () => {
   })
 
   it('calls API and navigates on success', async () => {
-    vi.mocked(api.createProject).mockResolvedValue({ project_id: 'proj-1', run_id: 'run-1', trace_id: 'tr-1', command_id: 'cmd-1' })
+    vi.mocked(api.createTask).mockResolvedValue({ task_id: 'proj-1', run_id: 'run-1', trace_id: 'tr-1', command_id: 'cmd-1' })
     renderPage()
 
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
     fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
 
     await waitFor(() => {
-      expect(api.createProject).toHaveBeenCalledWith({
+      expect(api.createTask).toHaveBeenCalledWith({
         title: '量子计算科普',
         engine: 'whiteboard',
       })
     })
     await waitFor(() => {
-      expect(screen.getByText('project-detail')).toBeInTheDocument()
+      expect(screen.getByText('task-detail')).toBeInTheDocument()
     })
   })
 
   it('shows error message on failure', async () => {
-    vi.mocked(api.createProject).mockRejectedValue(new Error('网络错误'))
+    vi.mocked(api.createTask).mockRejectedValue(new Error('网络错误'))
     renderPage()
 
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
@@ -77,7 +77,7 @@ describe('CreateProjectPage', () => {
   })
 
   it('shows loading state', async () => {
-    vi.mocked(api.createProject).mockImplementation(() => new Promise(() => {}))
+    vi.mocked(api.createTask).mockImplementation(() => new Promise(() => {}))
     renderPage()
 
     fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
@@ -88,9 +88,9 @@ describe('CreateProjectPage', () => {
     })
   })
 
-  it('cancel navigates to project list', () => {
+  it('cancel navigates to task list', () => {
     renderPage()
     fireEvent.click(screen.getByText('取消'))
-    expect(screen.getByText('project-list')).toBeInTheDocument()
+    expect(screen.getByText('task-list')).toBeInTheDocument()
   })
 })

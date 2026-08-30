@@ -20,10 +20,10 @@ description: Create visual storyboard from AV Plan and Timeline. Use for the vis
 
 ```bash
 # 运行分镜规划
-python -m cli.csboard stage run --project <id> --run <run-id> --stage plan-storyboard --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage plan-storyboard --json
 
 # 查看生成的 Storyboard
-python -m cli.csboard artifact show --project <id> --run <run-id> --key planning.storyboard --json
+python -m cli.csboard artifact show --task <id> --run <run-id> --key planning.storyboard --json
 ```
 
 ## 输出格式
@@ -50,4 +50,4 @@ python -m cli.csboard artifact show --project <id> --run <run-id> --key planning
 
 - av-plan 缺失 → 先运行 segment-script
 - timeline 缺失 → 先运行 clone-voice
-- 项目 pipeline 不是 mountain-av-v1 → `VALIDATION_ERROR`
+- 任务 pipeline 不是 mountain-av-v1 → `VALIDATION_ERROR`

@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.adapters.provider_factory import ProviderFactory
 from csboard.adapters.secrets import mask_secret
@@ -29,7 +29,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     所有端点直接调用 MountainCommands，不依赖 legacy 系统。
     """
-    repository = FilesystemProjectRepository(data_dir)
+    repository = FilesystemTaskRepository(data_dir)
     telemetry = JsonlTelemetry(repository)
     provider_factory = ProviderFactory(data_dir)
     router = APIRouter(prefix="/api/v1", tags=["mountain-v1"])
@@ -186,55 +186,55 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         provider_factory.secret_store.delete(full_key)
         return {"ok": True, "provider": provider_name, "key": secret_key}
 
-    # ── Project ──────────────────────────────────────────────────────
+    # ── Task ──────────────────────────────────────────────────────
 
-    @router.post("/projects")
-    def create_project(payload: dict = Body(...)):
-        """创建新项目。"""
+    @router.post("/tasks")
+    def create_task(payload: dict = Body(...)):
+        """创建新任务。"""
         try:
             title = str(payload.get("title", ""))
             engine = Engine(payload.get("engine", "whiteboard"))
             pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
-            return _commands().create_project(
+            return _commands().create_task(
                 title, pipeline_id, engine, context=_context()
             )
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 
-    @router.get("/projects")
-    def list_projects(limit: int = 50):
-        """列出项目。"""
+    @router.get("/tasks")
+    def list_tasks(limit: int = 50):
+        """列出任务。"""
         items = []
-        projects_dir = data_dir / "projects"
-        if projects_dir.exists():
-            for path in sorted(projects_dir.glob("*/project.json"), reverse=True)[
+        tasks_dir = data_dir / "tasks"
+        if tasks_dir.exists():
+            for path in sorted(tasks_dir.glob("*/task.json"), reverse=True)[
                 : max(1, min(limit, 100))
             ]:
                 try:
-                    items.append(repository.get_project(path.parent.name).to_dict())
+                    items.append(repository.get_task(path.parent.name).to_dict())
                 except NotFoundError:
                     continue
         return {"items": items}
 
-    @router.get("/projects/{project_id}")
-    def get_project(project_id: str):
-        """获取项目详情。"""
+    @router.get("/tasks/{task_id}")
+    def get_task(task_id: str):
+        """获取任务详情。"""
         try:
-            project = repository.get_project(project_id)
+            project = repository.get_task(task_id)
             run = (
-                repository.get_run(project_id, project.active_run_id)
+                repository.get_run(task_id, project.active_run_id)
                 if project.active_run_id
                 else None
             )
-            return _project_detail_view(project, run)
+            return _task_detail_view(project, run)
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
     # ── Input Upload ──────────────────────────────────────────────────
 
-    @router.post("/projects/{project_id}/inputs")
+    @router.post("/tasks/{task_id}/inputs")
     async def upload_inputs(
-        project_id: str,
+        task_id: str,
         script: str = Form(...),
         reference: UploadFile | None = File(None),
         style: str = Form("极简粗线简笔白板风"),
@@ -242,19 +242,19 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         pen_text: str = Form(""),
         stroke_detail: str = Form("detailed"),
     ):
-        """上传项目输入（文案和参考音频）。
+        """上传任务输入（文案和参考音频）。
 
         reference 可选：首次保存必须提供；后续编辑文案/参数时可省略，保留已有音频。
         """
         try:
-            repository.get_project(project_id)
+            repository.get_task(task_id)
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
         if len(script.strip()) < 10:
             raise HTTPException(400, "文案至少需要 10 个字")
 
-        input_dir = repository.project_dir(project_id) / "inputs"
+        input_dir = repository.task_dir(task_id) / "inputs"
 
         # 首次保存必须提供参考音频
         if reference is not None:
@@ -278,7 +278,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             if not has_audio:
                 raise HTTPException(400, "首次保存必须提供参考音频")
 
-        # 保存 request.json（新 Project request）
+        # 保存 request.json（新 Task request）
         request_data = {
             "script": script.strip(),
             "reference_audio": str(target),
@@ -289,25 +289,25 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             if stroke_detail in {"light", "standard", "detailed", "full"}
             else "detailed",
         }
-        request_path = repository.project_dir(project_id) / "request.json"
+        request_path = repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-        return {"ok": True, "project_id": project_id, "input_saved": True}
+        return {"ok": True, "task_id": task_id, "input_saved": True}
 
-    @router.get("/projects/{project_id}/inputs")
-    def get_inputs(project_id: str):
+    @router.get("/tasks/{task_id}/inputs")
+    def get_inputs(task_id: str):
         """读取已保存的任务制作输入。"""
         try:
-            repository.get_project(project_id)
+            repository.get_task(task_id)
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
-        request_path = repository.project_dir(project_id) / "request.json"
+        request_path = repository.task_dir(task_id) / "request.json"
         if not request_path.exists():
             return {
-                "project_id": project_id,
+                "task_id": task_id,
                 "saved": False,
                 "inputs": None,
                 "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
@@ -316,7 +316,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         request_data = json.loads(request_path.read_text(encoding="utf-8"))
 
         # 查找已保存的参考音频文件
-        input_dir = repository.project_dir(project_id) / "inputs"
+        input_dir = repository.task_dir(task_id) / "inputs"
         audio_meta: dict[str, Any] = {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None}
         for suffix in (".wav", ".mp3", ".m4a", ".ogg", ".flac"):
             candidate = input_dir / f"reference{suffix}"
@@ -330,7 +330,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 break
 
         return {
-            "project_id": project_id,
+            "task_id": task_id,
             "saved": True,
             "inputs": {
                 "script": request_data.get("script", ""),
@@ -344,12 +344,12 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Run Operations ──────────────────────────────────────────────────
 
-    @router.post("/projects/{project_id}/runs/{run_id}/start")
-    def start_run(project_id: str, run_id: str, policy: str = "auto"):
+    @router.post("/tasks/{task_id}/runs/{run_id}/start")
+    def start_run(task_id: str, run_id: str, policy: str = "auto"):
         """启动标准流程。"""
         try:
             # 检查 request.json 是否存在
-            request_path = repository.project_dir(project_id) / "request.json"
+            request_path = repository.task_dir(task_id) / "request.json"
             if not request_path.exists():
                 raise HTTPException(400, "请先上传文案与参考音频")
 
@@ -377,35 +377,35 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
             # 通过 Pipeline 启动
             return _commands().pipeline_run(
-                project_id, run_id, policy, context=_context()
+                task_id, run_id, policy, context=_context()
             )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
         except DomainError as error:
             raise HTTPException(400, {"code": error.code, "message": error.message}) from error
 
-    @router.post("/projects/{project_id}/runs/{run_id}/cancel")
-    def cancel_run(project_id: str, run_id: str):
+    @router.post("/tasks/{task_id}/runs/{run_id}/cancel")
+    def cancel_run(task_id: str, run_id: str):
         """取消运行。"""
         try:
-            run = repository.get_run(project_id, run_id)
+            run = repository.get_run(task_id, run_id)
             # 直接更新 Run 状态为 cancelled
             from csboard.domain.enums import RunStatus
             run.status = RunStatus.CANCELLED
             repository.save_run(run)
             telemetry.append_event(
-                project_id, run_id, {"event_type": "RunCancelled"}
+                task_id, run_id, {"event_type": "RunCancelled"}
             )
             return {"ok": True, "status": "cancelled"}
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
-    @router.post("/projects/{project_id}/runs/{run_id}/retry")
-    def retry_run(project_id: str, run_id: str):
+    @router.post("/tasks/{task_id}/runs/{run_id}/retry")
+    def retry_run(task_id: str, run_id: str):
         """重试失败的运行。"""
         try:
             return _commands().pipeline_resume(
-                project_id, run_id, context=_context()
+                task_id, run_id, context=_context()
             )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
@@ -414,21 +414,21 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Stage Operations ──────────────────────────────────────────────────
 
-    @router.post("/projects/{project_id}/runs/{run_id}/stages/{stage}/run")
-    def run_stage(project_id: str, run_id: str, stage: str):
+    @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/run")
+    def run_stage(task_id: str, run_id: str, stage: str):
         """运行指定阶段。"""
         try:
             return _commands().pipeline_run(
-                project_id, run_id, "targeted", stage, _context()
+                task_id, run_id, "targeted", stage, _context()
             )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
         except DomainError as error:
             raise HTTPException(400, {"code": error.code, "message": error.message}) from error
 
-    @router.post("/projects/{project_id}/runs/{run_id}/stages/{stage}/retry")
+    @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/retry")
     def retry_stage(
-        project_id: str,
+        task_id: str,
         run_id: str,
         stage: str,
         unit_id: str = None,
@@ -437,7 +437,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         """重试指定阶段。"""
         try:
             return _commands().stage_retry(
-                project_id, run_id, stage, unit_id, visual_id, _context()
+                task_id, run_id, stage, unit_id, visual_id, _context()
             )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
@@ -446,9 +446,9 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Pipeline Operations ──────────────────────────────────────────────────
 
-    @router.post("/projects/{project_id}/runs/{run_id}/pipeline/run")
+    @router.post("/tasks/{task_id}/runs/{run_id}/pipeline/run")
     def pipeline_run(
-        project_id: str,
+        task_id: str,
         run_id: str,
         policy: str = "auto",
         target_stage: str = None,
@@ -456,19 +456,19 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         """运行 Pipeline。"""
         try:
             return _commands().pipeline_run(
-                project_id, run_id, policy, target_stage, _context()
+                task_id, run_id, policy, target_stage, _context()
             )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
         except DomainError as error:
             raise HTTPException(400, {"code": error.code, "message": error.message}) from error
 
-    @router.post("/projects/{project_id}/runs/{run_id}/pipeline/resume")
-    def pipeline_resume(project_id: str, run_id: str, policy: str = "auto"):
+    @router.post("/tasks/{task_id}/runs/{run_id}/pipeline/resume")
+    def pipeline_resume(task_id: str, run_id: str, policy: str = "auto"):
         """恢复 Pipeline。"""
         try:
             return _commands().pipeline_resume(
-                project_id, run_id, policy, _context()
+                task_id, run_id, policy, _context()
             )
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
@@ -477,20 +477,20 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Run Status ──────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}")
-    def get_run(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}")
+    def get_run(task_id: str, run_id: str):
         """获取 Run 详情。"""
         try:
-            run = repository.get_run(project_id, run_id)
+            run = repository.get_run(task_id, run_id)
             return _run_view(run)
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
-    @router.get("/projects/{project_id}/runs/{run_id}/stages")
-    def get_stages(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/stages")
+    def get_stages(task_id: str, run_id: str):
         """获取所有阶段状态。"""
         try:
-            run = repository.get_run(project_id, run_id)
+            run = repository.get_run(task_id, run_id)
             return {
                 "items": [
                     {"stage": name, **state.to_dict()}
@@ -502,11 +502,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Voice Units ──────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/units")
-    def get_units(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/units")
+    def get_units(task_id: str, run_id: str):
         """获取 Voice Units。"""
         try:
-            run_dir = repository.run_dir(project_id, run_id)
+            run_dir = repository.run_dir(task_id, run_id)
             plan_path = run_dir / "artifacts" / "planning" / "av-plan.json"
             if not plan_path.exists():
                 return {"items": []}
@@ -531,11 +531,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Artifacts ──────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/artifacts")
-    def list_artifacts(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/artifacts")
+    def list_artifacts(task_id: str, run_id: str):
         """列出所有产物。"""
         try:
-            run_dir = repository.run_dir(project_id, run_id)
+            run_dir = repository.run_dir(task_id, run_id)
             index_path = run_dir / "artifacts" / "index.json"
             if not index_path.exists():
                 return {"items": []}
@@ -548,18 +548,18 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
-    @router.get("/projects/{project_id}/runs/{run_id}/artifacts/{artifact_key}")
-    def download_artifact(project_id: str, run_id: str, artifact_key: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/artifacts/{artifact_key}")
+    def download_artifact(task_id: str, run_id: str, artifact_key: str):
         """下载产物文件。"""
         try:
             index = repository.read_json(
-                repository.run_dir(project_id, run_id) / "artifacts" / "index.json"
+                repository.run_dir(task_id, run_id) / "artifacts" / "index.json"
             )
             item = index.get("artifacts", {}).get(artifact_key)
             if not item or item.get("status") != "succeeded":
                 raise HTTPException(404, "产物不可用")
             path = (
-                repository.run_dir(project_id, run_id)
+                repository.run_dir(task_id, run_id)
                 / "artifacts"
                 / str(item["relative_path"])
             )
@@ -570,19 +570,19 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             raise HTTPException(404, error.message) from error
 
     @router.get(
-        "/projects/{project_id}/runs/{run_id}/artifacts/{artifact_key}/content"
+        "/tasks/{task_id}/runs/{run_id}/artifacts/{artifact_key}/content"
     )
-    def artifact_content(project_id: str, run_id: str, artifact_key: str):
+    def artifact_content(task_id: str, run_id: str, artifact_key: str):
         """获取产物内容（JSON 或文本）。"""
         try:
             index = repository.read_json(
-                repository.run_dir(project_id, run_id) / "artifacts" / "index.json"
+                repository.run_dir(task_id, run_id) / "artifacts" / "index.json"
             )
             item = index.get("artifacts", {}).get(artifact_key)
             if not item:
                 raise HTTPException(404, "产物不存在")
             path = (
-                repository.run_dir(project_id, run_id)
+                repository.run_dir(task_id, run_id)
                 / "artifacts"
                 / str(item["relative_path"])
             )
@@ -602,11 +602,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Events ──────────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/events")
-    def get_events(project_id: str, run_id: str, after: int = 0):
+    @router.get("/tasks/{task_id}/runs/{run_id}/events")
+    def get_events(task_id: str, run_id: str, after: int = 0):
         """获取事件列表。"""
         try:
-            items = telemetry.read_events(project_id, run_id, after)
+            items = telemetry.read_events(task_id, run_id, after)
             return {
                 "items": items,
                 "next_cursor": items[-1]["sequence"] if items else after,
@@ -616,9 +616,9 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Logs ──────────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/logs")
+    @router.get("/tasks/{task_id}/runs/{run_id}/logs")
     def get_logs(
-        project_id: str,
+        task_id: str,
         run_id: str,
         level: str = "",
         component: str = "",
@@ -627,11 +627,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         """获取日志列表。"""
         try:
             path = (
-                repository.run_dir(project_id, run_id)
+                repository.run_dir(task_id, run_id)
                 / "observability"
                 / "logs.jsonl"
             )
-            repository.get_run(project_id, run_id)
+            repository.get_run(task_id, run_id)
             items = (
                 []
                 if not path.exists()
@@ -655,11 +655,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Trace ──────────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/trace")
-    def get_trace(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/trace")
+    def get_trace(task_id: str, run_id: str):
         """获取 Trace 信息。"""
         try:
-            run = repository.get_run(project_id, run_id)
+            run = repository.get_run(task_id, run_id)
             return {
                 "trace_id": run.trace_id,
                 "command_ids": run.command_ids,
@@ -670,11 +670,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Metrics ──────────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/metrics")
-    def get_metrics(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/metrics")
+    def get_metrics(task_id: str, run_id: str):
         """获取运行指标。"""
         try:
-            run = repository.get_run(project_id, run_id)
+            run = repository.get_run(task_id, run_id)
             return {
                 "run_status": run.status.value,
                 "stage_attempts": {
@@ -691,20 +691,20 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Diagnostics ──────────────────────────────────────────────────────
 
-    @router.post("/projects/{project_id}/runs/{run_id}/diagnostics")
-    def export_diagnostics(project_id: str, run_id: str):
+    @router.post("/tasks/{task_id}/runs/{run_id}/diagnostics")
+    def export_diagnostics(task_id: str, run_id: str):
         """导出诊断包。"""
         try:
-            bundle = telemetry.export_diagnostic_bundle(project_id, run_id)
+            bundle = telemetry.export_diagnostic_bundle(task_id, run_id)
             return {
                 "bundle_id": bundle.stem,
-                "download_url": f"/api/v1/projects/{project_id}/runs/{run_id}/diagnostics/{bundle.name}",
+                "download_url": f"/api/v1/tasks/{task_id}/runs/{run_id}/diagnostics/{bundle.name}",
             }
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 
-    @router.get("/projects/{project_id}/runs/{run_id}/diagnostics/{filename}")
-    def download_diagnostics(project_id: str, run_id: str, filename: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/diagnostics/{filename}")
+    def download_diagnostics(task_id: str, run_id: str, filename: str):
         """下载诊断包。"""
         if (
             not filename.startswith("diagnostic-")
@@ -713,9 +713,9 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         ):
             raise HTTPException(400, "诊断包名称无效")
         try:
-            repository.get_run(project_id, run_id)
+            repository.get_run(task_id, run_id)
             path = (
-                repository.run_dir(project_id, run_id) / "diagnostics" / filename
+                repository.run_dir(task_id, run_id) / "diagnostics" / filename
             )
             if not path.is_file():
                 raise HTTPException(404, "诊断包不存在")
@@ -727,11 +727,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Final Video ──────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/runs/{run_id}/final")
-    def download_final(project_id: str, run_id: str):
+    @router.get("/tasks/{task_id}/runs/{run_id}/final")
+    def download_final(task_id: str, run_id: str):
         """下载成片。"""
         path = (
-            repository.run_dir(project_id, run_id)
+            repository.run_dir(task_id, run_id)
             / "artifacts"
             / "output"
             / "final.mp4"
@@ -739,7 +739,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         if not path.exists():
             raise HTTPException(404, "成片尚未生成")
         return FileResponse(
-            path, media_type="video/mp4", filename=f"cs-board-{project_id}.mp4"
+            path, media_type="video/mp4", filename=f"cs-board-{task_id}.mp4"
         )
 
     # ── Health ──────────────────────────────────────────────────────────
@@ -755,10 +755,10 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
 
     # ── Helper Functions ──────────────────────────────────────────────────
 
-    def _project_detail_view(project, run) -> dict[str, Any]:
-        """构建 Project 详情视图。"""
+    def _task_detail_view(project, run) -> dict[str, Any]:
+        """构建 Task 详情视图。"""
         result = {
-            "project": project.to_dict(),
+            "task": project.to_dict(),
             "active_run": run.to_dict() if run else None,
             "stages": [],
             "warnings": [],
@@ -777,7 +777,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             }
             # 获取产物列表
             index_path = (
-                repository.run_dir(project.project_id, run.run_id)
+                repository.run_dir(project.task_id, run.run_id)
                 / "artifacts"
                 / "index.json"
             )
@@ -793,7 +793,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         """构建 Run 视图。"""
         return {
             "run_id": run.run_id,
-            "project_id": run.project_id,
+            "task_id": run.task_id,
             "trace_id": run.trace_id,
             "status": run.status.value,
             "entrypoint": run.entrypoint.value,

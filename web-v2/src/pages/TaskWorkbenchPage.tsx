@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAsync } from '../lib/api/queries'
 import {
-  fetchProject, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
+  fetchTask, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
   startRun, cancelRun, retryRun, runStage, retryStage,
   uploadInputs, fetchInputs, getFinalUrl,
 } from '../lib/api/client'
@@ -20,19 +20,19 @@ function isTerminal(status: string): boolean {
 
 // ── Component ───────────────────────────────────────────────────────────
 
-export function ProjectWorkbenchPage() {
-  const { projectId } = useParams<{ projectId: string }>()
+export function TaskWorkbenchPage() {
+  const { taskId } = useParams<{ taskId: string }>()
 
-  // ── Project data (10s poll, stop on terminal) ────────────────────────
+  // ── Task data (10s poll, stop on terminal) ────────────────────────
   const [pollMs, setPollMs] = useState<number | undefined>(10_000)
-  const projectLoader = useCallback(() => fetchProject(projectId!), [projectId])
-  const { data: projectData, loading: projectLoading, error: projectError } = useAsync(projectLoader, [projectId], pollMs)
+  const taskLoader = useCallback(() => fetchTask(taskId!), [taskId])
+  const { data: taskData, loading: taskLoading, error: taskError } = useAsync(taskLoader, [taskId], pollMs)
 
-  const project = projectData?.project
-  const activeRun = projectData?.active_run ?? null
-  const stages = projectData?.stages ?? []
-  const artifacts = projectData?.artifacts ?? []
-  const trace = projectData?.trace ?? null
+  const task = taskData?.task
+  const activeRun = taskData?.active_run ?? null
+  const stages = taskData?.stages ?? []
+  const artifacts = taskData?.artifacts ?? []
+  const trace = taskData?.trace ?? null
   const runId = activeRun?.run_id
 
   // Stop polling on terminal state
@@ -51,17 +51,17 @@ export function ProjectWorkbenchPage() {
 
   // ── Saved inputs readback ──────────────────────────────────────────────
   const inputsLoader = useCallback(() => {
-    if (!projectId) return Promise.resolve(null)
-    return fetchInputs(projectId)
-  }, [projectId])
-  const { data: inputsData } = useAsync(inputsLoader, [projectId])
+    if (!taskId) return Promise.resolve(null)
+    return fetchInputs(taskId)
+  }, [taskId])
+  const { data: inputsData } = useAsync(inputsLoader, [taskId])
 
-  // ── Units (poll with project) ────────────────────────────────────────
+  // ── Units (poll with task) ────────────────────────────────────────
   const unitsLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [] })
-    return fetchUnits(projectId, runId)
-  }, [projectId, runId])
-  const { data: unitsData } = useAsync(unitsLoader, [projectId, runId], pollMs)
+    if (!taskId || !runId) return Promise.resolve({ items: [] })
+    return fetchUnits(taskId, runId)
+  }, [taskId, runId])
+  const { data: unitsData } = useAsync(unitsLoader, [taskId, runId], pollMs)
   const units = unitsData?.items ?? []
 
   // ── Events (cursor pagination) ───────────────────────────────────────
@@ -70,10 +70,10 @@ export function ProjectWorkbenchPage() {
   const eventIdsRef = useRef(new Set<string>())
 
   const eventsLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [], next_cursor: 0 })
-    return fetchEvents(projectId, runId, eventCursor)
-  }, [projectId, runId, eventCursor])
-  const { data: eventsData } = useAsync(eventsLoader, [projectId, runId, eventCursor], pollMs)
+    if (!taskId || !runId) return Promise.resolve({ items: [], next_cursor: 0 })
+    return fetchEvents(taskId, runId, eventCursor)
+  }, [taskId, runId, eventCursor])
+  const { data: eventsData } = useAsync(eventsLoader, [taskId, runId, eventCursor], pollMs)
 
   // Append new events (dedup by sequence or index)
   useEffect(() => {
@@ -95,10 +95,10 @@ export function ProjectWorkbenchPage() {
   // ── Logs ─────────────────────────────────────────────────────────────
   const [logFilter, setLogFilter] = useState({ level: '', component: '', stage: '' })
   const logsLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [] })
-    return fetchLogs(projectId, runId, logFilter.level || logFilter.component || logFilter.stage ? logFilter : undefined)
-  }, [projectId, runId, logFilter])
-  const { data: logsData } = useAsync(logsLoader, [projectId, runId, logFilter], pollMs)
+    if (!taskId || !runId) return Promise.resolve({ items: [] })
+    return fetchLogs(taskId, runId, logFilter.level || logFilter.component || logFilter.stage ? logFilter : undefined)
+  }, [taskId, runId, logFilter])
+  const { data: logsData } = useAsync(logsLoader, [taskId, runId, logFilter], pollMs)
   const logs = logsData?.items ?? []
 
   // ── Activity panel state ──────────────────────────────────────────────
@@ -144,7 +144,7 @@ export function ProjectWorkbenchPage() {
 
   // ── Save inputs ──────────────────────────────────────────────────────
   async function handleSaveInputs() {
-    if (!projectId) return
+    if (!taskId) return
     if (!script.trim()) {
       setActionError('请输入视频文案')
       return
@@ -164,7 +164,7 @@ export function ProjectWorkbenchPage() {
       if (penText) form.set('pen_text', penText)
       if (strokeDetail) form.set('stroke_detail', strokeDetail)
 
-      const res = await uploadInputs(projectId, form)
+      const res = await uploadInputs(taskId, form)
       if (res.ok) {
         setInputsSaved(true)
         setActionSuccess('制作输入已保存')
@@ -178,11 +178,11 @@ export function ProjectWorkbenchPage() {
 
   // ── Start run ────────────────────────────────────────────────────────
   async function handleStart() {
-    if (!projectId || !runId) return
+    if (!taskId || !runId) return
     setActionLoading('start')
     clearFeedback()
     try {
-      await startRun(projectId, runId)
+      await startRun(taskId, runId)
       setActionSuccess('运行已启动')
       setPollMs(10_000) // resume polling
     } catch (err) {
@@ -194,11 +194,11 @@ export function ProjectWorkbenchPage() {
 
   // ── Cancel / Retry ───────────────────────────────────────────────────
   async function handleCancel() {
-    if (!projectId || !runId) return
+    if (!taskId || !runId) return
     setActionLoading('cancel')
     clearFeedback()
     try {
-      await cancelRun(projectId, runId)
+      await cancelRun(taskId, runId)
       setActionSuccess('已取消')
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '取消失败')
@@ -208,11 +208,11 @@ export function ProjectWorkbenchPage() {
   }
 
   async function handleRetry() {
-    if (!projectId || !runId) return
+    if (!taskId || !runId) return
     setActionLoading('retry')
     clearFeedback()
     try {
-      await retryRun(projectId, runId)
+      await retryRun(taskId, runId)
       setActionSuccess('重试已提交')
       setPollMs(10_000)
     } catch (err) {
@@ -224,11 +224,11 @@ export function ProjectWorkbenchPage() {
 
   // ── Stage run/retry ──────────────────────────────────────────────────
   async function handleStageRun(stage: string) {
-    if (!projectId || !runId) return
+    if (!taskId || !runId) return
     setActionLoading(`stage-run-${stage}`)
     clearFeedback()
     try {
-      await runStage(projectId, runId, stage)
+      await runStage(taskId, runId, stage)
       setActionSuccess(`${STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage} 已启动`)
       setPollMs(10_000)
     } catch (err) {
@@ -239,11 +239,11 @@ export function ProjectWorkbenchPage() {
   }
 
   async function handleStageRetry(stage: string) {
-    if (!projectId || !runId) return
+    if (!taskId || !runId) return
     setActionLoading(`stage-retry-${stage}`)
     clearFeedback()
     try {
-      await retryStage(projectId, runId, stage)
+      await retryStage(taskId, runId, stage)
       setActionSuccess(`${STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage} 重试已提交`)
       setPollMs(10_000)
     } catch (err) {
@@ -254,18 +254,18 @@ export function ProjectWorkbenchPage() {
   }
 
   // ── Loading / Error states ───────────────────────────────────────────
-  if (projectLoading && !projectData) {
+  if (taskLoading && !taskData) {
     return <div className="page"><p className="loading"><span className="spinner" />加载中…</p></div>
   }
-  if (projectError) {
+  if (taskError) {
     return (
       <div className="page">
         <BackButton to="/" label="返回任务队列" />
-        <div className="error-card"><span className="code">加载失败</span><p className="sug">{projectError}</p></div>
+        <div className="error-card"><span className="code">加载失败</span><p className="sug">{taskError}</p></div>
       </div>
     )
   }
-  if (!project) {
+  if (!task) {
     return (
       <div className="page">
         <BackButton to="/" label="返回任务队列" />
@@ -281,7 +281,7 @@ export function ProjectWorkbenchPage() {
 
   const completedCount = STAGE_KEYS.filter((k) => stageStatuses[k] === 'succeeded').length
   const hasFinal = artifacts.some((a) => a.producer_stage === 'compose-video' && a.status === 'succeeded')
-  const runStatus = activeRun?.status ?? project.status
+  const runStatus = activeRun?.status ?? task.status
   const isRunning = activeRun?.status === 'running'
   const isTerminalState = activeRun ? isTerminal(activeRun.status) : false
 
@@ -292,13 +292,13 @@ export function ProjectWorkbenchPage() {
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h1 className="page-title">{project.title || `任务 ${shortId(project.project_id)}`}</h1>
+          <h1 className="page-title">{task.title || `任务 ${shortId(task.task_id)}`}</h1>
           <StatusBadge status={runStatus} />
-          <span style={{ fontSize: 12, color: 'var(--nt-text-muted)' }}>创建于 {formatTime(project.created_at)}</span>
+          <span style={{ fontSize: 12, color: 'var(--nt-text-muted)' }}>创建于 {formatTime(task.created_at)}</span>
         </div>
 
         <div className="chip-ids">
-          <span className="id-chip">project: {shortId(project.project_id)}<CopyButton text={project.project_id} /></span>
+          <span className="id-chip">task: {shortId(task.task_id)}<CopyButton text={task.task_id} /></span>
           {activeRun && (
             <>
               <span className="id-chip">run: {shortId(activeRun.run_id)}<CopyButton text={activeRun.run_id} /></span>
@@ -350,12 +350,12 @@ export function ProjectWorkbenchPage() {
             </button>
           )}
           {hasFinal && activeRun && (
-            <a href={getFinalUrl(project.project_id, activeRun.run_id)} className="btn btn-ghost btn-sm" download>
+            <a href={getFinalUrl(task.task_id, activeRun.run_id)} className="btn btn-ghost btn-sm" download>
               下载成片
             </a>
           )}
           {activeRun && (
-            <Link to={`/projects/${project.project_id}/runs/${activeRun.run_id}/diagnostics`} className="btn btn-ghost btn-sm">
+            <Link to={`/tasks/${task.task_id}/runs/${activeRun.run_id}/diagnostics`} className="btn btn-ghost btn-sm">
               诊断
             </Link>
           )}
@@ -582,12 +582,12 @@ export function ProjectWorkbenchPage() {
           <video
             controls
             style={{ width: '100%', maxWidth: 640, borderRadius: 'var(--nt-radius-md)', marginTop: 8 }}
-            src={getFinalUrl(project.project_id, activeRun.run_id)}
+            src={getFinalUrl(task.task_id, activeRun.run_id)}
           >
             您的浏览器不支持视频播放
           </video>
           <div style={{ marginTop: 8 }}>
-            <a href={getFinalUrl(project.project_id, activeRun.run_id)} className="btn btn-ghost btn-sm" download>
+            <a href={getFinalUrl(task.task_id, activeRun.run_id)} className="btn btn-ghost btn-sm" download>
               下载 final.mp4
             </a>
           </div>

@@ -1,6 +1,6 @@
 # M07 PR-4：任务制作输入读取与 Workbench 刷新恢复
 
-> **迁移说明：** 本 PR 在 Task 术语迁移前完成，文中的 `project_id` 与 `/projects` 为当时的内部实现。它们必须在 Task 迁移中改为 `task_id` 与 `/tasks`，不作为最终公开契约保留。
+> **迁移说明：** 本 PR 在 Task 术语迁移前完成，文中的 `task_id` 与 `/projects` 为当时的内部实现。它们必须在 Task 迁移中改为 `task_id` 与 `/tasks`，不作为最终公开契约保留。
 
 ## 概述
 
@@ -10,23 +10,23 @@
 
 | 内部字段/API路径 | 用户界面文本 | 说明 |
 |---|---|---|
-| `project_id` | 不显示 | 内部标识符 |
-| `/projects/{project_id}` | 任务工作台 | API路径不变 |
+| `task_id` | 不显示 | 内部标识符 |
+| `/projects/{task_id}` | 任务工作台 | API路径不变 |
 | `project.title` | 任务标题 | 用户可见 |
 | `active_run` | 运行 | 后端字段 |
 
-**严禁**：用户界面中不得出现"项目"字样，统一使用"任务"。
+**严禁**：用户界面中不得出现"任务"字样，统一使用"任务"。
 
 ## API 契约
 
-### GET /api/v1/projects/{project_id}/inputs
+### GET /api/v1/tasks/{task_id}/inputs
 
 读取已保存的任务制作输入。
 
 **响应（已保存）**:
 ```json
 {
-  "project_id": "proj-abc123",
+  "task_id": "proj-abc123",
   "saved": true,
   "inputs": {
     "script": "完整文案内容...",
@@ -47,7 +47,7 @@
 **响应（未保存）**:
 ```json
 {
-  "project_id": "proj-abc123",
+  "task_id": "proj-abc123",
   "saved": false,
   "inputs": null,
   "reference_audio": {
@@ -61,7 +61,7 @@
 
 **错误**: 404 — 任务不存在。
 
-### POST /api/v1/projects/{project_id}/inputs
+### POST /api/v1/tasks/{task_id}/inputs
 
 保存任务制作输入。`reference` 文件为可选（重新保存时可省略，前提是已有参考音频）。
 
@@ -70,7 +70,7 @@
 ### Workbench 加载流程
 
 ```
-fetchProject(projectId)  →  渲染标题、状态
+fetchTask(projectId)  →  渲染标题、状态
 fetchInputs(projectId)   →  回填表单、设置 inputsSaved
 fetchCapabilities()      →  检查 Provider 可用性
 ```
@@ -102,7 +102,7 @@ enabled = inputsSaved && hasCapability && !actionLoading
 ## 存储结构
 
 ```
-{STATE_DIR}/{project_id}/
+{STATE_DIR}/{task_id}/
 ├── request.json          # 制作输入参数
 ├── inputs/
 │   ├── reference.wav     # 参考音频
@@ -116,7 +116,7 @@ enabled = inputsSaved && hasCapability && !actionLoading
 
 ```typescript
 interface InputsReadback {
-  project_id: string
+  task_id: string
   saved: boolean
   inputs: {
     script: string
@@ -142,7 +142,7 @@ interface InputsReadback {
 |---|---|
 | `test_v1_get_inputs_saved` | 已保存输入返回 saved=true + 完整数据 |
 | `test_v1_get_inputs_unsaved` | 无 request.json 返回 saved=false + null |
-| `test_v1_get_inputs_not_found` | 不存在的 project_id 返回 404 |
+| `test_v1_get_inputs_not_found` | 不存在的 task_id 返回 404 |
 | `test_v1_get_inputs_no_secrets_or_paths` | 响应不含文件路径或密钥 |
 
 ### 前端（web-v2/tests/contract.test.tsx）

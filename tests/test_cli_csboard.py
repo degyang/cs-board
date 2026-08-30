@@ -25,69 +25,69 @@ class CliCsboardTest(unittest.TestCase):
         return code, json.loads(output.getvalue())
 
     def test_project_create_exposes_all_correlation_ids(self) -> None:
-        code, result = self.invoke("project", "create", "--title", "CLI 标准任务", "--json")
+        code, result = self.invoke("task", "create", "--title", "CLI 标准任务", "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertTrue(result["ok"])
-        self.assertEqual(result["command"], "project.create")
-        self.assertTrue(all(result[key] for key in ("project_id", "run_id", "trace_id", "command_id")))
+        self.assertEqual(result["command"], "task.create")
+        self.assertTrue(all(result[key] for key in ("task_id", "run_id", "trace_id", "command_id")))
 
-        code, shown = self.invoke("project", "show", "--project", result["project_id"], "--json")
+        code, shown = self.invoke("task", "show", "--task", result["task_id"], "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(shown["active_run"]["run_id"], result["run_id"])
 
     def test_events_and_trace_are_cross_entrypoint_queryable(self) -> None:
-        _, created = self.invoke("project", "create", "--title", "可观测任务", "--json")
-        code, trace = self.invoke("run", "trace", "--project", created["project_id"], "--run", created["run_id"], "--json")
+        _, created = self.invoke("task", "create", "--title", "可观测任务", "--json")
+        code, trace = self.invoke("run", "trace", "--task", created["task_id"], "--run", created["run_id"], "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(trace["trace_id"], created["trace_id"])
-        code, events = self.invoke("events", "list", "--project", created["project_id"], "--run", created["run_id"], "--json")
+        code, events = self.invoke("events", "list", "--task", created["task_id"], "--run", created["run_id"], "--json")
         self.assertEqual(code, EXIT_OK)
-        self.assertEqual(events["items"][0]["event_type"], "ProjectCreated")
+        self.assertEqual(events["items"][0]["event_type"], "TaskCreated")
 
     def test_segment_script_persists_av_plan_and_other_stage_is_rejected(self) -> None:
-        _, created = self.invoke("project", "create", "--title", "分割任务", "--json")
-        code, segmented = self.invoke("stage", "run", "--project", created["project_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "第一句话。第二句话。", "--json")
+        _, created = self.invoke("task", "create", "--title", "分割任务", "--json")
+        code, segmented = self.invoke("stage", "run", "--task", created["task_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "第一句话。第二句话。", "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(segmented["artifacts"], ["planning.av-plan"])
         # Use an unregistered stage (custom-stage is not implemented)
-        code, result = self.invoke("stage", "run", "--project", created["project_id"], "--stage", "custom-stage", "--json")
+        code, result = self.invoke("stage", "run", "--task", created["task_id"], "--stage", "custom-stage", "--json")
         self.assertEqual(code, EXIT_VALIDATION)
         self.assertEqual(result["error"]["code"], "CAPABILITY_NOT_AVAILABLE")
 
     def test_missing_project_has_stable_error(self) -> None:
-        code, result = self.invoke("project", "show", "--project", "does-not-exist", "--json")
+        code, result = self.invoke("task", "show", "--task", "does-not-exist", "--json")
         self.assertEqual(code, EXIT_NOT_FOUND)
         self.assertEqual(result["error"]["code"], "NOT_FOUND")
 
     def test_artifact_show_returns_content(self) -> None:
-        _, created = self.invoke("project", "create", "--title", "Artifact 测试", "--json")
-        self.invoke("stage", "run", "--project", created["project_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "测试文案。", "--json")
-        code, result = self.invoke("artifact", "show", "--project", created["project_id"], "--run", created["run_id"], "--key", "planning.av-plan", "--json")
+        _, created = self.invoke("task", "create", "--title", "Artifact 测试", "--json")
+        self.invoke("stage", "run", "--task", created["task_id"], "--run", created["run_id"], "--stage", "segment-script", "--script", "测试文案。", "--json")
+        code, result = self.invoke("artifact", "show", "--task", created["task_id"], "--run", created["run_id"], "--key", "planning.av-plan", "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertTrue(result["ok"])
         self.assertIn("content", result)
         self.assertEqual(result["artifact_key"], "planning.av-plan")
 
     def test_artifact_show_missing_key(self) -> None:
-        _, created = self.invoke("project", "create", "--title", "Artifact 缺失", "--json")
-        code, result = self.invoke("artifact", "show", "--project", created["project_id"], "--run", created["run_id"], "--key", "nonexistent", "--json")
+        _, created = self.invoke("task", "create", "--title", "Artifact 缺失", "--json")
+        code, result = self.invoke("artifact", "show", "--task", created["task_id"], "--run", created["run_id"], "--key", "nonexistent", "--json")
         self.assertEqual(code, EXIT_NOT_FOUND)
 
     def test_pipeline_run_gated_policy(self) -> None:
-        _, created = self.invoke("project", "create", "--title", "Pipeline 测试", "--json")
+        _, created = self.invoke("task", "create", "--title", "Pipeline 测试", "--json")
         # Write a request file with script (project stored under projects/ subdir)
-        request_path = self.root / "projects" / created["project_id"] / "request.json"
+        request_path = self.root / "tasks" / created["task_id"] / "request.json"
         request_path.parent.mkdir(parents=True, exist_ok=True)
         request_path.write_text('{"script": "流水线测试文案。"}', encoding="utf-8")
-        code, result = self.invoke("pipeline", "run", "--project", created["project_id"], "--policy", "gated", "--json")
+        code, result = self.invoke("pipeline", "run", "--task", created["task_id"], "--policy", "gated", "--json")
         self.assertEqual(code, EXIT_OK)
         self.assertTrue(result["ok"])
         self.assertEqual(result["policy"], "gated")
         self.assertEqual(len(result["stages_executed"]), 1)
 
     def test_stage_retry_missing_stage_returns_not_found(self) -> None:
-        _, created = self.invoke("project", "create", "--title", "Retry 测试", "--json")
-        code, result = self.invoke("stage", "retry", "--project", created["project_id"], "--run", created["run_id"], "--stage", "segment-script", "--json")
+        _, created = self.invoke("task", "create", "--title", "Retry 测试", "--json")
+        code, result = self.invoke("stage", "retry", "--task", created["task_id"], "--run", created["run_id"], "--stage", "segment-script", "--json")
         self.assertEqual(code, EXIT_NOT_FOUND)
         self.assertEqual(result["error"]["code"], "NOT_FOUND")
 

@@ -1,11 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useState, useCallback } from 'react'
 import { useAsync } from '../lib/api/queries'
-import { fetchProjects } from '../lib/api/client'
+import { fetchTasks } from '../lib/api/client'
 import { formatTime, shortId } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { Tabs } from '../components/ui/Tabs'
-import type { Project } from '../lib/api/types'
+import type { Task } from '../lib/api/types'
 
 const STATUS_TABS = [
   { key: 'all', label: '全部' },
@@ -15,12 +15,12 @@ const STATUS_TABS = [
   { key: 'cancelled', label: '已取消' },
 ]
 
-export function ProjectsPage() {
+export function TasksPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('all')
   const [search, setSearch] = useState('')
 
-  const loader = useCallback(() => fetchProjects(50), [])
+  const loader = useCallback(() => fetchTasks(50), [])
   const { data, loading, error } = useAsync(loader, [], 15_000)
 
   const projects = data?.items ?? []
@@ -54,7 +54,7 @@ export function ProjectsPage() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: 220 }}
         />
-        <Link to="/projects/new" className="btn btn-primary">
+        <Link to="/tasks/new" className="btn btn-primary">
           + 新建任务
         </Link>
       </div>
@@ -70,7 +70,7 @@ export function ProjectsPage() {
             {tab === 'all' ? '点击"新建任务"开始制作第一个视频' : `没有${STATUS_TABS.find((t) => t.key === tab)?.label ?? ''}状态的任务`}
           </div>
           {tab === 'all' && (
-            <Link to="/projects/new" className="btn btn-primary" style={{ marginTop: 8 }}>
+            <Link to="/tasks/new" className="btn btn-primary" style={{ marginTop: 8 }}>
               + 新建任务
             </Link>
           )}
@@ -78,22 +78,22 @@ export function ProjectsPage() {
       )}
 
       {filtered.map((p) => (
-        <ProjectCard key={p.project_id} project={p} onOpen={() => navigate(`/projects/${p.project_id}`)} />
+        <TaskCard key={p.task_id} task={p} onOpen={() => navigate(`/tasks/${p.task_id}`)} />
       ))}
     </div>
   )
 }
 
-function ProjectCard({ project: p, onOpen }: { project: Project; onOpen: () => void }) {
+function TaskCard({ task: p, onOpen }: { task: Task; onOpen: () => void }) {
   return (
     <div className="proj-card">
       <div className="proj-top">
-        <h3 className="proj-name">{p.title || `任务 ${shortId(p.project_id)}`}</h3>
+        <h3 className="proj-name">{p.title || `任务 ${shortId(p.task_id)}`}</h3>
         <StatusBadge status={p.status} />
         <span className="proj-time">{formatTime(p.updated_at)}</span>
       </div>
       <div className="proj-meta">
-        <span className="m">ID: {shortId(p.project_id)}</span>
+        <span className="m">ID: {shortId(p.task_id)}</span>
         {p.engine && <span className="m">引擎: {p.engine}</span>}
         {p.pipeline_id && <span className="m">流水线: {p.pipeline_id}</span>}
       </div>
@@ -102,7 +102,7 @@ function ProjectCard({ project: p, onOpen }: { project: Project; onOpen: () => v
           进入工作台
         </button>
         <Link
-          to={`/projects/${p.project_id}/runs/${p.active_run_id ?? ''}/diagnostics`}
+          to={`/tasks/${p.task_id}/runs/${p.active_run_id ?? ''}/diagnostics`}
           className="btn btn-ghost btn-sm"
           style={!p.active_run_id ? { pointerEvents: 'none', opacity: 0.4 } : undefined}
         >

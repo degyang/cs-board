@@ -8,7 +8,7 @@ from typing import Any
 from csboard.domain.models import ArtifactRef
 from csboard.domain.validation import validate_relative_path
 
-from .repository import FilesystemProjectRepository
+from .repository import FilesystemTaskRepository
 
 
 DOWNSTREAM_ARTIFACTS: dict[str, tuple[str, ...]] = {
@@ -31,12 +31,12 @@ DOWNSTREAM_ARTIFACTS: dict[str, tuple[str, ...]] = {
 class FilesystemArtifactStore:
     """Atomically stores run artifacts and tracks their invalidation state."""
 
-    def __init__(self, repository: FilesystemProjectRepository) -> None:
+    def __init__(self, repository: FilesystemTaskRepository) -> None:
         self.repository = repository
 
     def commit_bytes(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         artifact_key: str,
         relative_path: str,
@@ -44,8 +44,8 @@ class FilesystemArtifactStore:
         producer_stage: str,
     ) -> ArtifactRef:
         validate_relative_path(relative_path)
-        run_dir = self.repository.run_dir(project_id, run_id)
-        self.repository.get_run(project_id, run_id)
+        run_dir = self.repository.run_dir(task_id, run_id)
+        self.repository.get_run(task_id, run_id)
         target = run_dir / "artifacts" / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(f"{target.suffix}.{os.getpid()}.partial")
@@ -62,22 +62,22 @@ class FilesystemArtifactStore:
             size_bytes=len(payload),
             producer_stage=producer_stage,
         )
-        with self.repository.project_lock(project_id):
+        with self.repository.task_lock(task_id):
             index = self._read_index(run_dir)
             index["artifacts"][artifact_key] = reference.to_dict()
             self._write_index(run_dir, index)
         return reference
 
-    def get(self, project_id: str, run_id: str, artifact_key: str) -> dict[str, Any] | None:
-        index = self._read_index(self.repository.run_dir(project_id, run_id))
+    def get(self, task_id: str, run_id: str, artifact_key: str) -> dict[str, Any] | None:
+        index = self._read_index(self.repository.run_dir(task_id, run_id))
         return index["artifacts"].get(artifact_key)
 
-    def invalidate_from(self, project_id: str, run_id: str, artifact_key: str, reason: str) -> list[str]:
+    def invalidate_from(self, task_id: str, run_id: str, artifact_key: str, reason: str) -> list[str]:
         """Mark only known downstream output as stale; source output stays usable."""
-        run_dir = self.repository.run_dir(project_id, run_id)
-        self.repository.get_run(project_id, run_id)
+        run_dir = self.repository.run_dir(task_id, run_id)
+        self.repository.get_run(task_id, run_id)
         invalidated: list[str] = []
-        with self.repository.project_lock(project_id):
+        with self.repository.task_lock(task_id):
             index = self._read_index(run_dir)
             for dependent in DOWNSTREAM_ARTIFACTS.get(artifact_key, ()):
                 item = index["artifacts"].get(dependent)

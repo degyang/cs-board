@@ -18,7 +18,7 @@ class RuntimePaths:
     state_dir: Path
     jobs_dir: Path
     config_path: Path
-    projects_dir: Path
+    tasks_dir: Path
     temp_dir: Path
 
     # ── factory ──────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ class RuntimePaths:
             state_dir=state,
             jobs_dir=state / "jobs",
             config_path=state / "config.json",
-            projects_dir=state / "projects",
+            tasks_dir=state / "tasks",
             temp_dir=state / "tmp",
         )
 
@@ -41,7 +41,7 @@ class RuntimePaths:
         for path in (
             self.state_dir,
             self.jobs_dir,
-            self.projects_dir,
+            self.tasks_dir,
             self.temp_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)

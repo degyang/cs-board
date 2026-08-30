@@ -21,10 +21,10 @@ description: Segment narration script into Voice Units and Visual Items for vide
 
 ```bash
 # 运行文案分割
-python -m cli.csboard stage run --project <id> --run <run-id> --stage segment-script --script "旁白文案" --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage segment-script --script "旁白文案" --json
 
 # 查看生成的 AV Plan
-python -m cli.csboard artifact show --project <id> --run <run-id> --key planning.av-plan --json
+python -m cli.csboard artifact show --task <id> --run <run-id> --key planning.av-plan --json
 ```
 
 ## 输出格式
@@ -35,7 +35,7 @@ python -m cli.csboard artifact show --project <id> --run <run-id> --key planning
 {
   "ok": true,
   "command": "stage.run",
-  "project_id": "project-xxx",
+  "task_id": "project-xxx",
   "run_id": "run-xxx",
   "stage": "segment-script",
   "result": "succeeded",
@@ -46,11 +46,11 @@ python -m cli.csboard artifact show --project <id> --run <run-id> --key planning
 
 ## 与其他 Skill 的协作
 
-- **上游**：video-workflow 创建项目并提供文案
+- **上游**：video-workflow 创建任务并提供文案
 - **下游**：voice-cloner 使用 av-plan 生成语音
 
 ## 错误处理
 
 - 文案为空或缺失 → `VALIDATION_ERROR`
 - 覆盖率不是 100% → `SEGMENTATION_COVERAGE_INVALID`
-- 项目 pipeline 不是 mountain-av-v1 → `VALIDATION_ERROR`
+- 任务 pipeline 不是 mountain-av-v1 → `VALIDATION_ERROR`

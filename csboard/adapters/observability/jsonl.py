@@ -7,48 +7,48 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from csboard.application.context import new_id, utc_now
-from csboard.adapters.filesystem.repository import FilesystemProjectRepository
+from csboard.adapters.filesystem.repository import FilesystemTaskRepository
 from csboard.adapters.observability.redactor import DefaultRedactor
 
 
 class JsonlTelemetry:
     """Append-only, locally queryable telemetry correlated by project/run/trace."""
 
-    def __init__(self, repository: FilesystemProjectRepository, redactor: DefaultRedactor | None = None) -> None:
+    def __init__(self, repository: FilesystemTaskRepository, redactor: DefaultRedactor | None = None) -> None:
         self.repository = repository
         self.redactor = redactor or DefaultRedactor({repository.root: "$DATA"})
 
-    def append_event(self, project_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        path = self._run_dir(project_id, run_id) / "observability" / "events.jsonl"
-        record = self._record("event", project_id, run_id, payload)
-        with self.repository.project_lock(project_id):
+    def append_event(self, task_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        path = self._run_dir(task_id, run_id) / "observability" / "events.jsonl"
+        record = self._record("event", task_id, run_id, payload)
+        with self.repository.task_lock(task_id):
             record["sequence"] = self._next_sequence(path)
             self._append(path, record)
         return record
 
-    def append_log(self, project_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        record = self._record("log", project_id, run_id, payload)
-        with self.repository.project_lock(project_id):
-            self._append(self._run_dir(project_id, run_id) / "observability" / "logs.jsonl", record)
+    def append_log(self, task_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        record = self._record("log", task_id, run_id, payload)
+        with self.repository.task_lock(task_id):
+            self._append(self._run_dir(task_id, run_id) / "observability" / "logs.jsonl", record)
         return record
 
-    def append_audit(self, project_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        record = self._record("audit", project_id, run_id, payload)
-        with self.repository.project_lock(project_id):
-            self._append(self._run_dir(project_id, run_id) / "observability" / "audit.jsonl", record)
+    def append_audit(self, task_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        record = self._record("audit", task_id, run_id, payload)
+        with self.repository.task_lock(task_id):
+            self._append(self._run_dir(task_id, run_id) / "observability" / "audit.jsonl", record)
         return record
 
-    def read_events(self, project_id: str, run_id: str, after_sequence: int = 0) -> list[dict[str, Any]]:
-        path = self._run_dir(project_id, run_id) / "observability" / "events.jsonl"
+    def read_events(self, task_id: str, run_id: str, after_sequence: int = 0) -> list[dict[str, Any]]:
+        path = self._run_dir(task_id, run_id) / "observability" / "events.jsonl"
         if not path.exists():
             return []
         return [item for item in self._read_jsonl(path) if int(item.get("sequence", 0)) > after_sequence]
 
-    def export_diagnostic_bundle(self, project_id: str, run_id: str) -> Path:
-        run_dir = self._run_dir(project_id, run_id)
+    def export_diagnostic_bundle(self, task_id: str, run_id: str) -> Path:
+        run_dir = self._run_dir(task_id, run_id)
         output = run_dir / "diagnostics" / f"diagnostic-{new_id('bundle')}.zip"
         files = [
-            self.repository.project_dir(project_id) / "project.json",
+            self.repository.task_dir(task_id) / "task.json",
             run_dir / "run.json",
             run_dir / "artifacts" / "index.json",
             run_dir / "observability" / "events.jsonl",
@@ -59,21 +59,21 @@ class JsonlTelemetry:
             for source in files:
                 if not source.exists():
                     continue
-                relative = source.relative_to(self.repository.project_dir(project_id))
+                relative = source.relative_to(self.repository.task_dir(task_id))
                 archive.writestr(str(relative), self._redacted_file(source))
         return output
 
-    def _run_dir(self, project_id: str, run_id: str) -> Path:
-        self.repository.get_run(project_id, run_id)
-        return self.repository.run_dir(project_id, run_id)
+    def _run_dir(self, task_id: str, run_id: str) -> Path:
+        self.repository.get_run(task_id, run_id)
+        return self.repository.run_dir(task_id, run_id)
 
-    def _record(self, kind: str, project_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        run = self.repository.get_run(project_id, run_id)
+    def _record(self, kind: str, task_id: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        run = self.repository.get_run(task_id, run_id)
         return self.redactor.redact({
             "record_id": new_id(kind),
             "record_type": kind,
             "timestamp": utc_now(),
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             **payload,

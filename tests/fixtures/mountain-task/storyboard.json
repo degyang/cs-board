@@ -3,7 +3,7 @@
   "artifact_type": "storyboard",
   "artifact_id": "artifact-storyboard-001",
   "artifact_key": "planning.storyboard",
-  "project_id": "project-fixture-001",
+  "task_id": "project-fixture-001",
   "run_id": "run-fixture-001",
   "pipeline_id": "mountain-av-v1",
   "engine": "whiteboard",

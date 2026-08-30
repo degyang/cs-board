@@ -206,17 +206,17 @@ def test_v1_delete_provider_secret(client: TestClient, tmp_state: Path) -> None:
 def test_v1_project_lifecycle(client: TestClient, tmp_state: Path) -> None:
     """完整项目生命周期：创建 → 上传 → 启动（Provider 未配置）。"""
     # 1. 创建项目
-    response = client.post("/api/v1/projects", json={"title": "验收测试"})
+    response = client.post("/api/v1/tasks", json={"title": "验收测试"})
     assert response.status_code == 200
     body = response.json()
-    project_id = body["project_id"]
-    assert project_id
+    task_id = body["task_id"]
+    assert task_id
 
     # 2. 上传输入（文案 + 参考音频）
     script = "第一幕：春天来了，花儿开了。第二幕：夏天到了，果实成熟了。"
     reference_content = b"fake-audio-content"
     response = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={
             "script": script,
             "style": "极简粗线简笔白板风",
@@ -232,11 +232,11 @@ def test_v1_project_lifecycle(client: TestClient, tmp_state: Path) -> None:
     assert body["input_saved"] is True
 
     # 3. 尝试启动标准流程（Provider 未配置，应返回 CAPABILITY_NOT_AVAILABLE）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     assert response.status_code == 400
     body = response.json()
     assert body["detail"]["code"] == "CAPABILITY_NOT_AVAILABLE"
@@ -244,7 +244,7 @@ def test_v1_project_lifecycle(client: TestClient, tmp_state: Path) -> None:
 
 def test_v1_project_not_found(client: TestClient) -> None:
     """查询不存在的项目返回 404。"""
-    response = client.get("/api/v1/projects/nonexistent")
+    response = client.get("/api/v1/tasks/nonexistent")
     assert response.status_code == 404
 
 
@@ -254,12 +254,12 @@ def test_v1_project_not_found(client: TestClient) -> None:
 def test_v1_upload_short_script(client: TestClient, tmp_state: Path) -> None:
     """文案过短返回 400。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "测试"})
+    task_id = response.json()["task_id"]
 
     # 上传过短文案
     response = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={"script": "太短了"},
         files={"reference": ("ref.wav", b"audio", "audio/wav")},
     )
@@ -270,12 +270,12 @@ def test_v1_upload_short_script(client: TestClient, tmp_state: Path) -> None:
 def test_v1_upload_invalid_audio_format(client: TestClient, tmp_state: Path) -> None:
     """音频格式不支持返回 400。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "测试"})
+    task_id = response.json()["task_id"]
 
     # 上传不支持的音频格式
     response = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={"script": "这是一个足够长的文案用于测试验证"},
         files={"reference": ("ref.txt", b"not-audio", "text/plain")},
     )
@@ -289,16 +289,16 @@ def test_v1_upload_invalid_audio_format(client: TestClient, tmp_state: Path) -> 
 def test_v1_start_without_inputs(client: TestClient, tmp_state: Path) -> None:
     """未上传输入时启动返回 400。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "测试"})
+    task_id = response.json()["task_id"]
 
     # 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 尝试启动（没有 request.json）
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     assert response.status_code == 400
     assert "请先上传文案与参考音频" in response.text
 
@@ -306,16 +306,16 @@ def test_v1_start_without_inputs(client: TestClient, tmp_state: Path) -> None:
 def test_v1_cancel_run(client: TestClient, tmp_state: Path) -> None:
     """取消运行。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "测试"})
+    task_id = response.json()["task_id"]
 
     # 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 取消运行
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/cancel")
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/cancel")
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
@@ -328,16 +328,16 @@ def test_v1_cancel_run(client: TestClient, tmp_state: Path) -> None:
 def test_v1_list_artifacts_empty(client: TestClient, tmp_state: Path) -> None:
     """没有产物时返回空列表。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "测试"})
+    task_id = response.json()["task_id"]
 
     # 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 列出产物
-    response = client.get(f"/api/v1/projects/{project_id}/runs/{run_id}/artifacts")
+    response = client.get(f"/api/v1/tasks/{task_id}/runs/{run_id}/artifacts")
     assert response.status_code == 200
     body = response.json()
     assert body["items"] == []
@@ -349,16 +349,16 @@ def test_v1_list_artifacts_empty(client: TestClient, tmp_state: Path) -> None:
 def test_v1_export_diagnostics(client: TestClient, tmp_state: Path) -> None:
     """导出诊断包。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "测试"})
+    task_id = response.json()["task_id"]
 
     # 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 导出诊断包
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/diagnostics")
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/diagnostics")
     assert response.status_code == 200
     body = response.json()
     assert "bundle_id" in body
@@ -371,16 +371,16 @@ def test_v1_export_diagnostics(client: TestClient, tmp_state: Path) -> None:
 def test_v1_project_detail_view(client: TestClient, tmp_state: Path) -> None:
     """项目详情视图包含所有必要字段。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "视图测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "视图测试"})
+    task_id = response.json()["task_id"]
 
     # 获取详情
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     body = response.json()
 
     # 验证视图字段
-    assert "project" in body
+    assert "task" in body
     assert "active_run" in body
     assert "stages" in body
     assert "warnings" in body
@@ -391,22 +391,22 @@ def test_v1_project_detail_view(client: TestClient, tmp_state: Path) -> None:
 def test_v1_run_view(client: TestClient, tmp_state: Path) -> None:
     """Run 视图包含所有必要字段。"""
     # 先创建项目
-    response = client.post("/api/v1/projects", json={"title": "Run视图测试"})
-    project_id = response.json()["project_id"]
+    response = client.post("/api/v1/tasks", json={"title": "Run视图测试"})
+    task_id = response.json()["task_id"]
 
     # 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 获取 Run
-    response = client.get(f"/api/v1/projects/{project_id}/runs/{run_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}/runs/{run_id}")
     assert response.status_code == 200
     body = response.json()
 
     # 验证视图字段
     assert "run_id" in body
-    assert "project_id" in body
+    assert "task_id" in body
     assert "status" in body
     assert "stages" in body
     assert "warnings" in body
@@ -418,14 +418,14 @@ def test_v1_run_view(client: TestClient, tmp_state: Path) -> None:
 def test_v1_get_inputs_saved(client: TestClient, tmp_state: Path) -> None:
     """保存任务输入后 GET /inputs 返回正确非敏感 DTO。"""
     # 创建任务
-    resp = client.post("/api/v1/projects", json={"title": "输入读取测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "输入读取测试"})
     assert resp.status_code == 200
-    project_id = resp.json()["project_id"]
+    task_id = resp.json()["task_id"]
 
     # 保存输入
     script = "这是一段用于测试输入读取的文案，足够长以满足最小要求。"
     resp = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={
             "script": script,
             "style": "极简粗线简笔白板风",
@@ -438,11 +438,11 @@ def test_v1_get_inputs_saved(client: TestClient, tmp_state: Path) -> None:
     assert resp.status_code == 200
 
     # 读取输入
-    resp = client.get(f"/api/v1/projects/{project_id}/inputs")
+    resp = client.get(f"/api/v1/tasks/{task_id}/inputs")
     assert resp.status_code == 200
     body = resp.json()
 
-    assert body["project_id"] == project_id
+    assert body["task_id"] == task_id
     assert body["saved"] is True
     assert body["inputs"]["script"] == script
     assert body["inputs"]["style"] == "极简粗线简笔白板风"
@@ -456,14 +456,14 @@ def test_v1_get_inputs_saved(client: TestClient, tmp_state: Path) -> None:
 
 def test_v1_get_inputs_unsaved(client: TestClient, tmp_state: Path) -> None:
     """未保存输入时 GET /inputs 返回 saved:false。"""
-    resp = client.post("/api/v1/projects", json={"title": "未保存输入"})
-    project_id = resp.json()["project_id"]
+    resp = client.post("/api/v1/tasks", json={"title": "未保存输入"})
+    task_id = resp.json()["task_id"]
 
-    resp = client.get(f"/api/v1/projects/{project_id}/inputs")
+    resp = client.get(f"/api/v1/tasks/{task_id}/inputs")
     assert resp.status_code == 200
     body = resp.json()
 
-    assert body["project_id"] == project_id
+    assert body["task_id"] == task_id
     assert body["saved"] is False
     assert body["inputs"] is None
     assert body["reference_audio"]["uploaded"] is False
@@ -471,18 +471,18 @@ def test_v1_get_inputs_unsaved(client: TestClient, tmp_state: Path) -> None:
 
 def test_v1_get_inputs_not_found(client: TestClient, tmp_state: Path) -> None:
     """任务不存在时 GET /inputs 返回 404。"""
-    resp = client.get("/api/v1/projects/nonexistent/inputs")
+    resp = client.get("/api/v1/tasks/nonexistent/inputs")
     assert resp.status_code == 404
 
 
 def test_v1_get_inputs_no_secrets_or_paths(client: TestClient, tmp_state: Path) -> None:
     """GET /inputs 响应不含路径、音频内容、api_key、secret、token、password、credential。"""
-    resp = client.post("/api/v1/projects", json={"title": "安全测试"})
-    project_id = resp.json()["project_id"]
+    resp = client.post("/api/v1/tasks", json={"title": "安全测试"})
+    task_id = resp.json()["task_id"]
 
     script = "这是一段用于安全测试的文案，足够长以满足最小要求。包含多个句子。"
     resp = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={
             "script": script,
             "style": "极简粗线简笔白板风",
@@ -494,7 +494,7 @@ def test_v1_get_inputs_no_secrets_or_paths(client: TestClient, tmp_state: Path) 
     )
     assert resp.status_code == 200
 
-    resp = client.get(f"/api/v1/projects/{project_id}/inputs")
+    resp = client.get(f"/api/v1/tasks/{task_id}/inputs")
     assert resp.status_code == 200
     body = resp.json()
 
@@ -532,16 +532,16 @@ def test_v1_acceptance_flow_with_missing_provider(
     monkeypatch.setattr(ProviderFactory, "check_all_availability", lambda self: unavailable_result)
 
     # 步骤 1: 创建项目
-    response = client.post("/api/v1/projects", json={"title": "验收测试项目"})
+    response = client.post("/api/v1/tasks", json={"title": "验收测试项目"})
     assert response.status_code == 200
-    project_id = response.json()["project_id"]
-    assert project_id
+    task_id = response.json()["task_id"]
+    assert task_id
 
     # 步骤 2: 上传文案和参考音频
     script = "这是一段用于验收测试的文案，足够长以满足最小要求。包含多个句子，用于测试分镜功能。"
     reference_content = b"RIFF" + b"\x00" * 100  # 简单的 WAV 头部
     response = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={
             "script": script,
             "style": "极简粗线简笔白板风",
@@ -555,12 +555,12 @@ def test_v1_acceptance_flow_with_missing_provider(
     assert response.json()["ok"] is True
 
     # 步骤 3: 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 步骤 4: 尝试启动标准流程（Provider 未配置）
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     assert response.status_code == 400
     body = response.json()
 
@@ -601,13 +601,13 @@ def test_v1_provider_configuration_enables_start(client: TestClient, tmp_state: 
     assert body["all_configured"] is True
 
     # 创建项目并上传输入
-    response = client.post("/api/v1/projects", json={"title": "配置完成测试"})
+    response = client.post("/api/v1/tasks", json={"title": "配置完成测试"})
     assert response.status_code == 200
-    project_id = response.json()["project_id"]
+    task_id = response.json()["task_id"]
 
     script = "这是一段用于测试的文案，足够长以满足最小要求。包含多个句子，用于测试分镜功能。"
     response = client.post(
-        f"/api/v1/projects/{project_id}/inputs",
+        f"/api/v1/tasks/{task_id}/inputs",
         data={
             "script": script,
             "style": "极简粗线简笔白板风",
@@ -618,12 +618,12 @@ def test_v1_provider_configuration_enables_start(client: TestClient, tmp_state: 
     assert response.status_code == 200
 
     # 获取项目详情（这会创建一个 Run）
-    response = client.get(f"/api/v1/projects/{project_id}")
+    response = client.get(f"/api/v1/tasks/{task_id}")
     assert response.status_code == 200
     run_id = response.json()["active_run"]["run_id"]
 
     # 尝试启动（现在应该成功调用 pipeline_run）
-    response = client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     # 注意：这里可能仍然会失败，因为 pipeline_run 内部可能需要更多依赖
     # 但至少 Provider 检查应该通过
     # 我们验证它不是因为 Provider 问题而失败

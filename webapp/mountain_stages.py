@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.application.voice_units import (
     SynthesizedVoice,
@@ -37,15 +37,15 @@ class FallbackAligner:
         return AlignmentResult({}, 0, 0, reason_code="ALIGNMENT_ADAPTER_NOT_CONFIGURED")
 
 
-def clone_voice(root: Path, project_id: str, run_id: str) -> tuple[dict, dict]:
-    repo = FilesystemProjectRepository(root)
-    request = repo.read_json(repo.project_dir(project_id) / "inputs" / "request.json")
-    plan = repo.read_json(repo.run_dir(project_id, run_id) / "artifacts" / "planning" / "av-plan.json")
+def clone_voice(root: Path, task_id: str, run_id: str) -> tuple[dict, dict]:
+    repo = FilesystemTaskRepository(root)
+    request = repo.read_json(repo.task_dir(task_id) / "inputs" / "request.json")
+    plan = repo.read_json(repo.run_dir(task_id, run_id) / "artifacts" / "planning" / "av-plan.json")
     units = tuple(VoiceUnit(
         item["unit_id"], int(item["order"]), TextRange(**item["source_range"]), item["text"],
         tuple(VisualItem(v["visual_id"], int(v["order"]), TextRange(**v["source_range"]), v["text"]) for v in item["visual_items"]),
     ) for item in plan["voice_units"])
-    reference = repo.project_dir(project_id) / "inputs" / request["reference_path"]
+    reference = repo.task_dir(task_id) / "inputs" / request["reference_path"]
     legacy_tts = LegacyTtsAdapter(reference)
     legacy_aligner = FallbackAligner()
     return VoiceUnitService(
@@ -54,51 +54,51 @@ def clone_voice(root: Path, project_id: str, run_id: str) -> tuple[dict, dict]:
         media=_NoOpMedia(),
         repository=repo,
         reference_audio=reference,
-    ).run(project_id, run_id, units, "legacy-tts")
+    ).run(task_id, run_id, units, "legacy-tts")
 
 
-def submit_legacy_full_pipeline(root: Path, project_id: str, run_id: str) -> str:
+def submit_legacy_full_pipeline(root: Path, task_id: str, run_id: str) -> str:
     """Bridge mature execution into a Mountain Run; the browser never sees legacy state."""
-    repo = FilesystemProjectRepository(root)
-    request = repo.read_json(repo.project_dir(project_id) / "inputs" / "request.json")
-    reference = repo.project_dir(project_id) / "inputs" / request["reference_path"]
+    repo = FilesystemTaskRepository(root)
+    request = repo.read_json(repo.task_dir(task_id) / "inputs" / "request.json")
+    reference = repo.task_dir(task_id) / "inputs" / request["reference_path"]
     with reference.open("rb") as audio, httpx.Client(timeout=30) as client:
         response = client.post("http://127.0.0.1:8000/api/jobs", data={
-            "copy": request["script"], "task_name": repo.get_project(project_id).title,
+            "copy": request["script"], "task_name": repo.get_task(task_id).title,
             "style": request.get("style", "极简粗线简笔白板风"),
             "include_subtitles": str(bool(request.get("include_subtitles", True))).lower(),
             "pen_text": request.get("pen_text", ""), "stroke_detail": request.get("stroke_detail", "detailed"),
         }, files={"reference": (reference.name, audio, "audio/wav")})
     response.raise_for_status()
     legacy_id = str(response.json()["id"])
-    repo.write_json(repo.run_dir(project_id, run_id) / "execution.json", {"legacy_execution_id": legacy_id})
-    thread = threading.Thread(target=_sync_legacy, args=(root, project_id, run_id, legacy_id), daemon=True)
+    repo.write_json(repo.run_dir(task_id, run_id) / "execution.json", {"legacy_execution_id": legacy_id})
+    thread = threading.Thread(target=_sync_legacy, args=(root, task_id, run_id, legacy_id), daemon=True)
     thread.start()
     return legacy_id
 
 
-def _sync_legacy(root: Path, project_id: str, run_id: str, legacy_id: str) -> None:
-    repo = FilesystemProjectRepository(root)
+def _sync_legacy(root: Path, task_id: str, run_id: str, legacy_id: str) -> None:
+    repo = FilesystemTaskRepository(root)
     while True:
         try:
-            terminal = sync_legacy_state(root, project_id, run_id, legacy_id)
+            terminal = sync_legacy_state(root, task_id, run_id, legacy_id)
             if terminal: return
         except Exception:
             return
         time.sleep(2)
 
 
-def sync_legacy_state(root: Path, project_id: str, run_id: str, legacy_id: str) -> bool:
+def sync_legacy_state(root: Path, task_id: str, run_id: str, legacy_id: str) -> bool:
     """Idempotently reconcile one legacy job; safe after a Web service restart."""
-    repo = FilesystemProjectRepository(root)
+    repo = FilesystemTaskRepository(root)
     job = httpx.get(f"http://127.0.0.1:8000/api/jobs/{legacy_id}", timeout=15).json()
-    run = repo.get_run(project_id, run_id)
-    _project_legacy_stages(run, job)
+    run = repo.get_run(task_id, run_id)
+    _task_legacy_stages(run, job)
     if job.get("status") == "done":
         result_name = str(job.get("result_file") or "final.mp4")
         final = root / "jobs" / legacy_id / result_name
         if final.exists():
-            FilesystemArtifactStore(repo).commit_bytes(project_id, run_id, "output.final-video", "output/final.mp4", final.read_bytes(), "compose-video")
+            FilesystemArtifactStore(repo).commit_bytes(task_id, run_id, "output.final-video", "output/final.mp4", final.read_bytes(), "compose-video")
         run.status = RunStatus.SUCCEEDED
         repo.save_run(run)
         return True
@@ -113,8 +113,8 @@ def sync_legacy_state(root: Path, project_id: str, run_id: str, legacy_id: str) 
     return False
 
 
-def _project_legacy_stages(run, job: dict) -> None:
-    """Project legacy progress into the canonical six Stage names without guessing success."""
+def _task_legacy_stages(run, job: dict) -> None:
+    """Task legacy progress into the canonical six Stage names without guessing success."""
     status = str(job.get("status") or "")
     progress = int(job.get("progress") or 0)
     phase = str(job.get("current_phase") or job.get("queue_stage") or "")

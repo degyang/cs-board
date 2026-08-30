@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import json_bytes, storyboard_document
 from csboard.domain.enums import Engine, StageStatus
@@ -33,7 +33,7 @@ class StoryboardService:
     """
 
     text_model: TextModelPort
-    repository: FilesystemProjectRepository
+    repository: FilesystemTaskRepository
     artifacts: FilesystemArtifactStore = field(init=False)
     telemetry: JsonlTelemetry = field(init=False)
 
@@ -43,7 +43,7 @@ class StoryboardService:
 
     def run(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         engine: Engine = Engine.WHITEBOARD,
     ) -> dict[str, Any]:
@@ -54,8 +54,8 @@ class StoryboardService:
         dict with keys: storyboard, visual_count, bible
         """
         # Read dependencies
-        av_plan = self._read_artifact(project_id, run_id, "planning.av-plan")
-        timeline = self._read_artifact(project_id, run_id, "timing.timeline")
+        av_plan = self._read_artifact(task_id, run_id, "planning.av-plan")
+        timeline = self._read_artifact(task_id, run_id, "timing.timeline")
 
         if not av_plan:
             raise ValueError("请先运行 segment-script 生成 av-plan")
@@ -72,11 +72,11 @@ class StoryboardService:
         visual_prompts = self._generate_visual_prompts(av_plan, visuals, bible)
 
         # Build storyboard document
-        doc = storyboard_document(project_id, run_id, visual_prompts, bible, engine)
+        doc = storyboard_document(task_id, run_id, visual_prompts, bible, engine)
 
         # Commit artifact
         artifact = self.artifacts.commit_bytes(
-            project_id, run_id,
+            task_id, run_id,
             "planning.storyboard",
             "planning/storyboard.json",
             json_bytes(doc),
@@ -90,12 +90,12 @@ class StoryboardService:
             "artifact_key": artifact.artifact_key,
         }
 
-    def _read_artifact(self, project_id: str, run_id: str, key: str) -> dict[str, Any] | None:
+    def _read_artifact(self, task_id: str, run_id: str, key: str) -> dict[str, Any] | None:
         """Read an artifact by key, returning parsed JSON or None."""
-        ref = self.artifacts.get(project_id, run_id, key)
+        ref = self.artifacts.get(task_id, run_id, key)
         if not ref:
             return None
-        path = self.repository.run_dir(project_id, run_id) / "artifacts" / ref["relative_path"]
+        path = self.repository.run_dir(task_id, run_id) / "artifacts" / ref["relative_path"]
         if not path.exists():
             return None
         return json.loads(path.read_text(encoding="utf-8"))

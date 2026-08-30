@@ -12,10 +12,10 @@ import type {
   SecretStatusResponse,
   SetSecretRequest,
   SecretOperationResponse,
-  ProjectListResponse,
-  CreateProjectRequest,
-  CreateProjectResponse,
-  ProjectDetail,
+  TaskListResponse,
+  CreateTaskRequest,
+  CreateTaskResponse,
+  TaskDetail,
   RunDetail,
   UnitListResponse,
   ArtifactListResponse,
@@ -128,9 +128,9 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
  * 禁止手工设置 Content-Type — 浏览器自动设置 boundary。
  * 禁止读取/缓存/打印参考音频内容。
  */
-export function uploadInputs(projectId: string, form: FormData): Promise<SaveInputsResponse> {
+export function uploadInputs(taskId: string, form: FormData): Promise<SaveInputsResponse> {
   return postForm<SaveInputsResponse>(
-    `/projects/${encodeURIComponent(projectId)}/inputs`,
+    `/tasks/${encodeURIComponent(taskId)}/inputs`,
     form,
   )
 }
@@ -139,8 +139,8 @@ export function uploadInputs(projectId: string, form: FormData): Promise<SaveInp
  * 读取已保存的任务制作输入。
  * 返回 saved:false + inputs:null 表示尚未保存。
  */
-export function fetchInputs(projectId: string): Promise<InputsReadback> {
-  return get<InputsReadback>(`/projects/${encodeURIComponent(projectId)}/inputs`)
+export function fetchInputs(taskId: string): Promise<InputsReadback> {
+  return get<InputsReadback>(`/tasks/${encodeURIComponent(taskId)}/inputs`)
 }
 
 // ── Health ──────────────────────────────────────────────────────────────
@@ -197,83 +197,83 @@ export function deleteProviderSecret(
 
 // ── Projects ────────────────────────────────────────────────────────────
 
-export function fetchProjects(limit = 50): Promise<ProjectListResponse> {
-  return get<ProjectListResponse>(`/projects?limit=${limit}`)
+export function fetchTasks(limit = 50): Promise<TaskListResponse> {
+  return get<TaskListResponse>(`/tasks?limit=${limit}`)
 }
 
-export function createProject(
-  req: CreateProjectRequest,
-): Promise<CreateProjectResponse> {
-  return post<CreateProjectResponse>('/projects', req)
+export function createTask(
+  req: CreateTaskRequest,
+): Promise<CreateTaskResponse> {
+  return post<CreateTaskResponse>('/tasks', req)
 }
 
-export function fetchProject(id: string): Promise<ProjectDetail> {
-  return get<ProjectDetail>(`/projects/${encodeURIComponent(id)}`)
+export function fetchTask(id: string): Promise<TaskDetail> {
+  return get<TaskDetail>(`/tasks/${encodeURIComponent(id)}`)
 }
 
 // ── Runs ────────────────────────────────────────────────────────────────
 
-export function fetchRun(projectId: string, runId: string): Promise<RunDetail> {
-  return get<RunDetail>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`)
+export function fetchRun(taskId: string, runId: string): Promise<RunDetail> {
+  return get<RunDetail>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}`)
 }
 
-export function startRun(projectId: string, runId: string): Promise<PipelineRunResponse> {
-  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/start`)
+export function startRun(taskId: string, runId: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/start`)
 }
 
-export function cancelRun(projectId: string, runId: string): Promise<CancelRunResponse> {
-  return post<CancelRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`)
+export function cancelRun(taskId: string, runId: string): Promise<CancelRunResponse> {
+  return post<CancelRunResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/cancel`)
 }
 
-export function retryRun(projectId: string, runId: string): Promise<PipelineRunResponse> {
-  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/retry`)
+export function retryRun(taskId: string, runId: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/retry`)
 }
 
 // ── Stages ──────────────────────────────────────────────────────────────
 
-export function fetchStages(projectId: string, runId: string): Promise<{ items: Array<{ stage: string } & Record<string, unknown>> }> {
-  return get(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages`)
+export function fetchStages(taskId: string, runId: string): Promise<{ items: Array<{ stage: string } & Record<string, unknown>> }> {
+  return get(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/stages`)
 }
 
-export function runStage(projectId: string, runId: string, stage: string): Promise<PipelineRunResponse> {
-  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/run`)
+export function runStage(taskId: string, runId: string, stage: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/run`)
 }
 
-export function retryStage(projectId: string, runId: string, stage: string): Promise<PipelineRunResponse> {
-  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/retry`)
+export function retryStage(taskId: string, runId: string, stage: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/retry`)
 }
 
 // ── Units ───────────────────────────────────────────────────────────────
 
-export function fetchUnits(projectId: string, runId: string): Promise<UnitListResponse> {
-  return get<UnitListResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/units`)
+export function fetchUnits(taskId: string, runId: string): Promise<UnitListResponse> {
+  return get<UnitListResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/units`)
 }
 
 // ── Artifacts ───────────────────────────────────────────────────────────
 
-export function fetchArtifacts(projectId: string, runId: string): Promise<ArtifactListResponse> {
-  return get<ArtifactListResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/artifacts`)
+export function fetchArtifacts(taskId: string, runId: string): Promise<ArtifactListResponse> {
+  return get<ArtifactListResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/artifacts`)
 }
 
 // ── Events ──────────────────────────────────────────────────────────────
 
-export function fetchEvents(projectId: string, runId: string, after = 0): Promise<EventsResponse> {
-  return get<EventsResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/events?after=${after}`)
+export function fetchEvents(taskId: string, runId: string, after = 0): Promise<EventsResponse> {
+  return get<EventsResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/events?after=${after}`)
 }
 
 // ── Logs ────────────────────────────────────────────────────────────────
 
-export function fetchLogs(projectId: string, runId: string, filters?: { level?: string; component?: string; stage?: string }): Promise<LogsResponse> {
+export function fetchLogs(taskId: string, runId: string, filters?: { level?: string; component?: string; stage?: string }): Promise<LogsResponse> {
   const params = new URLSearchParams()
   if (filters?.level) params.set('level', filters.level)
   if (filters?.component) params.set('component', filters.component)
   if (filters?.stage) params.set('stage', filters.stage)
   const qs = params.toString()
-  return get<LogsResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/logs${qs ? '?' + qs : ''}`)
+  return get<LogsResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/logs${qs ? '?' + qs : ''}`)
 }
 
 // ── Final Video ─────────────────────────────────────────────────────────
 
-export function getFinalUrl(projectId: string, runId: string): string {
-  return `${BASE}/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/final`
+export function getFinalUrl(taskId: string, runId: string): string {
+  return `${BASE}/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/final`
 }

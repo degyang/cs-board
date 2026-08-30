@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import av_plan_document, json_bytes
@@ -18,9 +18,9 @@ from csboard.application.pipeline import PipelineOrchestrator
 from csboard.application.storyboard import StoryboardService
 from csboard.application.voice_units import VoiceUnitService
 from csboard.domain.av_timing import VoiceUnit, segment_script
-from csboard.domain.enums import Engine, Entrypoint, ProjectStatus, RunStatus, StageStatus
+from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
 from csboard.domain.errors import DomainError, NotFoundError
-from csboard.domain.models import Project, Run, StageState
+from csboard.domain.models import Task, Run, StageState
 from csboard.ports.providers import AlignmentPort, ImageModelPort, MediaPort, RendererPort, TextModelPort, TextToSpeechPort
 
 
@@ -30,12 +30,12 @@ class MountainCommands:
 
     root: Path
     provider_factory: Any | None = None  # ProviderFactory for real adapters
-    repository: FilesystemProjectRepository = field(init=False)
+    repository: FilesystemTaskRepository = field(init=False)
     telemetry: JsonlTelemetry = field(init=False)
     pipeline: PipelineOrchestrator = field(init=False)
 
     def __post_init__(self) -> None:
-        self.repository = FilesystemProjectRepository(self.root)
+        self.repository = FilesystemTaskRepository(self.root)
         self.telemetry = JsonlTelemetry(self.repository)
         self.pipeline = PipelineOrchestrator(
             get_run=self.repository.get_run,
@@ -50,7 +50,7 @@ class MountainCommands:
         self.pipeline.register_stage("render-visuals", self._exec_render_visuals)
         self.pipeline.register_stage("compose-video", self._exec_compose_video)
 
-    def create_project(
+    def create_task(
         self,
         title: str,
         pipeline_id: str = "mountain-av-v1",
@@ -59,26 +59,26 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         if not title.strip():
-            raise ValueError("项目名称不能为空")
+            raise ValueError("任务名称不能为空")
         if pipeline_id != "mountain-av-v1" or engine is not Engine.WHITEBOARD:
             raise ValueError("M04 仅支持标准 whiteboard 的 mountain-av-v1；自定义参考和动态信息图将在 M09 开放")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        project_id = new_id("project")
+        task_id = new_id("task")
         run_id = new_id("run")
         trace_id = new_id("trace")
-        project = Project(
-            project_id=project_id,
+        task = Task(
+            task_id=task_id,
             title=title.strip()[:80],
             pipeline_id=pipeline_id,
             engine=engine,
-            status=ProjectStatus.READY,
+            status=TaskStatus.READY,
             created_at=utc_now(),
             updated_at=utc_now(),
             active_run_id=run_id,
         )
         run = Run(
             run_id=run_id,
-            project_id=project_id,
+            task_id=task_id,
             trace_id=trace_id,
             entrypoint=context.entrypoint,
             command_ids=[context.command_id],
@@ -86,70 +86,70 @@ class MountainCommands:
             target_stage="compose-video",
             started_at=utc_now(),
         )
-        self.repository.create_project(project)
+        self.repository.create_task(task)
         self.repository.create_run(run)
-        # Store project request for pipeline orchestration
+        # Store task request for pipeline orchestration
         if request:
-            request_path = self.repository.project_dir(project_id) / "request.json"
+            request_path = self.repository.task_dir(task_id) / "request.json"
             request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
-        event = self.telemetry.append_event(project_id, run_id, {
-            "event_type": "ProjectCreated",
-            "command": "project.create",
+        event = self.telemetry.append_event(task_id, run_id, {
+            "event_type": "TaskCreated",
+            "command": "task.create",
             "pipeline_id": pipeline_id,
             "engine": engine.value,
         })
-        self.telemetry.append_audit(project_id, run_id, {
-            "action": "project.create",
+        self.telemetry.append_audit(task_id, run_id, {
+            "action": "task.create",
             "command_id": context.command_id,
             "entrypoint": context.entrypoint.value,
         })
-        return self._ok("project.create", project, run, context, event_sequence=event["sequence"])
+        return self._ok("task.create", task, run, context, event_sequence=event["sequence"])
 
-    def show_project(self, project_id: str) -> dict[str, Any]:
-        project = self.repository.get_project(project_id)
-        run = self.repository.get_run(project_id, project.active_run_id) if project.active_run_id else None
-        return {"ok": True, "project": project.to_dict(), "active_run": run.to_dict() if run else None}
+    def show_task(self, task_id: str) -> dict[str, Any]:
+        task = self.repository.get_task(task_id)
+        run = self.repository.get_run(task_id, task.active_run_id) if task.active_run_id else None
+        return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None}
 
-    def trace_run(self, project_id: str, run_id: str) -> dict[str, Any]:
-        run = self.repository.get_run(project_id, run_id)
-        return {"ok": True, "project_id": project_id, "run_id": run_id, "trace_id": run.trace_id, "command_ids": run.command_ids, "status": run.status.value}
+    def trace_run(self, task_id: str, run_id: str) -> dict[str, Any]:
+        run = self.repository.get_run(task_id, run_id)
+        return {"ok": True, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "command_ids": run.command_ids, "status": run.status.value}
 
-    def list_events(self, project_id: str, run_id: str, after_sequence: int = 0) -> dict[str, Any]:
-        events = self.telemetry.read_events(project_id, run_id, after_sequence)
-        return {"ok": True, "project_id": project_id, "run_id": run_id, "items": events, "next_cursor": events[-1]["sequence"] if events else after_sequence}
+    def list_events(self, task_id: str, run_id: str, after_sequence: int = 0) -> dict[str, Any]:
+        events = self.telemetry.read_events(task_id, run_id, after_sequence)
+        return {"ok": True, "task_id": task_id, "run_id": run_id, "items": events, "next_cursor": events[-1]["sequence"] if events else after_sequence}
 
-    def list_logs(self, project_id: str, run_id: str) -> dict[str, Any]:
-        path = self.repository.run_dir(project_id, run_id) / "observability" / "logs.jsonl"
-        self.repository.get_run(project_id, run_id)
+    def list_logs(self, task_id: str, run_id: str) -> dict[str, Any]:
+        path = self.repository.run_dir(task_id, run_id) / "observability" / "logs.jsonl"
+        self.repository.get_run(task_id, run_id)
         items = [] if not path.exists() else [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
-        return {"ok": True, "project_id": project_id, "run_id": run_id, "items": items}
+        return {"ok": True, "task_id": task_id, "run_id": run_id, "items": items}
 
-    def export_diagnostics(self, project_id: str, run_id: str) -> dict[str, Any]:
-        path = self.telemetry.export_diagnostic_bundle(project_id, run_id)
-        return {"ok": True, "project_id": project_id, "run_id": run_id, "bundle": str(path)}
+    def export_diagnostics(self, task_id: str, run_id: str) -> dict[str, Any]:
+        path = self.telemetry.export_diagnostic_bundle(task_id, run_id)
+        return {"ok": True, "task_id": task_id, "run_id": run_id, "bundle": str(path)}
 
-    def segment_script(self, project_id: str, run_id: str, script: str, context: CommandContext | None = None) -> dict[str, Any]:
-        run = self.repository.get_run(project_id, run_id)
-        project = self.repository.get_project(project_id)
-        if project.pipeline_id != "mountain-av-v1":
+    def segment_script(self, task_id: str, run_id: str, script: str, context: CommandContext | None = None) -> dict[str, Any]:
+        run = self.repository.get_run(task_id, run_id)
+        task = self.repository.get_task(task_id)
+        if task.pipeline_id != "mountain-av-v1":
             raise ValueError("仅 mountain-av-v1 可运行标准文案分割")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         run.status = RunStatus.RUNNING
         units = segment_script(script)
-        document = av_plan_document(project_id, run_id, units, script, project.engine)
+        document = av_plan_document(task_id, run_id, units, script, task.engine)
         artifact = FilesystemArtifactStore(self.repository).commit_bytes(
-            project_id, run_id, "planning.av-plan", "planning/av-plan.json", json_bytes(document), "segment-script"
+            task_id, run_id, "planning.av-plan", "planning/av-plan.json", json_bytes(document), "segment-script"
         )
         run.command_ids.append(context.command_id)
         run.stages["segment-script"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
-        event = self.telemetry.append_event(project_id, run_id, {"event_type": "ScriptSegmented", "unit_count": len(units), "visual_count": sum(len(unit.visual_items) for unit in units)})
-        self.telemetry.append_audit(project_id, run_id, {"action": "stage.run", "stage": "segment-script", "command_id": context.command_id})
-        return {"ok": True, "command": "stage.run", "project_id": project_id, "run_id": run_id, "trace_id": run.trace_id, "command_id": context.command_id, "stage": "segment-script", "result": "succeeded", "artifacts": [artifact.artifact_key], "event_sequence": event["sequence"], "warnings": [], "next_stage": "clone-voice"}
+        event = self.telemetry.append_event(task_id, run_id, {"event_type": "ScriptSegmented", "unit_count": len(units), "visual_count": sum(len(unit.visual_items) for unit in units)})
+        self.telemetry.append_audit(task_id, run_id, {"action": "stage.run", "stage": "segment-script", "command_id": context.command_id})
+        return {"ok": True, "command": "stage.run", "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "command_id": context.command_id, "stage": "segment-script", "result": "succeeded", "artifacts": [artifact.artifact_key], "event_sequence": event["sequence"], "warnings": [], "next_stage": "clone-voice"}
 
     def clone_voice(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         tts: TextToSpeechPort,
         alignment: AlignmentPort,
@@ -158,17 +158,17 @@ class MountainCommands:
         unit_id: str | None = None,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
-        run = self.repository.get_run(project_id, run_id)
-        project = self.repository.get_project(project_id)
-        if project.pipeline_id != "mountain-av-v1":
+        run = self.repository.get_run(task_id, run_id)
+        task = self.repository.get_task(task_id)
+        if task.pipeline_id != "mountain-av-v1":
             raise ValueError("仅 mountain-av-v1 可运行 clone-voice")
 
         # Read av-plan artifact to get voice units
-        av_plan_ref = FilesystemArtifactStore(self.repository).get(project_id, run_id, "planning.av-plan")
+        av_plan_ref = FilesystemArtifactStore(self.repository).get(task_id, run_id, "planning.av-plan")
         if not av_plan_ref:
             raise ValueError("请先运行 segment-script 生成 av-plan")
         import json
-        av_plan_path = self.repository.run_dir(project_id, run_id) / "artifacts" / av_plan_ref["relative_path"]
+        av_plan_path = self.repository.run_dir(task_id, run_id) / "artifacts" / av_plan_ref["relative_path"]
         av_plan = json.loads(av_plan_path.read_text(encoding="utf-8"))
 
         # Reconstruct VoiceUnit objects
@@ -199,15 +199,15 @@ class MountainCommands:
 
         service = VoiceUnitService(tts, alignment, media, self.repository, reference_audio)
         manifest, timeline = service.run(
-            project_id, run_id, tuple(units),
-            profile="default", engine=project.engine,
+            task_id, run_id, tuple(units),
+            profile="default", engine=task.engine,
         )
 
-        event = self.telemetry.append_event(project_id, run_id, {
+        event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "CloneVoiceSucceeded",
             "unit_count": len(units),
         })
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "stage.run",
             "stage": "clone-voice",
             "command_id": context.command_id,
@@ -216,7 +216,7 @@ class MountainCommands:
         return {
             "ok": True,
             "command": "stage.run",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,
@@ -230,17 +230,17 @@ class MountainCommands:
 
     def artifact_show(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         artifact_key: str,
     ) -> dict[str, Any]:
         """Return the content of an artifact by key."""
-        self.repository.get_run(project_id, run_id)  # validate run exists
+        self.repository.get_run(task_id, run_id)  # validate run exists
         store = FilesystemArtifactStore(self.repository)
-        ref = store.get(project_id, run_id, artifact_key)
+        ref = store.get(task_id, run_id, artifact_key)
         if not ref:
             raise NotFoundError(f"Artifact {artifact_key} 不存在")
-        run_dir = self.repository.run_dir(project_id, run_id)
+        run_dir = self.repository.run_dir(task_id, run_id)
         artifact_path = run_dir / "artifacts" / ref["relative_path"]
         if not artifact_path.exists():
             raise NotFoundError(f"Artifact 文件不存在: {ref['relative_path']}")
@@ -252,7 +252,7 @@ class MountainCommands:
         return {
             "ok": True,
             "command": "artifact.show",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "artifact_key": artifact_key,
             "content": content,
@@ -261,7 +261,7 @@ class MountainCommands:
 
     def stage_retry(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         stage: str,
         unit_id: str | None = None,
@@ -269,7 +269,7 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Retry a stage, optionally scoped to a specific unit or visual."""
-        run = self.repository.get_run(project_id, run_id)
+        run = self.repository.get_run(task_id, run_id)
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
         # Reset the stage status
@@ -295,13 +295,13 @@ class MountainCommands:
         run.command_ids.append(context.command_id)
         self.repository.save_run(run)
 
-        self.telemetry.append_event(project_id, run_id, {
+        self.telemetry.append_event(task_id, run_id, {
             "event_type": "StageRetryRequested",
             "stage": stage,
             "unit_id": unit_id,
             "visual_id": visual_id,
         })
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "stage.retry",
             "stage": stage,
             "command_id": context.command_id,
@@ -311,7 +311,7 @@ class MountainCommands:
 
         # Execute the stage via pipeline
         result = self.pipeline.run_pipeline(
-            project_id, run_id,
+            task_id, run_id,
             policy="targeted",
             target_stage=stage,
             context=context,
@@ -320,66 +320,66 @@ class MountainCommands:
 
     def pipeline_run(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str | None = None,
         policy: str = "auto",
         target_stage: str | None = None,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Run the pipeline with the given policy."""
-        project = self.repository.get_project(project_id)
+        task = self.repository.get_task(task_id)
         if run_id is None:
-            run_id = project.active_run_id
+            run_id = task.active_run_id
         if not run_id:
-            raise NotFoundError("项目没有活跃的运行")
+            raise NotFoundError("任务没有活跃的运行")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "pipeline.run",
             "policy": policy,
             "command_id": context.command_id,
         })
-        return self.pipeline.run_pipeline(project_id, run_id, policy, target_stage, context)
+        return self.pipeline.run_pipeline(task_id, run_id, policy, target_stage, context)
 
     def pipeline_resume(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str | None = None,
         policy: str = "auto",
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Resume a pipeline from the last successful stage."""
-        project = self.repository.get_project(project_id)
+        task = self.repository.get_task(task_id)
         if run_id is None:
-            run_id = project.active_run_id
+            run_id = task.active_run_id
         if not run_id:
-            raise NotFoundError("项目没有活跃的运行")
+            raise NotFoundError("任务没有活跃的运行")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "pipeline.resume",
             "policy": policy,
             "command_id": context.command_id,
         })
-        return self.pipeline.resume_pipeline(project_id, run_id, policy, context)
+        return self.pipeline.resume_pipeline(task_id, run_id, policy, context)
 
     # ── Stage executor wrappers ──────────────────────────────────────
 
-    def _exec_segment_script(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for segment-script. Reads script from project request."""
-        request = self._read_request(project_id)
+    def _exec_segment_script(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+        """Stage executor for segment-script. Reads script from task request."""
+        request = self._read_request(task_id)
         script = request.get("script", "")
         if not script:
-            raise DomainError("VALIDATION_ERROR", "项目请求中缺少 script 字段")
-        return self.segment_script(project_id, run_id, script, context)
+            raise DomainError("VALIDATION_ERROR", "任务请求中缺少 script 字段")
+        return self.segment_script(task_id, run_id, script, context)
 
-    def _exec_clone_voice(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+    def _exec_clone_voice(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for clone-voice. Uses ProviderFactory for adapters."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 TTS/alignment/media adapter")
 
-        request = self._read_request(project_id)
+        request = self._read_request(task_id)
         reference_audio = request.get("reference_audio")
         if not reference_audio:
-            raise DomainError("VALIDATION_ERROR", "项目请求中缺少 reference_audio 字段")
+            raise DomainError("VALIDATION_ERROR", "任务请求中缺少 reference_audio 字段")
 
         # 从 ProviderFactory 获取 adapters（不从 request.json 读取 provider 配置）
         tts = self.provider_factory.create_tts()
@@ -387,28 +387,28 @@ class MountainCommands:
         media = self.provider_factory.create_media()
 
         return self.clone_voice(
-            project_id, run_id, tts, alignment, media,
+            task_id, run_id, tts, alignment, media,
             reference_audio=Path(reference_audio),
             context=context,
         )
 
-    def _read_request(self, project_id: str) -> dict[str, Any]:
-        """Read the project request.json if it exists."""
-        request_path = self.repository.project_dir(project_id) / "request.json"
+    def _read_request(self, task_id: str) -> dict[str, Any]:
+        """Read the task request.json if it exists."""
+        request_path = self.repository.task_dir(task_id) / "request.json"
         if request_path.exists():
             return json.loads(request_path.read_text(encoding="utf-8"))
         return {}
 
     def plan_storyboard(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         text_model: TextModelPort,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Generate storyboard for all Visual Items."""
-        run = self.repository.get_run(project_id, run_id)
-        project = self.repository.get_project(project_id)
+        run = self.repository.get_run(task_id, run_id)
+        task = self.repository.get_task(task_id)
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
         run.status = RunStatus.RUNNING
@@ -417,16 +417,16 @@ class MountainCommands:
         self.repository.save_run(run)
 
         service = StoryboardService(text_model, self.repository)
-        result = service.run(project_id, run_id, project.engine)
+        result = service.run(task_id, run_id, task.engine)
 
         run.stages["plan-storyboard"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
 
-        event = self.telemetry.append_event(project_id, run_id, {
+        event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "StoryboardGenerated",
             "visual_count": result["visual_count"],
         })
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "stage.run",
             "stage": "plan-storyboard",
             "command_id": context.command_id,
@@ -435,7 +435,7 @@ class MountainCommands:
         return {
             "ok": True,
             "command": "stage.run",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,
@@ -449,15 +449,15 @@ class MountainCommands:
 
     def generate_illustrations(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         image_model: ImageModelPort,
         visual_id: str | None = None,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Generate illustrations for Visual Items."""
-        run = self.repository.get_run(project_id, run_id)
-        project = self.repository.get_project(project_id)
+        run = self.repository.get_run(task_id, run_id)
+        task = self.repository.get_task(task_id)
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
         run.status = RunStatus.RUNNING
@@ -466,16 +466,16 @@ class MountainCommands:
         self.repository.save_run(run)
 
         service = IllustrationService(image_model, self.repository)
-        result = service.run(project_id, run_id, project.engine, visual_id)
+        result = service.run(task_id, run_id, task.engine, visual_id)
 
         run.stages["generate-illustrations"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
 
-        event = self.telemetry.append_event(project_id, run_id, {
+        event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "IllustrationsGenerated",
             "image_count": result["image_count"],
         })
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "stage.run",
             "stage": "generate-illustrations",
             "command_id": context.command_id,
@@ -484,7 +484,7 @@ class MountainCommands:
         return {
             "ok": True,
             "command": "stage.run",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,
@@ -496,23 +496,23 @@ class MountainCommands:
             "next_stage": "render-visuals",
         }
 
-    def _exec_plan_storyboard(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+    def _exec_plan_storyboard(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for plan-storyboard. Uses ProviderFactory for text model."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 text model")
         text_model = self.provider_factory.create_text_model()
-        return self.plan_storyboard(project_id, run_id, text_model, context)
+        return self.plan_storyboard(task_id, run_id, text_model, context)
 
-    def _exec_generate_illustrations(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+    def _exec_generate_illustrations(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for generate-illustrations. Uses ProviderFactory for image model."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 image model")
         image_model = self.provider_factory.create_image_model()
-        return self.generate_illustrations(project_id, run_id, image_model, context=context)
+        return self.generate_illustrations(task_id, run_id, image_model, context=context)
 
     def render_visuals(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         renderer: RendererPort,
         context: CommandContext | None = None,
@@ -521,8 +521,8 @@ class MountainCommands:
         from csboard.application.av_artifacts import read_manifest
         from csboard.domain.provider_types import RenderRequest
 
-        run = self.repository.get_run(project_id, run_id)
-        project = self.repository.get_project(project_id)
+        run = self.repository.get_run(task_id, run_id)
+        task = self.repository.get_task(task_id)
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
         run.status = RunStatus.RUNNING
@@ -530,10 +530,10 @@ class MountainCommands:
         run.command_ids.append(context.command_id)
         self.repository.save_run(run)
 
-        run_dir = self.repository.run_dir(project_id, run_id)
+        run_dir = self.repository.run_dir(task_id, run_id)
         store = FilesystemArtifactStore(self.repository)
         def artifact_path(key: str) -> Path | None:
-            ref = store.get(project_id, run_id, key)
+            ref = store.get(task_id, run_id, key)
             return run_dir / "artifacts" / ref["relative_path"] if ref else None
         timeline_path = artifact_path("timing.timeline")
         storyboard_path = artifact_path("planning.storyboard")
@@ -556,7 +556,7 @@ class MountainCommands:
             storyboard_path=storyboard_path,
             illustration_manifest_path=illustration_manifest_path,
             output_dir=output_dir,
-            request_id=f"{project_id}:{run_id}:render",
+            request_id=f"{task_id}:{run_id}:render",
         )
 
         # Execute render
@@ -565,7 +565,7 @@ class MountainCommands:
         # Build render manifest
         render_manifest = {
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "engine": project.engine.value,
+            "engine": task.engine.value,
             "total_duration_ms": result.duration_ms,
             "total_frames": result.frames,
             "clips": result.provider_metadata.get("clips", []),
@@ -573,19 +573,19 @@ class MountainCommands:
         }
 
         artifact_key = store.commit_bytes(
-            project_id, run_id, "render.manifest", "render/render-manifest.json",
+            task_id, run_id, "render.manifest", "render/render-manifest.json",
             json_bytes(render_manifest), "render-visuals",
         ).artifact_key
 
         run.stages["render-visuals"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
 
-        event = self.telemetry.append_event(project_id, run_id, {
+        event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "RenderCompleted",
             "clip_count": len(render_manifest.get("clips", [])),
             "total_duration_ms": result.duration_ms,
         })
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "stage.run",
             "stage": "render-visuals",
             "command_id": context.command_id,
@@ -594,7 +594,7 @@ class MountainCommands:
         return {
             "ok": True,
             "command": "stage.run",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,
@@ -608,14 +608,14 @@ class MountainCommands:
 
     def compose_video(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         media: MediaPort,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Compose final video from rendered clips and audio."""
-        run = self.repository.get_run(project_id, run_id)
-        project = self.repository.get_project(project_id)
+        run = self.repository.get_run(task_id, run_id)
+        task = self.repository.get_task(task_id)
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
         run.status = RunStatus.RUNNING
@@ -624,18 +624,18 @@ class MountainCommands:
         self.repository.save_run(run)
 
         service = CompositionService(media, self.repository)
-        result = service.run(project_id, run_id)
+        result = service.run(task_id, run_id)
 
         run.stages["compose-video"] = StageState(StageStatus.SUCCEEDED, 1)
         run.status = RunStatus.SUCCEEDED
         self.repository.save_run(run)
 
-        event = self.telemetry.append_event(project_id, run_id, {
+        event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "CompositionCompleted",
             "output_path": result["output_path"],
             "duration_ms": result["duration_ms"],
         })
-        self.telemetry.append_audit(project_id, run_id, {
+        self.telemetry.append_audit(task_id, run_id, {
             "action": "stage.run",
             "stage": "compose-video",
             "command_id": context.command_id,
@@ -644,7 +644,7 @@ class MountainCommands:
         return {
             "ok": True,
             "command": "stage.run",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,
@@ -656,26 +656,26 @@ class MountainCommands:
             "next_stage": None,
         }
 
-    def _exec_render_visuals(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+    def _exec_render_visuals(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for render-visuals. Uses ProviderFactory for renderer."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 renderer")
         renderer = self.provider_factory.create_renderer()
-        return self.render_visuals(project_id, run_id, renderer, context)
+        return self.render_visuals(task_id, run_id, renderer, context)
 
-    def _exec_compose_video(self, project_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
+    def _exec_compose_video(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for compose-video. Uses ProviderFactory for media."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 media adapter")
         media = self.provider_factory.create_media()
-        return self.compose_video(project_id, run_id, media, context)
+        return self.compose_video(task_id, run_id, media, context)
 
     @staticmethod
-    def _ok(command: str, project: Project, run: Run, context: CommandContext, **extra: Any) -> dict[str, Any]:
+    def _ok(command: str, task: Task, run: Run, context: CommandContext, **extra: Any) -> dict[str, Any]:
         return {
             "ok": True,
             "command": command,
-            "project_id": project.project_id,
+            "task_id": task.task_id,
             "run_id": run.run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,

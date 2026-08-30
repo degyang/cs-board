@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useEffect, useState, useCallback } from 'react'
-import { fetchProjects } from '../../lib/api/client'
+import { fetchTasks } from '../../lib/api/client'
 import { statusText } from '../../lib/formatting'
 
 export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
@@ -8,7 +8,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
 
   const loadRunInfo = useCallback(async () => {
     try {
-      const { items } = await fetchProjects(20)
+      const { items } = await fetchTasks(20)
       const running = items.find((p) => p.status === 'running')
       setRunInfo(running ? { title: running.title, status: running.status } : null)
     } catch {
@@ -55,7 +55,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
           </span>
           <span>任务队列</span>
         </NavLink>
-        <NavLink to="/projects/new">
+        <NavLink to="/tasks/new">
           <span className="nav-ico">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M9 3v12M3 9h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

@@ -6,7 +6,7 @@ const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 // Import after mock setup
-const { fetchHealth, fetchProviders, fetchProvider, createProject, updateProviderConfig } = await import('../src/lib/api/client')
+const { fetchHealth, fetchProviders, fetchProvider, createTask, updateProviderConfig } = await import('../src/lib/api/client')
 
 describe('API Client', () => {
   beforeEach(() => {
@@ -66,10 +66,10 @@ describe('API Client', () => {
     })
   })
 
-  describe('createProject', () => {
-    it('sends POST with title and returns project_id', async () => {
+  describe('createTask', () => {
+    it('sends POST with title and returns task_id', async () => {
       const mockResponse = {
-        project_id: 'proj-123',
+        task_id: 'proj-123',
         run_id: 'run-456',
         trace_id: 'trace-789',
         command_id: 'cmd-012',
@@ -79,13 +79,13 @@ describe('API Client', () => {
         json: () => Promise.resolve(mockResponse),
       })
 
-      const result = await createProject({ title: '测试项目' })
-      expect(result.project_id).toBe('proj-123')
+      const result = await createTask({ title: '测试任务' })
+      expect(result.task_id).toBe('proj-123')
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/projects'),
+        expect.stringContaining('/tasks'),
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ title: '测试项目' }),
+          body: JSON.stringify({ title: '测试任务' }),
         }),
       )
     })

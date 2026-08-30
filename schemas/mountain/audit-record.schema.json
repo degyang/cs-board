@@ -10,7 +10,7 @@
     "entrypoint": {"$ref": "common.schema.json#/$defs/entrypoint"},
     "command_id": {"$ref": "common.schema.json#/$defs/id"},
     "trace_id": {"$ref": "common.schema.json#/$defs/id"},
-    "project_id": {"$ref": "common.schema.json#/$defs/id"},
+    "task_id": {"$ref": "common.schema.json#/$defs/id"},
     "run_id": {"$ref": "common.schema.json#/$defs/id"},
     "action": {"type": "string", "minLength": 1},
     "outcome": {"enum": ["succeeded", "failed", "rejected"]},

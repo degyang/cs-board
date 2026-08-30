@@ -17,7 +17,7 @@ def _make_run(stages: dict[str, StageStatus] | None = None, status: str = "pendi
     """Create a mock Run object."""
     run = MagicMock()
     run.run_id = "run-test"
-    run.project_id = "project-test"
+    run.task_id = "project-test"
     run.trace_id = "trace-test"
     run.status = RunStatus(status)
     run.stages = {
@@ -111,7 +111,7 @@ class TestRunPipeline(unittest.TestCase):
             for stage in STAGE_ORDER:
                 orch.register_stage(stage, MagicMock(return_value={
                     "ok": True, "command": "stage.run", "stage": stage,
-                    "project_id": "project-test", "run_id": "run-test",
+                    "task_id": "project-test", "run_id": "run-test",
                 }))
         return orch, get_run, save_run
 
@@ -156,8 +156,8 @@ class TestRunPipeline(unittest.TestCase):
 
     def test_stage_failure_stops_pipeline(self) -> None:
         orch, _, _ = self._make_orchestrator({
-            "segment-script": {"ok": True, "command": "stage.run", "stage": "segment-script", "project_id": "p", "run_id": "r"},
-            "clone-voice": {"ok": False, "command": "stage.run", "stage": "clone-voice", "project_id": "p", "run_id": "r",
+            "segment-script": {"ok": True, "command": "stage.run", "stage": "segment-script", "task_id": "p", "run_id": "r"},
+            "clone-voice": {"ok": False, "command": "stage.run", "stage": "clone-voice", "task_id": "p", "run_id": "r",
                             "error": {"code": "TTS_FAILED", "message": "TTS failed", "retryable": True}},
         })
         result = orch.run_pipeline("project-test", "run-test", policy="auto")
@@ -179,12 +179,12 @@ class TestResumePipeline(unittest.TestCase):
         orch = PipelineOrchestrator(get_run=get_run, save_run=save_run, append_event=append_event)
         orch.register_stage("clone-voice", MagicMock(return_value={
             "ok": True, "command": "stage.run", "stage": "clone-voice",
-            "project_id": "project-test", "run_id": "run-test",
+            "task_id": "project-test", "run_id": "run-test",
         }))
         for stage in STAGE_ORDER[2:]:
             orch.register_stage(stage, MagicMock(return_value={
                 "ok": True, "command": "stage.run", "stage": stage,
-                "project_id": "project-test", "run_id": "run-test",
+                "task_id": "project-test", "run_id": "run-test",
             }))
 
         result = orch.resume_pipeline("project-test", "run-test")

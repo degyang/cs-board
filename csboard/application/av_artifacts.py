@@ -9,9 +9,9 @@ from csboard.domain.av_timing import UnitTiming, VoiceUnit
 from csboard.domain.enums import Engine
 
 
-def av_plan_document(project_id: str, run_id: str, units: tuple[VoiceUnit, ...], source_text: str, engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+def av_plan_document(task_id: str, run_id: str, units: tuple[VoiceUnit, ...], source_text: str, engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
     return {
-        **_metadata("av-plan", "planning.av-plan", project_id, run_id, "segment-script", engine),
+        **_metadata("av-plan", "planning.av-plan", task_id, run_id, "segment-script", engine),
         "source_text_sha256": _sha(source_text),
         "voice_units": [{
             "unit_id": unit.unit_id, "order": unit.order, "source_range": _range(unit.source_range), "text": unit.text,
@@ -20,9 +20,9 @@ def av_plan_document(project_id: str, run_id: str, units: tuple[VoiceUnit, ...],
     }
 
 
-def timeline_document(project_id: str, run_id: str, timings: tuple[UnitTiming, ...], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+def timeline_document(task_id: str, run_id: str, timings: tuple[UnitTiming, ...], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
     return {
-        **_metadata("timeline", "timing.timeline", project_id, run_id, "clone-voice", engine),
+        **_metadata("timeline", "timing.timeline", task_id, run_id, "clone-voice", engine),
         "units": [{
             "unit_id": item.unit_id, "duration_ms": item.duration_ms, "timing_source": item.timing_source.value,
             "alignment": item.alignment,
@@ -31,34 +31,34 @@ def timeline_document(project_id: str, run_id: str, timings: tuple[UnitTiming, .
     }
 
 
-def voice_manifest_document(project_id: str, run_id: str, voices: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
-    return {**_metadata("voice-manifest", "audio.voice-manifest", project_id, run_id, "clone-voice", engine), "voices": voices}
+def voice_manifest_document(task_id: str, run_id: str, voices: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+    return {**_metadata("voice-manifest", "audio.voice-manifest", task_id, run_id, "clone-voice", engine), "voices": voices}
 
 
-def storyboard_document(project_id: str, run_id: str, visuals: list[dict[str, Any]], bible: dict[str, Any], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+def storyboard_document(task_id: str, run_id: str, visuals: list[dict[str, Any]], bible: dict[str, Any], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
     return {
-        **_metadata("storyboard", "planning.storyboard", project_id, run_id, "plan-storyboard", engine),
+        **_metadata("storyboard", "planning.storyboard", task_id, run_id, "plan-storyboard", engine),
         "visual_bible": bible,
         "visuals": visuals,
     }
 
 
-def illustration_manifest_document(project_id: str, run_id: str, illustrations: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+def illustration_manifest_document(task_id: str, run_id: str, illustrations: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
     return {
-        **_metadata("illustration-manifest", "illustrations.manifest", project_id, run_id, "generate-illustrations", engine),
+        **_metadata("illustration-manifest", "illustrations.manifest", task_id, run_id, "generate-illustrations", engine),
         "illustrations": illustrations,
     }
 
 
-def render_manifest_document(project_id: str, run_id: str, clips: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
+def render_manifest_document(task_id: str, run_id: str, clips: list[dict[str, Any]], engine: Engine = Engine.WHITEBOARD) -> dict[str, Any]:
     return {
-        **_metadata("render-manifest", "render.manifest", project_id, run_id, "render-visuals", engine),
+        **_metadata("render-manifest", "render.manifest", task_id, run_id, "render-visuals", engine),
         "clips": clips,
     }
 
 
 def final_manifest_document(
-    project_id: str,
+    task_id: str,
     run_id: str,
     video_path: str,
     srt_path: str | None,
@@ -66,7 +66,7 @@ def final_manifest_document(
     engine: Engine = Engine.WHITEBOARD,
 ) -> dict[str, Any]:
     return {
-        **_metadata("final-manifest", "output.final-manifest", project_id, run_id, "compose-video", engine),
+        **_metadata("final-manifest", "output.final-manifest", task_id, run_id, "compose-video", engine),
         "video_path": video_path,
         "srt_path": srt_path,
         "validation": validation,
@@ -77,11 +77,11 @@ def json_bytes(value: dict[str, Any]) -> bytes:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
 
 
-def _metadata(artifact_type: str, artifact_key: str, project_id: str, run_id: str, stage: str, engine: Engine) -> dict[str, Any]:
+def _metadata(artifact_type: str, artifact_key: str, task_id: str, run_id: str, stage: str, engine: Engine) -> dict[str, Any]:
     return {
         "schema_version": 1, "artifact_type": artifact_type, "artifact_id": new_id("artifact"), "artifact_key": artifact_key,
-        "project_id": project_id, "run_id": run_id, "pipeline_id": "mountain-av-v1", "engine": engine.value,
-        "producer_stage": stage, "producer_version": "1.0.0", "created_at": utc_now(), "input_fingerprint": _sha(f"{project_id}:{run_id}:{artifact_key}"),
+        "task_id": task_id, "run_id": run_id, "pipeline_id": "mountain-av-v1", "engine": engine.value,
+        "producer_stage": stage, "producer_version": "1.0.0", "created_at": utc_now(), "input_fingerprint": _sha(f"{task_id}:{run_id}:{artifact_key}"),
     }
 
 
@@ -90,7 +90,7 @@ def _sha(value: str) -> str:
 
 
 def save_json_artifact(
-    project_id: str,
+    task_id: str,
     run_id: str,
     filename: str,
     data: dict[str, Any],
@@ -102,8 +102,8 @@ def save_json_artifact(
     """
     from pathlib import Path
 
-    project_dir = Path("projects") / project_id
-    run_dir = project_dir / "runs" / run_id
+    task_dir = Path("tasks") / task_id
+    run_dir = task_dir / "runs" / run_id
     artifacts_dir = run_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -123,12 +123,12 @@ def save_json_artifact(
     return artifact_key
 
 
-def read_manifest(project_id: str, run_id: str, filename: str) -> dict[str, Any]:
+def read_manifest(task_id: str, run_id: str, filename: str) -> dict[str, Any]:
     """Read a JSON manifest from the run's artifacts directory."""
     from pathlib import Path
 
-    project_dir = Path("projects") / project_id
-    run_dir = project_dir / "runs" / run_id
+    task_dir = Path("tasks") / task_id
+    run_dir = task_dir / "runs" / run_id
     artifacts_dir = run_dir / "artifacts"
 
     # Try direct filename first

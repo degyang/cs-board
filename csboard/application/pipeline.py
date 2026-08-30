@@ -27,7 +27,7 @@ STAGE_ORDER: list[str] = [
 ]
 
 # Type alias for stage executor functions.
-# Signature: (project_id, run_id, context) -> result dict
+# Signature: (task_id, run_id, context) -> result dict
 StageExecutor = Callable[[str, str, CommandContext], dict[str, Any]]
 
 
@@ -77,7 +77,7 @@ class PipelineOrchestrator:
 
     def run_pipeline(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         policy: str = "auto",
         target_stage: str | None = None,
@@ -87,7 +87,7 @@ class PipelineOrchestrator:
 
         Parameters
         ----------
-        project_id:
+        task_id:
             Project identifier.
         run_id:
             Run identifier.
@@ -104,7 +104,7 @@ class PipelineOrchestrator:
             raise DomainError("VALIDATION_ERROR", "targeted 策略需要 --stage 参数")
 
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        run = self.get_run(project_id, run_id)
+        run = self.get_run(task_id, run_id)
 
         # A targeted rerun still needs every stale/missing dependency.  Running
         # only the requested leaf would make artifacts internally inconsistent.
@@ -117,7 +117,7 @@ class PipelineOrchestrator:
             return {
                 "ok": True,
                 "command": "pipeline.run",
-                "project_id": project_id,
+                "task_id": task_id,
                 "run_id": run_id,
                 "trace_id": run.trace_id,
                 "command_id": context.command_id,
@@ -131,7 +131,7 @@ class PipelineOrchestrator:
         run.status = RunStatus.RUNNING
         self.save_run(run)
 
-        self.append_event(project_id, run_id, {
+        self.append_event(task_id, run_id, {
             "event_type": "PipelineStarted",
             "policy": policy,
             "target_stage": target_stage,
@@ -140,15 +140,15 @@ class PipelineOrchestrator:
 
         results: list[dict[str, Any]] = []
         for stage in pending:
-            result = self._execute_stage(project_id, run_id, stage, context)
+            result = self._execute_stage(task_id, run_id, stage, context)
             results.append(result)
 
             if not result.get("ok"):
                 # Stage failed — stop pipeline
-                run = self.get_run(project_id, run_id)
+                run = self.get_run(task_id, run_id)
                 run.status = RunStatus.FAILED
                 self.save_run(run)
-                self.append_event(project_id, run_id, {
+                self.append_event(task_id, run_id, {
                     "event_type": "PipelineFailed",
                     "failed_stage": stage,
                     "error": result.get("error"),
@@ -157,7 +157,7 @@ class PipelineOrchestrator:
 
             if policy == "gated":
                 # Gated: pause after first successful stage
-                self.append_event(project_id, run_id, {
+                self.append_event(task_id, run_id, {
                     "event_type": "PipelineGated",
                     "completed_stage": stage,
                     "next_stage": self._next_stage_after(stage),
@@ -165,10 +165,10 @@ class PipelineOrchestrator:
                 break
         else:
             # All stages completed
-            run = self.get_run(project_id, run_id)
+            run = self.get_run(task_id, run_id)
             run.status = RunStatus.SUCCEEDED
             self.save_run(run)
-            self.append_event(project_id, run_id, {
+            self.append_event(task_id, run_id, {
                 "event_type": "PipelineSucceeded",
                 "stages_executed": [r.get("stage") for r in results],
             })
@@ -178,7 +178,7 @@ class PipelineOrchestrator:
         return {
             "ok": all(r.get("ok") for r in results),
             "command": "pipeline.run",
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "trace_id": run.trace_id,
             "command_id": context.command_id,
@@ -190,20 +190,20 @@ class PipelineOrchestrator:
 
     def resume_pipeline(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         policy: str = "auto",
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Resume pipeline from the last successful stage."""
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        run = self.get_run(project_id, run_id)
+        run = self.get_run(task_id, run_id)
 
         if run.status == RunStatus.SUCCEEDED:
             return {
                 "ok": True,
                 "command": "pipeline.resume",
-                "project_id": project_id,
+                "task_id": task_id,
                 "run_id": run_id,
                 "trace_id": run.trace_id,
                 "command_id": context.command_id,
@@ -218,11 +218,11 @@ class PipelineOrchestrator:
             run.status = RunStatus.RUNNING
             self.save_run(run)
 
-        return self.run_pipeline(project_id, run_id, policy, context=context)
+        return self.run_pipeline(task_id, run_id, policy, context=context)
 
     def _execute_stage(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         stage: str,
         context: CommandContext,
@@ -233,7 +233,7 @@ class PipelineOrchestrator:
             return {
                 "ok": False,
                 "command": "stage.run",
-                "project_id": project_id,
+                "task_id": task_id,
                 "run_id": run_id,
                 "stage": stage,
                 "error": {
@@ -243,9 +243,9 @@ class PipelineOrchestrator:
                 },
             }
         try:
-            return executor(project_id, run_id, context)
+            return executor(task_id, run_id, context)
         except Exception as exc:
-            run = self.get_run(project_id, run_id)
+            run = self.get_run(task_id, run_id)
             state = run.stages.get(stage)
             run.stages[stage] = type(state)(StageStatus.FAILED, (state.attempt if state else 0) + 1) if state else None
             if run.stages.get(stage) is None:
@@ -258,7 +258,7 @@ class PipelineOrchestrator:
             return {
                 "ok": False,
                 "command": "stage.run",
-                "project_id": project_id,
+                "task_id": task_id,
                 "run_id": run_id,
                 "stage": stage,
                 "error": {

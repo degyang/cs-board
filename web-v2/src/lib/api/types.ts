@@ -150,12 +150,12 @@ export interface SecretOperationResponse {
   key: string
 }
 
-// ── Projects ────────────────────────────────────────────────────────────
-// GET /projects → { items: Project[] }
-// Project.to_dict() from dataclasses.asdict()
+// ── Tasks ────────────────────────────────────────────────────────────
+// GET /tasks → { items: Task[] }
+// Task.to_dict() from dataclasses.asdict()
 
-export interface Project {
-  project_id: string
+export interface Task {
+  task_id: string
   title: string
   pipeline_id: string
   engine: string
@@ -167,22 +167,22 @@ export interface Project {
   schema_version: number
 }
 
-export interface ProjectListResponse {
-  items: Project[]
+export interface TaskListResponse {
+  items: Task[]
 }
 
-// POST /projects → { ok, command, project_id, run_id, trace_id, command_id, event_sequence }
+// POST /tasks → { ok, command, task_id, run_id, trace_id, command_id, event_sequence }
 
-export interface CreateProjectRequest {
+export interface CreateTaskRequest {
   title: string
   engine?: string
   pipeline_id?: string
 }
 
-export interface CreateProjectResponse {
+export interface CreateTaskResponse {
   ok: boolean
   command: string
-  project_id: string
+  task_id: string
   run_id: string
   trace_id: string
   command_id: string
@@ -190,13 +190,13 @@ export interface CreateProjectResponse {
 }
 
 // ── Run ─────────────────────────────────────────────────────────────────
-// GET /projects/{id}/runs/{runId} → RunView
+// GET /tasks/{id}/runs/{runId} → RunView
 // Run.to_dict() + computed fields
 
 export interface RunDetail {
   schema_version: number
   run_id: string
-  project_id: string
+  task_id: string
   trace_id: string
   entrypoint: string
   command_ids: string[]
@@ -213,12 +213,12 @@ export interface StageState {
   attempt: number
 }
 
-// ── Project Detail ──────────────────────────────────────────────────────
-// GET /projects/{id} → _project_detail_view()
+// ── Task Detail ──────────────────────────────────────────────────────
+// GET /tasks/{id} → _project_detail_view()
 // { project, active_run, stages, warnings, artifacts, trace }
 
-export interface ProjectDetail {
-  project: Project
+export interface TaskDetail {
+  task: Task
   active_run: RunDetail | null
   stages: StageListItem[]
   warnings: unknown[]
@@ -238,7 +238,7 @@ export interface TraceInfo {
 }
 
 // ── Units ───────────────────────────────────────────────────────────────
-// GET /projects/{id}/runs/{runId}/units → { items }
+// GET /tasks/{id}/runs/{runId}/units → { items }
 // Merged from av-plan.json voice_units + timeline.json timings
 
 export interface Unit {
@@ -254,7 +254,7 @@ export interface UnitListResponse {
 }
 
 // ── Artifacts ───────────────────────────────────────────────────────────
-// GET /projects/{id}/runs/{runId}/artifacts → { items }
+// GET /tasks/{id}/runs/{runId}/artifacts → { items }
 
 export interface Artifact {
   artifact_key: string
@@ -270,7 +270,7 @@ export interface ArtifactListResponse {
 }
 
 // ── Events ──────────────────────────────────────────────────────────────
-// GET /projects/{id}/runs/{runId}/events?after=N → { items, next_cursor }
+// GET /tasks/{id}/runs/{runId}/events?after=N → { items, next_cursor }
 // Items are arbitrary event dicts from telemetry
 
 export interface EventsResponse {
@@ -279,7 +279,7 @@ export interface EventsResponse {
 }
 
 // ── Logs ────────────────────────────────────────────────────────────────
-// GET /projects/{id}/runs/{runId}/logs?level=&component=&stage= → { items }
+// GET /tasks/{id}/runs/{runId}/logs?level=&component=&stage= → { items }
 // Items are parsed JSONL log entries
 
 export interface LogsResponse {
@@ -287,14 +287,14 @@ export interface LogsResponse {
 }
 
 // ── Pipeline Run Response ───────────────────────────────────────────────
-// POST /projects/{id}/runs/{runId}/start
-// POST /projects/{id}/runs/{runId}/stages/{stage}/run
-// POST /projects/{id}/runs/{runId}/stages/{stage}/retry
+// POST /tasks/{id}/runs/{runId}/start
+// POST /tasks/{id}/runs/{runId}/stages/{stage}/run
+// POST /tasks/{id}/runs/{runId}/stages/{stage}/retry
 
 export interface PipelineRunResponse {
   ok: boolean
   command: string
-  project_id: string
+  task_id: string
   run_id: string
   trace_id: string
   command_id: string
@@ -309,7 +309,7 @@ export interface PipelineRunResponse {
 export interface PipelineStageResult {
   ok: boolean
   command: string
-  project_id: string
+  task_id: string
   run_id: string
   stage: string
   trace_id?: string
@@ -327,7 +327,7 @@ export interface PipelineStageResult {
 }
 
 // ── Cancel Run Response ─────────────────────────────────────────────────
-// POST /projects/{id}/runs/{runId}/cancel
+// POST /tasks/{id}/runs/{runId}/cancel
 
 export interface CancelRunResponse {
   ok: boolean
@@ -335,18 +335,18 @@ export interface CancelRunResponse {
 }
 
 // ── Save Inputs Response ────────────────────────────────────────────────
-// POST /projects/{id}/inputs (multipart/form-data)
+// POST /tasks/{id}/inputs (multipart/form-data)
 
 export interface SaveInputsResponse {
   ok: boolean
-  project_id: string
+  task_id: string
   input_saved: boolean
 }
 
-// GET /projects/{id}/inputs
+// GET /tasks/{id}/inputs
 
 export interface InputsReadback {
-  project_id: string
+  task_id: string
   saved: boolean
   inputs: {
     script: string

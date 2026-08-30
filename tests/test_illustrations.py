@@ -11,37 +11,37 @@ import unittest
 from pathlib import Path
 
 from csboard.adapters.fakes import FakeImageModel
-from csboard.adapters.filesystem import FilesystemProjectRepository, FilesystemArtifactStore
+from csboard.adapters.filesystem import FilesystemTaskRepository, FilesystemArtifactStore
 from csboard.application.av_artifacts import json_bytes, storyboard_document
 from csboard.application.context import new_id, utc_now
 from csboard.application.illustrations import IllustrationService
-from csboard.domain.enums import Engine, Entrypoint, ProjectStatus, RunStatus, StageStatus
-from csboard.domain.models import Project, Run, StageState
+from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
+from csboard.domain.models import Task, Run, StageState
 
 
-def _setup_project_with_storyboard(root: Path) -> tuple[str, str, FilesystemProjectRepository]:
+def _setup_project_with_storyboard(root: Path) -> tuple[str, str, FilesystemTaskRepository]:
     """Create a test project with storyboard artifact."""
-    repo = FilesystemProjectRepository(root)
-    project_id = new_id("project")
+    repo = FilesystemTaskRepository(root)
+    task_id = new_id("project")
     run_id = new_id("run")
 
     # Create project
-    project = Project(
-        project_id=project_id,
+    task = Task(
+        task_id=task_id,
         title="测试项目",
         pipeline_id="mountain-av-v1",
         engine=Engine.WHITEBOARD,
-        status=ProjectStatus.READY,
+        status=TaskStatus.READY,
         created_at=utc_now(),
         updated_at=utc_now(),
         active_run_id=run_id,
     )
-    repo.create_project(project)
+    repo.create_task(task)
 
     # Create run
     run = Run(
         run_id=run_id,
-        project_id=project_id,
+        task_id=task_id,
         trace_id=new_id("trace"),
         entrypoint=Entrypoint.CLI,
         command_ids=[new_id("command")],
@@ -84,14 +84,14 @@ def _setup_project_with_storyboard(root: Path) -> tuple[str, str, FilesystemProj
         "mood": "专业",
         "visual_metaphors": [],
     }
-    storyboard = storyboard_document(project_id, run_id, visuals, bible, Engine.WHITEBOARD)
+    storyboard = storyboard_document(task_id, run_id, visuals, bible, Engine.WHITEBOARD)
     store = FilesystemArtifactStore(repo)
     store.commit_bytes(
-        project_id, run_id, "planning.storyboard", "planning/storyboard.json",
+        task_id, run_id, "planning.storyboard", "planning/storyboard.json",
         json_bytes(storyboard), "plan-storyboard",
     )
 
-    return project_id, run_id, repo
+    return task_id, run_id, repo
 
 
 class TestIllustrationService(unittest.TestCase):
@@ -100,7 +100,7 @@ class TestIllustrationService(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.project_id, self.run_id, self.repo = _setup_project_with_storyboard(self.root)
+        self.task_id, self.run_id, self.repo = _setup_project_with_storyboard(self.root)
         self.image_model = FakeImageModel()
 
     def tearDown(self) -> None:
@@ -108,32 +108,32 @@ class TestIllustrationService(unittest.TestCase):
 
     def test_returns_illustrations(self) -> None:
         service = IllustrationService(self.image_model, self.repo)
-        result = service.run(self.project_id, self.run_id)
+        result = service.run(self.task_id, self.run_id)
         self.assertIn("illustrations", result)
 
     def test_image_count_matches(self) -> None:
         service = IllustrationService(self.image_model, self.repo)
-        result = service.run(self.project_id, self.run_id)
+        result = service.run(self.task_id, self.run_id)
         self.assertEqual(result["image_count"], 2)
 
     def test_artifact_committed(self) -> None:
         service = IllustrationService(self.image_model, self.repo)
-        result = service.run(self.project_id, self.run_id)
+        result = service.run(self.task_id, self.run_id)
         store = FilesystemArtifactStore(self.repo)
-        ref = store.get(self.project_id, self.run_id, "illustrations.manifest")
+        ref = store.get(self.task_id, self.run_id, "illustrations.manifest")
         self.assertIsNotNone(ref)
 
     def test_images_saved_to_disk(self) -> None:
         service = IllustrationService(self.image_model, self.repo)
-        result = service.run(self.project_id, self.run_id)
-        images_dir = Path(self.root) / "projects" / self.project_id / "runs" / self.run_id / "media" / "images"
+        result = service.run(self.task_id, self.run_id)
+        images_dir = Path(self.root) / "tasks" / self.task_id / "runs" / self.run_id / "media" / "images"
         self.assertTrue(images_dir.exists())
         png_files = list(images_dir.glob("*.png"))
         self.assertEqual(len(png_files), 2)
 
     def test_single_visual_retry(self) -> None:
         service = IllustrationService(self.image_model, self.repo)
-        result = service.run(self.project_id, self.run_id, visual_id="visual-001-01")
+        result = service.run(self.task_id, self.run_id, visual_id="visual-001-01")
         self.assertEqual(result["image_count"], 1)
         illustrations = result["illustrations"]["illustrations"]
         self.assertEqual(illustrations[0]["visual_id"], "visual-001-01")
@@ -141,25 +141,25 @@ class TestIllustrationService(unittest.TestCase):
     def test_missing_visual_id_raises(self) -> None:
         service = IllustrationService(self.image_model, self.repo)
         with self.assertRaises(ValueError):
-            service.run(self.project_id, self.run_id, visual_id="nonexistent")
+            service.run(self.task_id, self.run_id, visual_id="nonexistent")
 
     def test_missing_storyboard_raises(self) -> None:
         # Create a project without storyboard
-        project_id = new_id("project")
+        task_id = new_id("project")
         run_id = new_id("run")
-        project = Project(
-            project_id=project_id,
+        task = Task(
+            task_id=task_id,
             title="测试项目",
             pipeline_id="mountain-av-v1",
             engine=Engine.WHITEBOARD,
-            status=ProjectStatus.READY,
+            status=TaskStatus.READY,
             created_at=utc_now(),
             updated_at=utc_now(),
             active_run_id=run_id,
         )
-        self.repo.create_project(project)
+        self.repo.create_task(task)
         run = Run(
-            run_id=run_id, project_id=project_id, trace_id=new_id("trace"),
+            run_id=run_id, task_id=task_id, trace_id=new_id("trace"),
             entrypoint=Entrypoint.CLI, command_ids=[], status=RunStatus.RUNNING,
             target_stage="compose-video", started_at=utc_now(),
         )
@@ -167,7 +167,7 @@ class TestIllustrationService(unittest.TestCase):
 
         service = IllustrationService(self.image_model, self.repo)
         with self.assertRaises(ValueError):
-            service.run(project_id, run_id)
+            service.run(task_id, run_id)
 
 
 if __name__ == "__main__":

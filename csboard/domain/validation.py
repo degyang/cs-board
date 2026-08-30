@@ -20,4 +20,4 @@ def validate_relative_path(value: str) -> None:
         or re.match(r"^[a-zA-Z]:", value)
         or ".." in value.split("/")
     ):
-        raise DomainError("INVALID_ARTIFACT_PATH", "Artifact 路径必须是项目内相对路径")
+        raise DomainError("INVALID_ARTIFACT_PATH", "Artifact 路径必须是任务内相对路径")

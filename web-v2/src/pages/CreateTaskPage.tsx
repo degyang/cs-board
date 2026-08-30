@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { createProject } from '../lib/api/client'
+import { createTask } from '../lib/api/client'
 import { BackButton } from '../components/ui/BackButton'
 
-export function CreateProjectPage() {
+export function CreateTaskPage() {
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [script, setScript] = useState('')
@@ -20,8 +20,8 @@ export function CreateProjectPage() {
     setSubmitting(true)
     setError(null)
     try {
-      const res = await createProject({ title: title.trim(), engine })
-      navigate(`/projects/${res.project_id}`)
+      const res = await createTask({ title: title.trim(), engine })
+      navigate(`/tasks/${res.task_id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建失败')
     } finally {

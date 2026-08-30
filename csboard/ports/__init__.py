@@ -8,7 +8,7 @@ from csboard.ports.providers import (
     TextModelPort,
     TextToSpeechPort,
 )
-from csboard.ports.repositories import ArtifactStore, ProjectRepository
+from csboard.ports.repositories import ArtifactStore, TaskRepository
 from csboard.ports.telemetry import AuditSink, DiagnosticLogSink, DomainEventSink, Redactor
 
 __all__ = [
@@ -19,7 +19,7 @@ __all__ = [
     "DomainEventSink",
     "ImageModelPort",
     "MediaPort",
-    "ProjectRepository",
+    "TaskRepository",
     "Redactor",
     "RendererPort",
     "TextModelPort",

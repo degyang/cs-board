@@ -7,7 +7,7 @@
 4. Provider 失败→RunStatus=FAILED、StageStatus=FAILED、失败 telemetry、无伪媒体
 5. FFmpeg 验收→通过 CompositionService 生成 final.mp4，ffprobe 验证 audio+video stream
 6. API 验收→profile 配置、health availability、create→upload→start 同一 run_id
-7. CLI+API 相同 project/run 状态
+7. CLI+API 相同 task/run 状态
 8. secrets 不在 request/logs/diagnostics/responses 中
 """
 
@@ -116,9 +116,9 @@ class TestCleanCheckoutImports:
         assert PipelineOrchestrator is not None
 
     def test_import_domain_models(self):
-        from csboard.domain.models import Project, Run, StageState
-        from csboard.domain.enums import ProjectStatus, RunStatus, StageStatus
-        assert Project is not None
+        from csboard.domain.models import Task, Run, StageState
+        from csboard.domain.enums import TaskStatus, RunStatus, StageStatus
+        assert Task is not None
         assert Run is not None
         assert StageState is not None
 
@@ -147,12 +147,12 @@ class TestProviderFactorySoleEntry:
     def test_exec_clone_voice_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
         """clone-voice 阶段从 ProviderFactory 获取 tts、alignment、media adapter。"""
         # 创建项目
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
         # 写入 request.json（只包含制作输入，不包含 provider 配置）
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -173,7 +173,7 @@ class TestProviderFactorySoleEntry:
         # 但我们可以验证 provider_factory 的方法被调用了
         try:
             commands._exec_clone_voice(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -193,11 +193,11 @@ class TestProviderFactorySoleEntry:
 
     def test_exec_plan_storyboard_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
         """plan-storyboard 阶段从 ProviderFactory 获取 text_model adapter。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -210,7 +210,7 @@ class TestProviderFactorySoleEntry:
 
         try:
             commands._exec_plan_storyboard(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -220,11 +220,11 @@ class TestProviderFactorySoleEntry:
 
     def test_exec_generate_illustrations_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
         """generate-illustrations 阶段从 ProviderFactory 获取 image_model adapter。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -237,7 +237,7 @@ class TestProviderFactorySoleEntry:
 
         try:
             commands._exec_generate_illustrations(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -247,8 +247,8 @@ class TestProviderFactorySoleEntry:
 
     def test_exec_render_visuals_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
         """render-visuals 阶段从 ProviderFactory 获取 renderer adapter。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
         mock_factory = MagicMock()
@@ -258,7 +258,7 @@ class TestProviderFactorySoleEntry:
 
         try:
             commands._exec_render_visuals(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -268,8 +268,8 @@ class TestProviderFactorySoleEntry:
 
     def test_exec_compose_video_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
         """compose-video 阶段从 ProviderFactory 获取 media adapter。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
         mock_factory = MagicMock()
@@ -279,7 +279,7 @@ class TestProviderFactorySoleEntry:
 
         try:
             commands._exec_compose_video(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -309,11 +309,11 @@ class TestAdapterCallParams:
         self, commands: MountainCommands, tmp_data_dir: Path
     ):
         """text_model adapter 接收到 TextGenerationRequest 对象。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -329,7 +329,7 @@ class TestAdapterCallParams:
 
         try:
             commands._exec_plan_storyboard(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -345,11 +345,11 @@ class TestAdapterCallParams:
         self, commands: MountainCommands, tmp_data_dir: Path
     ):
         """image_model adapter 接收到 ImageGenerationRequest 对象。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -363,7 +363,7 @@ class TestAdapterCallParams:
 
         try:
             commands._exec_generate_illustrations(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -377,11 +377,11 @@ class TestAdapterCallParams:
 
     def test_tts_receives_tts_request(self, commands: MountainCommands, tmp_data_dir: Path):
         """tts adapter 接收到 TTSRequest 对象。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -400,7 +400,7 @@ class TestAdapterCallParams:
 
         try:
             commands._exec_clone_voice(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -414,8 +414,8 @@ class TestAdapterCallParams:
 
     def test_renderer_receives_render_request(self, commands: MountainCommands, tmp_data_dir: Path):
         """renderer adapter 接收到 RenderRequest 对象。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
         mock_renderer = MagicMock()
@@ -429,7 +429,7 @@ class TestAdapterCallParams:
 
         try:
             commands._exec_render_visuals(
-                project_id, run_id,
+                task_id, run_id,
                 CommandContext(entrypoint=Entrypoint.CLI),
             )
         except Exception:
@@ -451,11 +451,11 @@ class TestProviderFailure:
         self, commands: MountainCommands, tmp_data_dir: Path
     ):
         """text_model 失败时 RunStatus=FAILED，StageStatus=FAILED，有失败 telemetry。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -470,12 +470,12 @@ class TestProviderFailure:
 
         # 执行 pipeline（应该失败）
         try:
-            commands.pipeline_run(project_id, run_id, "targeted", "plan-storyboard")
+            commands.pipeline_run(task_id, run_id, "targeted", "plan-storyboard")
         except Exception:
             pass
 
         # 验证 Run 状态
-        run = commands.repository.get_run(project_id, run_id)
+        run = commands.repository.get_run(task_id, run_id)
         assert run.status in (RunStatus.FAILED, RunStatus.RUNNING)
 
         # 验证 Stage 状态
@@ -483,19 +483,19 @@ class TestProviderFailure:
             assert run.stages["plan-storyboard"].status in (StageStatus.FAILED, StageStatus.RUNNING)
 
         # 验证有失败 telemetry
-        events = commands.telemetry.read_events(project_id, run_id)
+        events = commands.telemetry.read_events(task_id, run_id)
         event_types = [e.get("event_type") for e in events]
-        assert "ProjectCreated" in event_types
+        assert "TaskCreated" in event_types
 
     def test_no_fake_media_files_on_failure(
         self, commands: MountainCommands, tmp_data_dir: Path
     ):
         """失败时不创建假的 WAV/PNG/MP4 文件。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -513,12 +513,12 @@ class TestProviderFailure:
 
         # 执行 pipeline
         try:
-            commands.pipeline_run(project_id, run_id, "auto")
+            commands.pipeline_run(task_id, run_id, "auto")
         except Exception:
             pass
 
         # 验证没有创建假媒体文件
-        run_dir = tmp_data_dir / "projects" / project_id / "runs" / run_id / "artifacts"
+        run_dir = tmp_data_dir / "tasks" / task_id / "runs" / run_id / "artifacts"
         if run_dir.exists():
             for f in run_dir.rglob("*"):
                 if f.is_file() and f.suffix in (".wav", ".png", ".mp4"):
@@ -538,33 +538,33 @@ class TestFFmpegComposition:
         """CompositionService.run() 生成的 MP4 文件可以通过 ffprobe 验证，artifact index 标记为 succeeded。"""
         from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
         from csboard.application.composition import CompositionService
-        from csboard.adapters.filesystem import FilesystemProjectRepository, FilesystemArtifactStore
-        from csboard.domain.models import Project, Run, StageState
-        from csboard.domain.enums import ProjectStatus, RunStatus, StageStatus, Entrypoint
+        from csboard.adapters.filesystem import FilesystemTaskRepository, FilesystemArtifactStore
+        from csboard.domain.models import Task, Run, StageState
+        from csboard.domain.enums import TaskStatus, RunStatus, StageStatus, Entrypoint
         from csboard.application.context import CommandContext, new_id, utc_now
 
         # 创建临时仓库
         data_dir = tmp_path / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
-        repository = FilesystemProjectRepository(data_dir)
+        repository = FilesystemTaskRepository(data_dir)
         artifacts = FilesystemArtifactStore(repository)
 
         # 创建项目和 run
-        project_id = new_id("project")
+        task_id = new_id("task")
         run_id = new_id("run")
-        project = Project(
-            project_id=project_id,
+        task = Task(
+            task_id=task_id,
             title="测试项目",
             pipeline_id="mountain-av-v1",
             engine=Engine.WHITEBOARD,
-            status=ProjectStatus.READY,
+            status=TaskStatus.READY,
             created_at=utc_now(),
             updated_at=utc_now(),
             active_run_id=run_id,
         )
         run = Run(
             run_id=run_id,
-            project_id=project_id,
+            task_id=task_id,
             trace_id=new_id("trace"),
             entrypoint=Entrypoint.CLI,
             command_ids=[],
@@ -572,10 +572,10 @@ class TestFFmpegComposition:
             target_stage="compose-video",
             started_at=utc_now(),
         )
-        repository.create_project(project)
+        repository.create_task(task)
         repository.create_run(run)
 
-        run_dir = repository.run_dir(project_id, run_id)
+        run_dir = repository.run_dir(task_id, run_id)
         artifacts_dir = run_dir / "artifacts"
 
         # 使用 FFmpeg 创建一个真实的视频片段
@@ -606,7 +606,7 @@ class TestFFmpegComposition:
             ],
         }
         artifacts.commit_bytes(
-            project_id, run_id, "render.manifest", "render/manifest.json",
+            task_id, run_id, "render.manifest", "render/manifest.json",
             json.dumps(render_manifest).encode("utf-8"), "render-visuals",
         )
 
@@ -625,7 +625,7 @@ class TestFFmpegComposition:
             ],
         }
         artifacts.commit_bytes(
-            project_id, run_id, "audio.voice-manifest", "audio/voice-manifest.json",
+            task_id, run_id, "audio.voice-manifest", "audio/voice-manifest.json",
             json.dumps(voice_manifest).encode("utf-8"), "clone-voice",
         )
 
@@ -640,7 +640,7 @@ class TestFFmpegComposition:
             ],
         }
         artifacts.commit_bytes(
-            project_id, run_id, "timing.timeline", "timing/timeline.json",
+            task_id, run_id, "timing.timeline", "timing/timeline.json",
             json.dumps(timeline_data).encode("utf-8"), "clone-voice",
         )
 
@@ -655,23 +655,23 @@ class TestFFmpegComposition:
             ],
         }
         artifacts.commit_bytes(
-            project_id, run_id, "planning.av-plan", "planning/av-plan.json",
+            task_id, run_id, "planning.av-plan", "planning/av-plan.json",
             json.dumps(av_plan).encode("utf-8"), "plan-storyboard",
         )
 
         # 通过 CompositionService.run() 合成最终视频
         media = FFmpegMediaAdapter()
         service = CompositionService(media=media, repository=repository)
-        result = service.run(project_id, run_id)
+        result = service.run(task_id, run_id)
 
         # 验证输出文件存在
         output_path = Path(result["output_path"])
         assert output_path.exists(), "CompositionService 未生成 final.mp4"
 
         # 验证 artifact index 中 final 成片为 succeeded
-        final_video_ref = artifacts.get(project_id, run_id, "output.final-video")
+        final_video_ref = artifacts.get(task_id, run_id, "output.final-video")
         assert final_video_ref is not None, "artifact index 中没有 output.final-video"
-        final_manifest_ref = artifacts.get(project_id, run_id, "output.final-manifest")
+        final_manifest_ref = artifacts.get(task_id, run_id, "output.final-manifest")
         assert final_manifest_ref is not None, "artifact index 中没有 output.final-manifest"
 
         # 使用 ffprobe 验证
@@ -775,9 +775,9 @@ class TestApiAcceptance:
     def test_create_upload_start_same_run_id(self, api_client: TestClient, tmp_data_dir: Path):
         """create→upload→start 使用同一 run_id。"""
         # 创建项目
-        response = api_client.post("/api/v1/projects", json={"title": "测试项目"})
+        response = api_client.post("/api/v1/tasks", json={"title": "测试项目"})
         assert response.status_code == 200
-        project_id = response.json()["project_id"]
+        task_id = response.json()["task_id"]
         run_id = response.json()["run_id"]
 
         # 上传输入
@@ -785,14 +785,14 @@ class TestApiAcceptance:
         ref_audio.write_bytes(b"RIFF" + b"\x00" * 1000)  # 足够大的假 WAV
         with open(ref_audio, "rb") as f:
             response = api_client.post(
-                f"/api/v1/projects/{project_id}/inputs",
+                f"/api/v1/tasks/{task_id}/inputs",
                 data={"script": "这是一段测试文案，用于验证上传功能是否正常工作。"},
                 files={"reference": ("test.wav", f, "audio/wav")},
             )
         assert response.status_code == 200
 
         # 验证 run_id 仍然存在
-        response = api_client.get(f"/api/v1/projects/{project_id}/runs/{run_id}")
+        response = api_client.get(f"/api/v1/tasks/{task_id}/runs/{run_id}")
         assert response.status_code == 200
         assert response.json()["run_id"] == run_id
 
@@ -801,8 +801,8 @@ class TestApiAcceptance:
     ):
         """start 在服务不可达时返回结构化 CAPABILITY_NOT_AVAILABLE。"""
         # 创建项目
-        response = api_client.post("/api/v1/projects", json={"title": "测试项目"})
-        project_id = response.json()["project_id"]
+        response = api_client.post("/api/v1/tasks", json={"title": "测试项目"})
+        task_id = response.json()["task_id"]
         run_id = response.json()["run_id"]
 
         # 上传输入
@@ -810,13 +810,13 @@ class TestApiAcceptance:
         ref_audio.write_bytes(b"RIFF" + b"\x00" * 1000)
         with open(ref_audio, "rb") as f:
             api_client.post(
-                f"/api/v1/projects/{project_id}/inputs",
+                f"/api/v1/tasks/{task_id}/inputs",
                 data={"script": "这是一段测试文案，用于验证上传功能是否正常工作。"},
                 files={"reference": ("test.wav", f, "audio/wav")},
             )
 
         # 启动运行（应该因为服务不可达而失败）
-        response = api_client.post(f"/api/v1/projects/{project_id}/runs/{run_id}/start")
+        response = api_client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
         # 如果服务不可达，应该返回 400
         if response.status_code == 400:
             data = response.json()
@@ -829,10 +829,10 @@ class TestApiAcceptance:
                     assert "details" in detail
 
 
-# ── 测试类别 7: CLI+API 相同 project/run 状态 ──────────────────────────
+# ── 测试类别 7: CLI+API 相同 task/run 状态 ──────────────────────────
 
 class TestCliApiConsistency:
-    """验证 CLI 和 API 读写相同的 project/run 状态。"""
+    """验证 CLI 和 API 读写相同的 task/run 状态。"""
 
     def test_cli_and_api_share_same_repository(
         self, tmp_data_dir: Path, api_client: TestClient
@@ -840,28 +840,28 @@ class TestCliApiConsistency:
         """CLI 和 API 共享同一个 repository。"""
         # 通过 CLI 创建项目
         commands = MountainCommands(root=tmp_data_dir)
-        result = commands.create_project("CLI 创建的项目")
-        project_id = result["project_id"]
+        result = commands.create_task("CLI 创建的任务")
+        task_id = result["task_id"]
 
         # 通过 API 读取项目
-        response = api_client.get(f"/api/v1/projects/{project_id}")
+        response = api_client.get(f"/api/v1/tasks/{task_id}")
         assert response.status_code == 200
         data = response.json()
-        assert data["project"]["title"] == "CLI 创建的项目"
+        assert data["task"]["title"] == "CLI 创建的任务"
 
     def test_api_and_cli_share_same_run_state(
         self, tmp_data_dir: Path, api_client: TestClient
     ):
         """API 和 CLI 共享同一个 run 状态。"""
         # 通过 API 创建项目
-        response = api_client.post("/api/v1/projects", json={"title": "API 创建的项目"})
-        project_id = response.json()["project_id"]
+        response = api_client.post("/api/v1/tasks", json={"title": "API 创建的项目"})
+        task_id = response.json()["task_id"]
         run_id = response.json()["run_id"]
 
         # 通过 CLI 读取 run 状态
         commands = MountainCommands(root=tmp_data_dir)
-        run = commands.repository.get_run(project_id, run_id)
-        assert run.project_id == project_id
+        run = commands.repository.get_run(task_id, run_id)
+        assert run.task_id == task_id
         assert run.run_id == run_id
 
 
@@ -874,11 +874,11 @@ class TestSecretsNotExposed:
         self, commands: MountainCommands, tmp_data_dir: Path
     ):
         """secrets 不会写入 request.json。"""
-        result = commands.create_project("测试项目")
-        project_id = result["project_id"]
+        result = commands.create_task("测试项目")
+        task_id = result["task_id"]
 
         # 写入 request.json（模拟上传输入）
-        request_path = tmp_data_dir / "projects" / project_id / "request.json"
+        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_data = {
             "script": "测试文案",
             "reference_audio": "/tmp/test.wav",

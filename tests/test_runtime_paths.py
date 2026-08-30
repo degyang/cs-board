@@ -21,7 +21,7 @@ class RuntimePathsTest(unittest.TestCase):
         self.assertEqual(paths.state_dir, self.root.resolve() / ".webapp")
         self.assertEqual(paths.jobs_dir, self.root.resolve() / ".webapp" / "jobs")
         self.assertEqual(paths.config_path, self.root.resolve() / ".webapp" / "config.json")
-        self.assertEqual(paths.projects_dir, self.root.resolve() / ".webapp" / "projects")
+        self.assertEqual(paths.tasks_dir, self.root.resolve() / ".webapp" / "tasks")
         self.assertEqual(paths.temp_dir, self.root.resolve() / ".webapp" / "tmp")
 
     def test_from_root_resolves_relative(self) -> None:
@@ -36,7 +36,7 @@ class RuntimePathsTest(unittest.TestCase):
         paths.ensure_dirs()
         self.assertTrue(paths.state_dir.is_dir())
         self.assertTrue(paths.jobs_dir.is_dir())
-        self.assertTrue(paths.projects_dir.is_dir())
+        self.assertTrue(paths.tasks_dir.is_dir())
         self.assertTrue(paths.temp_dir.is_dir())
 
     def test_ensure_dirs_idempotent(self) -> None:

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import json_bytes, illustration_manifest_document
 from csboard.domain.enums import Engine, StageStatus
@@ -33,7 +33,7 @@ class IllustrationService:
     """
 
     image_model: ImageModelPort
-    repository: FilesystemProjectRepository
+    repository: FilesystemTaskRepository
     artifacts: FilesystemArtifactStore = field(init=False)
     telemetry: JsonlTelemetry = field(init=False)
 
@@ -43,7 +43,7 @@ class IllustrationService:
 
     def run(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         engine: Engine = Engine.WHITEBOARD,
         visual_id: str | None = None,
@@ -52,7 +52,7 @@ class IllustrationService:
 
         Parameters
         ----------
-        project_id:
+        task_id:
             Project identifier.
         run_id:
             Run identifier.
@@ -66,7 +66,7 @@ class IllustrationService:
         dict with keys: illustrations, image_count
         """
         # Read storyboard
-        storyboard = self._read_artifact(project_id, run_id, "planning.storyboard")
+        storyboard = self._read_artifact(task_id, run_id, "planning.storyboard")
         if not storyboard:
             raise ValueError("请先运行 plan-storyboard 生成 storyboard")
 
@@ -78,23 +78,23 @@ class IllustrationService:
                 raise ValueError(f"Visual {visual_id} 不存在于 storyboard 中")
 
         # Generate images
-        run_dir = self.repository.run_dir(project_id, run_id)
+        run_dir = self.repository.run_dir(task_id, run_id)
         images_dir = run_dir / "media" / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
         illustrations: list[dict[str, Any]] = []
         for visual in visuals:
             illustration = self._generate_single(
-                project_id, run_id, visual, images_dir, engine
+                task_id, run_id, visual, images_dir, engine
             )
             illustrations.append(illustration)
 
         # Build manifest document
-        doc = illustration_manifest_document(project_id, run_id, illustrations, engine)
+        doc = illustration_manifest_document(task_id, run_id, illustrations, engine)
 
         # Commit artifact
         artifact = self.artifacts.commit_bytes(
-            project_id, run_id,
+            task_id, run_id,
             "illustrations.manifest",
             "planning/illustration-manifest.json",
             json_bytes(doc),
@@ -109,7 +109,7 @@ class IllustrationService:
 
     def _generate_single(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         visual: dict[str, Any],
         images_dir: Path,
@@ -154,12 +154,12 @@ class IllustrationService:
             "source_prompt": prompt[:200],  # Truncated for safety
         }
 
-    def _read_artifact(self, project_id: str, run_id: str, key: str) -> dict[str, Any] | None:
+    def _read_artifact(self, task_id: str, run_id: str, key: str) -> dict[str, Any] | None:
         """Read an artifact by key, returning parsed JSON or None."""
-        ref = self.artifacts.get(project_id, run_id, key)
+        ref = self.artifacts.get(task_id, run_id, key)
         if not ref:
             return None
-        path = self.repository.run_dir(project_id, run_id) / "artifacts" / ref["relative_path"]
+        path = self.repository.run_dir(task_id, run_id) / "artifacts" / ref["relative_path"]
         if not path.exists():
             return None
         return json.loads(path.read_text(encoding="utf-8"))

@@ -3,16 +3,16 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from csboard.domain.enums import Engine, Entrypoint, ProjectStatus, RunStatus, StageStatus
+from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
 
 
 @dataclass(slots=True)
-class Project:
-    project_id: str
+class Task:
+    task_id: str
     title: str
     pipeline_id: str
     engine: Engine
-    status: ProjectStatus
+    status: TaskStatus
     created_at: str
     updated_at: str
     active_run_id: str | None = None
@@ -23,13 +23,13 @@ class Project:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "Project":
+    def from_dict(cls, value: dict[str, Any]) -> "Task":
         return cls(
-            project_id=str(value["project_id"]),
+            task_id=str(value["task_id"]),
             title=str(value["title"]),
             pipeline_id=str(value["pipeline_id"]),
             engine=Engine(value["engine"]),
-            status=ProjectStatus(value["status"]),
+            status=TaskStatus(value["status"]),
             created_at=str(value["created_at"]),
             updated_at=str(value["updated_at"]),
             active_run_id=value.get("active_run_id"),
@@ -50,7 +50,7 @@ class StageState:
 @dataclass(slots=True)
 class Run:
     run_id: str
-    project_id: str
+    task_id: str
     trace_id: str
     entrypoint: Entrypoint
     command_ids: list[str]
@@ -66,7 +66,7 @@ class Run:
         return {
             "schema_version": self.schema_version,
             "run_id": self.run_id,
-            "project_id": self.project_id,
+            "task_id": self.task_id,
             "trace_id": self.trace_id,
             "entrypoint": self.entrypoint.value,
             "command_ids": self.command_ids,
@@ -86,7 +86,7 @@ class Run:
         }
         return cls(
             run_id=str(value["run_id"]),
-            project_id=str(value["project_id"]),
+            task_id=str(value["task_id"]),
             trace_id=str(value["trace_id"]),
             entrypoint=Entrypoint(value["entrypoint"]),
             command_ids=[str(item) for item in value["command_ids"]],

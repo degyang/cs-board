@@ -20,13 +20,13 @@ description: Compose final video with audio, subtitles and quality validation. U
 
 ```bash
 # 运行最终合成
-python -m cli.csboard stage run --project <id> --run <run-id> --stage compose-video --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage compose-video --json
 
 # 查看最终清单
-python -m cli.csboard artifact show --project <id> --run <run-id> --key output.final-manifest --json
+python -m cli.csboard artifact show --task <id> --run <run-id> --key output.final-manifest --json
 
 # 导出诊断包
-python -m cli.csboard diagnostics export --project <id> --run <run-id> --json
+python -m cli.csboard diagnostics export --task <id> --run <run-id> --json
 ```
 
 ## 输出格式

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from csboard.adapters.filesystem import FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import json_bytes
 from csboard.adapters.filesystem import FilesystemArtifactStore
@@ -22,13 +22,13 @@ from csboard.ports.providers import MediaPort
 
 
 def final_manifest_document(
-    project_id: str, run_id: str, timeline: dict[str, Any], render: dict[str, Any], duration_ms: int,
+    task_id: str, run_id: str, timeline: dict[str, Any], render: dict[str, Any], duration_ms: int,
 ) -> dict[str, Any]:
     """Compatibility validator used by the pre-existing contract test."""
     expected = sum(int(item.get("duration_ms", 0)) for item in timeline.get("units", []))
     actual = sum(int(item.get("duration_ms", 0)) for item in render.get("clips", []))
     return {
-        "project_id": project_id, "run_id": run_id, "duration_ms": duration_ms,
+        "task_id": task_id, "run_id": run_id, "duration_ms": duration_ms,
         "validation": {"passed": expected == actual == duration_ms, "expected_ms": expected, "actual_ms": actual},
     }
 
@@ -48,15 +48,15 @@ class CompositionService:
     media:
         MediaPort for FFmpeg operations (probe, concat, subtitle).
     repository:
-        Project repository for filesystem access.
+        Task repository for filesystem access.
     """
 
     media: MediaPort
-    repository: FilesystemProjectRepository
+    repository: FilesystemTaskRepository
 
     def run(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
     ) -> dict[str, Any]:
         """Execute composition stage.
@@ -66,28 +66,28 @@ class CompositionService:
         dict
             Result with ``artifact_key``, ``output_path``, ``duration_ms``.
         """
-        run_dir = self.repository.run_dir(project_id, run_id)
+        run_dir = self.repository.run_dir(task_id, run_id)
         artifacts_dir = run_dir / "artifacts"
         artifacts = FilesystemArtifactStore(self.repository)
 
         # Read by logical artifact key.  Producers own their physical layout;
         # consumers must never reconstruct paths from file names.
-        render_manifest = self._read_artifact(artifacts, project_id, run_id, "render.manifest")
+        render_manifest = self._read_artifact(artifacts, task_id, run_id, "render.manifest")
         if not render_manifest:
             raise ValueError("请先运行 render-visuals 生成 render.manifest")
         clips = render_manifest.get("clips", [])
         total_duration_ms = render_manifest.get("total_duration_ms", 0)
 
-        voice_manifest = self._read_artifact(artifacts, project_id, run_id, "audio.voice-manifest")
+        voice_manifest = self._read_artifact(artifacts, task_id, run_id, "audio.voice-manifest")
         voice_units = voice_manifest.get("voices", [])
         if not voice_units:
             raise ValueError("请先运行 clone-voice 生成 audio.voice-manifest")
 
-        timeline = self._read_artifact(artifacts, project_id, run_id, "timing.timeline")
+        timeline = self._read_artifact(artifacts, task_id, run_id, "timing.timeline")
         units = timeline.get("units", [])
         if not units:
             raise ValueError("请先运行 clone-voice 生成 timing.timeline")
-        av_plan = self._read_artifact(artifacts, project_id, run_id, "planning.av-plan")
+        av_plan = self._read_artifact(artifacts, task_id, run_id, "planning.av-plan")
         text_by_unit = {item.get("unit_id"): item.get("text", "") for item in av_plan.get("voice_units", [])}
         subtitle_units: list[dict[str, Any]] = []
         cursor_ms = 0
@@ -155,7 +155,7 @@ class CompositionService:
 
         # Build final manifest
         final_manifest = self._build_final_manifest(
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             clips=clips,
             voice_units=voice_units,
@@ -165,11 +165,11 @@ class CompositionService:
         )
 
         manifest_ref = artifacts.commit_bytes(
-            project_id, run_id, "output.final-manifest", "output/final-manifest.json",
+            task_id, run_id, "output.final-manifest", "output/final-manifest.json",
             json_bytes(final_manifest), "compose-video",
         )
         artifacts.commit_bytes(
-            project_id, run_id, "output.final-video", "output/final.mp4",
+            task_id, run_id, "output.final-video", "output/final.mp4",
             final_path.read_bytes(), "compose-video",
         )
 
@@ -217,7 +217,7 @@ class CompositionService:
 
     def _build_final_manifest(
         self,
-        project_id: str,
+        task_id: str,
         run_id: str,
         clips: list[dict[str, Any]],
         voice_units: list[dict[str, Any]],
@@ -228,7 +228,7 @@ class CompositionService:
         """Build the final output manifest."""
         return {
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "project_id": project_id,
+            "task_id": task_id,
             "run_id": run_id,
             "output": {
                 "video_path": final_path,
@@ -254,10 +254,10 @@ class CompositionService:
         }
 
     def _read_artifact(
-        self, artifacts: FilesystemArtifactStore, project_id: str, run_id: str, key: str,
+        self, artifacts: FilesystemArtifactStore, task_id: str, run_id: str, key: str,
     ) -> dict[str, Any]:
-        ref = artifacts.get(project_id, run_id, key)
+        ref = artifacts.get(task_id, run_id, key)
         if not ref:
             return {}
-        path = self.repository.run_dir(project_id, run_id) / "artifacts" / ref["relative_path"]
+        path = self.repository.run_dir(task_id, run_id) / "artifacts" / ref["relative_path"]
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}

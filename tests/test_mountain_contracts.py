@@ -9,10 +9,10 @@ from jsonschema import Draft202012Validator, FormatChecker, RefResolver
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas" / "mountain"
-FIXTURE_DIR = ROOT / "tests" / "fixtures" / "mountain-project"
+FIXTURE_DIR = ROOT / "tests" / "fixtures" / "mountain-task"
 
 SCHEMA_FIXTURES = {
-    "project.schema.json": "project.json",
+    "task.schema.json": "task.json",
     "run.schema.json": "run.json",
     "av-plan.schema.json": "av-plan.json",
     "voice-manifest.schema.json": "voice-manifest.json",

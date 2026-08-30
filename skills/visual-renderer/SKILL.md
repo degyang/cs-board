@@ -20,13 +20,13 @@ description: Render video clips for each Visual Item using the whiteboard render
 
 ```bash
 # 运行视觉渲染
-python -m cli.csboard stage run --project <id> --run <run-id> --stage render-visuals --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage render-visuals --json
 
 # 重试特定 Visual
-python -m cli.csboard stage retry --project <id> --run <run-id> --stage render-visuals --visual visual-003-01 --json
+python -m cli.csboard stage retry --task <id> --run <run-id> --stage render-visuals --visual visual-003-01 --json
 
 # 查看渲染清单
-python -m cli.csboard artifact show --project <id> --run <run-id> --key render.manifest --json
+python -m cli.csboard artifact show --task <id> --run <run-id> --key render.manifest --json
 ```
 
 ## 输出格式

@@ -22,13 +22,13 @@ description: Generate unit-level voice synthesis with Whisper alignment and fall
 
 ```bash
 # 运行语音克隆
-python -m cli.csboard stage run --project <id> --run <run-id> --stage clone-voice --reference /path/to/reference.wav --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice --reference /path/to/reference.wav --json
 
 # 重试特定 Unit
-python -m cli.csboard stage retry --project <id> --run <run-id> --stage clone-voice --unit unit-003 --json
+python -m cli.csboard stage retry --task <id> --run <run-id> --stage clone-voice --unit unit-003 --json
 
 # 使用自定义 TTS 服务
-python -m cli.csboard stage run --project <id> --run <run-id> --stage clone-voice --reference ref.wav --tts-url http://localhost:8080 --tts-mode fastapi --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice --reference ref.wav --tts-url http://localhost:8080 --tts-mode fastapi --json
 ```
 
 ## 输出格式

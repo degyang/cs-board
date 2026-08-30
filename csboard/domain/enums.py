@@ -15,7 +15,7 @@ class Entrypoint(StrEnum):
     SKILL = "skill"
 
 
-class ProjectStatus(StrEnum):
+class TaskStatus(StrEnum):
     DRAFT = "draft"
     READY = "ready"
     RUNNING = "running"

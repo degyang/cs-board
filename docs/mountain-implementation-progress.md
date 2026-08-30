@@ -84,25 +84,25 @@ All 13 docs + README were reviewed:
 
 | Deliverable | Status | File | Notes |
 |-------------|--------|------|-------|
-| `Project` model | DONE | `csboard/domain/models.py` | Full serialize/deserialize |
+| `Task` model | DONE | `csboard/domain/models.py` | Full serialize/deserialize |
 | `Run` model | DONE | `csboard/domain/models.py` | Includes stages, warnings, trace_id |
 | `StageState` model | DONE | `csboard/domain/models.py` | status + attempt |
 | `ArtifactRef` model | DONE | `csboard/domain/models.py` | key, path, hash, size, stage |
 | `Engine` enum | DONE | `csboard/domain/enums.py` | whiteboard, infographic-remotion |
 | `Entrypoint` enum | DONE | `csboard/domain/enums.py` | web, desktop, cli, skill |
-| `ProjectStatus` enum | DONE | `csboard/domain/enums.py` | draft/ready/running/succeeded/failed/cancelled |
+| `TaskStatus` enum | DONE | `csboard/domain/enums.py` | draft/ready/running/succeeded/failed/cancelled |
 | `RunStatus` enum | DONE | `csboard/domain/enums.py` | pending/running/succeeded/failed/cancelled |
 | `StageStatus` enum | DONE | `csboard/domain/enums.py` | Includes stale and skipped |
 | `TimingSource` enum | DONE | `csboard/domain/enums.py` | whisper, equal_fallback |
 | `DomainError` + subtypes | DONE | `csboard/domain/errors.py` | NotFoundError, InvalidStateTransition, InvalidArtifactPath |
 | State transition validation | DONE | `csboard/domain/validation.py` | Generic allowed-transitions check |
 | Relative path validation | DONE | `csboard/domain/validation.py` | Prevents path escape |
-| `FilesystemProjectRepository` | DONE | `csboard/adapters/filesystem/repository.py` | Atomic write, project-level lock, fsync |
+| `FilesystemTaskRepository` | DONE | `csboard/adapters/filesystem/repository.py` | Atomic write, project-level lock, fsync |
 | `FilesystemArtifactStore` | DONE | `csboard/adapters/filesystem/artifacts.py` | Atomic commit, downstream invalidation |
 | `JsonlTelemetry` | DONE | `csboard/adapters/observability/jsonl.py` | Event/Log/Audit append, cursor read, diagnostic bundle |
 | `DefaultRedactor` | DONE | `csboard/adapters/observability/redactor.py` | Secret field redaction, bearer, query, path |
 | `CommandContext` | DONE | `csboard/application/context.py` | entrypoint, command_id, actor, timestamp |
-| `ProjectRepository` port | DONE | `csboard/ports/repositories.py` | Protocol definition |
+| `TaskRepository` port | DONE | `csboard/ports/repositories.py` | Protocol definition |
 | `ArtifactStore` port | DONE | `csboard/ports/repositories.py` | Protocol definition |
 | `TextModelPort` | DONE | `csboard/ports/providers.py` | Protocol with `complete()` |
 | `ImageModelPort` | DONE | `csboard/ports/providers.py` | Protocol with `generate()` |
@@ -135,7 +135,7 @@ All 13 docs + README were reviewed:
 
 | Deliverable | Status | Evidence |
 |-------------|--------|----------|
-| `MountainCommands` | DONE | `csboard/application/commands.py` -- create_project, show_project, trace_run, list_events, list_logs, export_diagnostics, segment_script |
+| `MountainCommands` | DONE | `csboard/application/commands.py` -- create_task, show_project, trace_run, list_events, list_logs, export_diagnostics, segment_script |
 | Legacy bridge | DONE | `csboard/application/legacy_bridge.py` -- `LegacyJobBridge` syncs legacy jobs into Mountain records |
 | Legacy stage projection | DONE | `webapp/mountain_stages.py` -- `_project_legacy_stages()` maps legacy progress to 6 canonical stages |
 | Legacy pipeline submission | DONE | `webapp/mountain_stages.py` -- `submit_legacy_full_pipeline()` bridges to legacy API |
@@ -253,11 +253,11 @@ All 13 docs + README were reviewed:
 
 **Key observation:** M06 is now complete with all 6 stages implemented end-to-end. The pipeline orchestrator manages stage dependencies, and all adapters implement the required port protocols. 61 tests pass for M06 PR-2 related components.
 
-### M07: Project API, Vite WebUI & Diagnostics -- MINIMAL FUNCTIONAL
+### M07: Task API, Vite WebUI & Diagnostics -- MINIMAL FUNCTIONAL
 
 **What was delivered per docs:**
 - Pure React + Vite SPA hosted by FastAPI
-- Project/Run/Stage/Unit/Visual/Artifact/Capability API
+- Task/Run/Stage/Unit/Visual/Artifact/Capability API
 - `/create`, project list, workbench, settings, diagnostics pages
 - Event cursor, trace, log filtering, metrics, fallback labels, diagnostic bundle
 
@@ -268,13 +268,13 @@ All 13 docs + README were reviewed:
 | Vite + React SPA | DONE | `web-v2/` | Vite config, React, JSX |
 | FastAPI integration | DONE | `webapp/server.py:220` | `app.include_router(mountain_router(STATE_DIR))` |
 | `/api/mountain/capabilities` | DONE | `webapp/mountain_api.py:24-30` | Returns supported combos |
-| `POST /api/mountain/projects` | DONE | `webapp/mountain_api.py:32-37` | Create project |
-| `POST /api/mountain/projects/{id}/inputs` | DONE | `webapp/mountain_api.py:39-70` | Save script + reference audio |
-| `GET /api/mountain/projects` | DONE | `webapp/mountain_api.py:72-80` | List projects |
-| `GET /api/mountain/projects/{id}` | DONE | `webapp/mountain_api.py:82-106` | Detail with run, stages, artifacts, trace |
-| `GET /api/mountain/projects/{id}/runs/{id}/units` | DONE | `webapp/mountain_api.py:108-120` | Voice units with timing |
-| `GET /api/mountain/projects/{id}/runs/{id}/artifacts/{key}` | DONE | `webapp/mountain_api.py:122-134` | Download artifact |
-| `GET /api/mountain/projects/{id}/runs/{id}/events` | DONE | `webapp/mountain_api.py:136-142` | Event cursor read |
+| `POST /api/mountain/tasks` | DONE | `webapp/mountain_api.py:32-37` | Create project |
+| `POST /api/mountain/tasks/{id}/inputs` | DONE | `webapp/mountain_api.py:39-70` | Save script + reference audio |
+| `GET /api/mountain/tasks` | DONE | `webapp/mountain_api.py:72-80` | List projects |
+| `GET /api/mountain/tasks/{id}` | DONE | `webapp/mountain_api.py:82-106` | Detail with run, stages, artifacts, trace |
+| `GET /api/mountain/tasks/{id}/runs/{id}/units` | DONE | `webapp/mountain_api.py:108-120` | Voice units with timing |
+| `GET /api/mountain/tasks/{id}/runs/{id}/artifacts/{key}` | DONE | `webapp/mountain_api.py:122-134` | Download artifact |
+| `GET /api/mountain/tasks/{id}/runs/{id}/events` | DONE | `webapp/mountain_api.py:136-142` | Event cursor read |
 | `POST .../stages/segment-script` | DONE | `webapp/mountain_api.py:144-149` | Run segmentation |
 | `POST .../start` | DONE | `webapp/mountain_api.py:151-166` | Start full pipeline |
 | `POST .../stages/clone-voice` | DONE | `webapp/mountain_api.py:168-174` | Run voice cloning |
@@ -288,16 +288,16 @@ All 13 docs + README were reviewed:
 | `GET .../metrics` | DONE | `webapp/mountain_api.py:243-255` | Run metrics |
 | `GET .../health` | DONE | `webapp/mountain_api.py:257-270` | Service health |
 | `/create` page | DONE | `web-v2/src/main.jsx:19-34` | Form with script, audio, style |
-| `/projects` page | DONE | `web-v2/src/main.jsx:52` | List with status |
-| `/projects/:id` workbench | DONE | `web-v2/src/main.jsx:37-49` | Stage grid, units, artifacts, events, video player |
+| `/tasks` page | DONE | `web-v2/src/main.jsx:52` | List with status |
+| `/tasks/:id` workbench | DONE | `web-v2/src/main.jsx:37-49` | Stage grid, units, artifacts, events, video player |
 | `/settings` page | DONE | `web-v2/src/main.jsx:53` | API key, model config, TTS URL |
 | `/help` page | DONE | `web-v2/src/main.jsx:54` | Basic help text |
 | Client-side routing | DONE | `web-v2/src/main.jsx:14-16` | History API pushState |
 
 **Missing per M07 spec:**
-- No `/projects/:projectId/runs/:runId/diagnostics` page (route exists in API but no dedicated page)
+- No `/tasks/:projectId/runs/:runId/diagnostics` page (route exists in API but no dedicated page)
 - No SSE endpoint (`GET .../events?after=<cursor>` exists as polling, not SSE)
-- No `ProjectSummaryView`, `ProjectDetailView`, `RunView`, `StageDetailView` as typed API views
+- No `TaskSummaryView`, `TaskDetailView`, `RunView`, `StageDetailView` as typed API views
 - No `CapabilityView`, `ServiceHealthView`, `TraceView`, `LogEntryView`, `RunMetricsView` typed views
 - No Voice Unit / Visual Item detail views in the workbench
 - No artifact gallery with hash/version/status
@@ -334,10 +334,10 @@ The `capabilities` endpoint explicitly returns `supported: False` for these comb
 
 ### 3.1 Domain Models
 
-**Doc 02-target-architecture.md specifies:** `Project`, `Run`, `Stage`, `VoiceUnit`, `VisualItem`, `ArtifactRef` in `csboard/domain/models.py`
+**Doc 02-target-architecture.md specifies:** `Task`, `Run`, `Stage`, `VoiceUnit`, `VisualItem`, `ArtifactRef` in `csboard/domain/models.py`
 
 **Code has:**
-- `Project` (models.py) -- matches spec
+- `Task` (models.py) -- matches spec
 - `Run` (models.py) -- matches spec
 - `StageState` (models.py) -- status + attempt (matches)
 - `ArtifactRef` (models.py) -- matches spec
@@ -361,18 +361,18 @@ The `capabilities` endpoint explicitly returns `supported: False` for these comb
 
 **Doc 02 specifies:**
 ```
-create_project, run_pipeline, run_stage, retry_stage, invalidate_from,
-cancel_run, get_project, get_run_trace, list_projects
+create_task, run_pipeline, run_stage, retry_stage, invalidate_from,
+cancel_run, get_task, get_run_trace, list_projects
 ```
 
 **Code has:**
-- `create_project` -- DONE
+- `create_task` -- DONE
 - `run_pipeline` -- MISSING (stub in CLI)
 - `run_stage` -- PARTIAL (only `segment-script`)
 - `retry_stage` -- MISSING
 - `invalidate_from` -- DONE (in ArtifactStore, not in Commands)
 - `cancel_run` -- DONE (via legacy bridge)
-- `get_project` -- DONE (`show_project`)
+- `get_task` -- DONE (`show_project`)
 - `get_run_trace` -- DONE (`trace_run`)
 - `list_projects` -- MISSING from commands (exists in API router)
 
@@ -420,8 +420,8 @@ cancel_run, get_project, get_run_trace, list_projects
 | Spec Item | Status |
 |-----------|--------|
 | `/create` page | DONE (basic form) |
-| `/projects` page | DONE (basic list) |
-| `/projects/:projectId` workbench | DONE (basic stage grid + units) |
+| `/tasks` page | DONE (basic list) |
+| `/tasks/:projectId` workbench | DONE (basic stage grid + units) |
 | `/settings` page | DONE (model config) |
 | `/help` page | DONE (static text) |
 | Six-stage timeline | DONE (hardcoded in JSX) |

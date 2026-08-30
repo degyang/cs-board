@@ -11,11 +11,11 @@ from unittest.mock import MagicMock
 
 from csboard.adapters.fakes import FakeMedia
 from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
-from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemProjectRepository
+from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.composition import CompositionService
-from csboard.domain.enums import Entrypoint, ProjectStatus, RunStatus
-from csboard.domain.models import Project, Run
+from csboard.domain.enums import Entrypoint, TaskStatus, RunStatus
+from csboard.domain.models import Task, Run
 
 
 class TestCompositionServiceUnit(unittest.TestCase):
@@ -23,23 +23,23 @@ class TestCompositionServiceUnit(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
-        self.repo = FilesystemProjectRepository(self.tmpdir)
+        self.repo = FilesystemTaskRepository(self.tmpdir)
         self.media = FakeMedia()
 
         # Create project and run
-        self.project = Project(
-            project_id="proj-comp",
+        self.task = Task(
+            task_id="proj-comp",
             title="Composition Test",
             pipeline_id="mountain-av-v1",
             engine="whiteboard",
-            status=ProjectStatus.READY,
+            status=TaskStatus.READY,
             created_at="2025-01-01T00:00:00Z",
             updated_at="2025-01-01T00:00:00Z",
             active_run_id="run-comp",
         )
         self.run = Run(
             run_id="run-comp",
-            project_id="proj-comp",
+            task_id="proj-comp",
             trace_id="trace-comp",
             entrypoint=Entrypoint.CLI,
             command_ids=["cmd-1"],
@@ -47,7 +47,7 @@ class TestCompositionServiceUnit(unittest.TestCase):
             target_stage="compose-video",
             started_at="2025-01-01T00:00:00Z",
         )
-        self.repo.create_project(self.project)
+        self.repo.create_task(self.task)
         self.repo.create_run(self.run)
 
     def tearDown(self):
@@ -229,23 +229,23 @@ class TestCompositionServiceIntegration(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
-        self.repo = FilesystemProjectRepository(self.tmpdir)
+        self.repo = FilesystemTaskRepository(self.tmpdir)
         self.media = FakeMedia()
 
         # Create project and run
-        self.project = Project(
-            project_id="proj-int",
+        self.task = Task(
+            task_id="proj-int",
             title="Integration Test",
             pipeline_id="mountain-av-v1",
             engine="whiteboard",
-            status=ProjectStatus.READY,
+            status=TaskStatus.READY,
             created_at="2025-01-01T00:00:00Z",
             updated_at="2025-01-01T00:00:00Z",
             active_run_id="run-int",
         )
         self.run = Run(
             run_id="run-int",
-            project_id="proj-int",
+            task_id="proj-int",
             trace_id="trace-int",
             entrypoint=Entrypoint.CLI,
             command_ids=["cmd-1"],
@@ -253,7 +253,7 @@ class TestCompositionServiceIntegration(unittest.TestCase):
             target_stage="compose-video",
             started_at="2025-01-01T00:00:00Z",
         )
-        self.repo.create_project(self.project)
+        self.repo.create_task(self.task)
         self.repo.create_run(self.run)
 
     def tearDown(self):
@@ -336,12 +336,12 @@ class TestCompositionServiceFFmpegAcceptance(unittest.TestCase):
     def test_real_ffmpeg_produces_playable_audio_video(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            repo = FilesystemProjectRepository(root)
-            project = Project("proj-real", "real", "mountain-av-v1", "whiteboard", ProjectStatus.READY,
+            repo = FilesystemTaskRepository(root)
+            task = Task("proj-real", "real", "mountain-av-v1", "whiteboard", TaskStatus.READY,
                               "2025-01-01T00:00:00Z", "2025-01-01T00:00:00Z", "run-real")
             run = Run("run-real", "proj-real", "trace-real", Entrypoint.CLI, ["cmd-real"], RunStatus.RUNNING,
                       "compose-video", "2025-01-01T00:00:00Z")
-            repo.create_project(project)
+            repo.create_task(task)
             repo.create_run(run)
             run_dir = repo.run_dir("proj-real", "run-real")
             clip = run_dir / "render" / "clips" / "v-01.mp4"

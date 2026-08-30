@@ -50,8 +50,8 @@ function jsonResponse(body: unknown, status = 200) {
 // ── uploadInputs: FormData, no manual Content-Type ─────────────────────
 
 describe('HTTP contract: uploadInputs', () => {
-  it('sends POST to /projects/{id}/inputs with FormData body', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ ok: true, project_id: 'p1', input_saved: true }))
+  it('sends POST to /tasks/{id}/inputs with FormData body', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ ok: true, task_id: 'p1', input_saved: true }))
 
     const form = new FormData()
     form.set('script', 'test script')
@@ -63,13 +63,13 @@ describe('HTTP contract: uploadInputs', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/inputs')
+    expect(url).toContain('/api/v1/tasks/p1/inputs')
     expect(opts.method).toBe('POST')
     expect(opts.body).toBeInstanceOf(FormData)
   })
 
   it('does not set Content-Type header (browser auto-sets with boundary)', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ ok: true, project_id: 'p1', input_saved: true }))
+    mockFetch.mockResolvedValue(jsonResponse({ ok: true, task_id: 'p1', input_saved: true }))
 
     const form = new FormData()
     form.set('script', 'test')
@@ -81,8 +81,8 @@ describe('HTTP contract: uploadInputs', () => {
     expect(opts.headers).toBeUndefined()
   })
 
-  it('encodes projectId in URL path', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ ok: true, project_id: 'a/b', input_saved: true }))
+  it('encodes taskId in URL path', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ ok: true, task_id: 'a/b', input_saved: true }))
 
     const form = new FormData()
     form.set('script', 'test')
@@ -90,46 +90,46 @@ describe('HTTP contract: uploadInputs', () => {
     await uploadInputs('a/b', form)
 
     const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/a%2Fb/inputs')
+    expect(url).toContain('/api/v1/tasks/a%2Fb/inputs')
   })
 })
 
 // ── startRun / cancelRun / retryRun ────────────────────────────────────
 
 describe('HTTP contract: run actions', () => {
-  it('startRun sends POST to /projects/{id}/runs/{runId}/start', async () => {
+  it('startRun sends POST to /tasks/{id}/runs/{runId}/start', async () => {
     mockFetch.mockResolvedValue(jsonResponse({
-      ok: true, command: 'start', project_id: 'p1', run_id: 'r1',
+      ok: true, command: 'start', task_id: 'p1', run_id: 'r1',
       trace_id: 't1', command_id: 'c1',
     }))
 
     await startRun('p1', 'r1')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/start')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/start')
     expect(opts.method).toBe('POST')
   })
 
-  it('cancelRun sends POST to /projects/{id}/runs/{runId}/cancel', async () => {
+  it('cancelRun sends POST to /tasks/{id}/runs/{runId}/cancel', async () => {
     mockFetch.mockResolvedValue(jsonResponse({ ok: true, status: 'cancelled' }))
 
     await cancelRun('p1', 'r1')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/cancel')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/cancel')
     expect(opts.method).toBe('POST')
   })
 
-  it('retryRun sends POST to /projects/{id}/runs/{runId}/retry', async () => {
+  it('retryRun sends POST to /tasks/{id}/runs/{runId}/retry', async () => {
     mockFetch.mockResolvedValue(jsonResponse({
-      ok: true, command: 'retry', project_id: 'p1', run_id: 'r1',
+      ok: true, command: 'retry', task_id: 'p1', run_id: 'r1',
       trace_id: 't1', command_id: 'c1',
     }))
 
     await retryRun('p1', 'r1')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/retry')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/retry')
     expect(opts.method).toBe('POST')
   })
 })
@@ -137,35 +137,35 @@ describe('HTTP contract: run actions', () => {
 // ── runStage / retryStage ──────────────────────────────────────────────
 
 describe('HTTP contract: stage actions', () => {
-  it('runStage sends POST to /projects/{id}/runs/{runId}/stages/{stage}/run', async () => {
+  it('runStage sends POST to /tasks/{id}/runs/{runId}/stages/{stage}/run', async () => {
     mockFetch.mockResolvedValue(jsonResponse({
-      ok: true, command: 'run-stage', project_id: 'p1', run_id: 'r1',
+      ok: true, command: 'run-stage', task_id: 'p1', run_id: 'r1',
       trace_id: 't1', command_id: 'c1', stage: 'clone-voice',
     }))
 
     await runStage('p1', 'r1', 'clone-voice')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/stages/clone-voice/run')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/stages/clone-voice/run')
     expect(opts.method).toBe('POST')
   })
 
-  it('retryStage sends POST to /projects/{id}/runs/{runId}/stages/{stage}/retry', async () => {
+  it('retryStage sends POST to /tasks/{id}/runs/{runId}/stages/{stage}/retry', async () => {
     mockFetch.mockResolvedValue(jsonResponse({
-      ok: true, command: 'retry-stage', project_id: 'p1', run_id: 'r1',
+      ok: true, command: 'retry-stage', task_id: 'p1', run_id: 'r1',
       trace_id: 't1', command_id: 'c1', stage: 'render-visuals',
     }))
 
     await retryStage('p1', 'r1', 'render-visuals')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/stages/render-visuals/retry')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/stages/render-visuals/retry')
     expect(opts.method).toBe('POST')
   })
 
   it('encodes stage key in URL path', async () => {
     mockFetch.mockResolvedValue(jsonResponse({
-      ok: true, command: 'run-stage', project_id: 'p1', run_id: 'r1',
+      ok: true, command: 'run-stage', task_id: 'p1', run_id: 'r1',
       trace_id: 't1', command_id: 'c1', stage: 'segment-script',
     }))
 
@@ -179,13 +179,13 @@ describe('HTTP contract: stage actions', () => {
 // ── fetchEvents: cursor pagination ─────────────────────────────────────
 
 describe('HTTP contract: fetchEvents', () => {
-  it('sends GET to /projects/{id}/runs/{runId}/events', async () => {
+  it('sends GET to /tasks/{id}/runs/{runId}/events', async () => {
     mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: 0 }))
 
     await fetchEvents('p1', 'r1')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/events')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/events')
     expect(opts.method).toBeUndefined() // GET is default
   })
 
@@ -211,13 +211,13 @@ describe('HTTP contract: fetchEvents', () => {
 // ── fetchLogs: level/component/stage filters ───────────────────────────
 
 describe('HTTP contract: fetchLogs', () => {
-  it('sends GET to /projects/{id}/runs/{runId}/logs', async () => {
+  it('sends GET to /tasks/{id}/runs/{runId}/logs', async () => {
     mockFetch.mockResolvedValue(jsonResponse({ items: [] }))
 
     await fetchLogs('p1', 'r1')
 
     const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/projects/p1/runs/r1/logs')
+    expect(url).toContain('/api/v1/tasks/p1/runs/r1/logs')
   })
 
   it('appends level query param when filter provided', async () => {
@@ -262,9 +262,9 @@ describe('HTTP contract: fetchLogs', () => {
 // ── getFinalUrl ────────────────────────────────────────────────────────
 
 describe('HTTP contract: getFinalUrl', () => {
-  it('returns URL ending with /projects/{id}/runs/{runId}/final', () => {
+  it('returns URL ending with /tasks/{id}/runs/{runId}/final', () => {
     const url = getFinalUrl('p1', 'r1')
-    expect(url).toMatch(/\/api\/v1\/projects\/p1\/runs\/r1\/final$/)
+    expect(url).toMatch(/\/api\/v1\/tasks\/p1\/runs\/r1\/final$/)
   })
 
   it('encodes special characters in projectId', () => {

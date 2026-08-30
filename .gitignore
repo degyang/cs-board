@@ -28,7 +28,7 @@ video_renderer/dist/
 .npm-cache/
 .pip-cache/
 
-# Runtime media and local projects
+# Runtime media and local tasks
 assets/whiteboard/
 *.wav
 *.mp3

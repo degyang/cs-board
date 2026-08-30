@@ -39,22 +39,22 @@ class AvTimingTest(unittest.TestCase):
     def test_artifact_documents_keep_contract_identifiers_and_local_timing(self) -> None:
         source = "第一句话。第二句话。"
         units = segment_script(source)
-        plan = av_plan_document("project-1", "run-1", units, source)
+        plan = av_plan_document("task-1", "run-1", units, source)
         timing = time_voice_unit(units[0], 1000, None)
-        timeline = timeline_document("project-1", "run-1", (timing,))
+        timeline = timeline_document("task-1", "run-1", (timing,))
         self.assertEqual(plan["artifact_key"], "planning.av-plan")
         self.assertEqual(plan["voice_units"][0]["visual_items"][1]["source_range"]["start"], len("第一句话。"))
         self.assertEqual(timeline["units"][0]["timing_source"], "equal_fallback")
         self.assertEqual(timeline["units"][0]["visual_timings"][-1]["end_ms"], 1000)
-        self.assertEqual(voice_manifest_document("project-1", "run-1", [{"unit_id": "unit-001"}])["artifact_key"], "audio.voice-manifest")
+        self.assertEqual(voice_manifest_document("task-1", "run-1", [{"unit_id": "unit-001"}])["artifact_key"], "audio.voice-manifest")
 
     def test_generated_documents_validate_against_mountain_schemas(self) -> None:
         source = "第一句话。第二句话。"
         units = segment_script(source)
-        plan = av_plan_document("project-1", "run-1", units, source)
+        plan = av_plan_document("task-1", "run-1", units, source)
         timing = time_voice_unit(units[0], 1000, None)
-        timeline = timeline_document("project-1", "run-1", (timing,))
-        voice = voice_manifest_document("project-1", "run-1", [{"unit_id": "unit-001", "audio_path": "artifacts/media/voices/unit-001.wav", "sha256": "sha256:abcdef12", "duration_ms": 1000, "sample_rate": 24000, "channels": 1, "tts_profile": "test", "attempt": 1}])
+        timeline = timeline_document("task-1", "run-1", (timing,))
+        voice = voice_manifest_document("task-1", "run-1", [{"unit_id": "unit-001", "audio_path": "artifacts/media/voices/unit-001.wav", "sha256": "sha256:abcdef12", "duration_ms": 1000, "sample_rate": 24000, "channels": 1, "tts_profile": "test", "attempt": 1}])
         root = Path(__file__).resolve().parents[1] / "schemas" / "mountain"
         for name, document in (("av-plan.schema.json", plan), ("timeline.schema.json", timeline), ("voice-manifest.schema.json", voice)):
             self.assertEqual([], list(validator_for(root / name).iter_errors(document)), name)

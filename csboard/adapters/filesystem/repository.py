@@ -7,53 +7,53 @@ from pathlib import Path
 
 from csboard.application.context import utc_now
 from csboard.domain.errors import NotFoundError
-from csboard.domain.models import Project, Run
+from csboard.domain.models import Task, Run
 
 
-class FilesystemProjectRepository:
-    """Local project persistence with in-process project-level mutual exclusion."""
+class FilesystemTaskRepository:
+    """Local task persistence with in-process task-level mutual exclusion."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
 
-    def project_dir(self, project_id: str) -> Path:
-        return self.root / "projects" / project_id
+    def task_dir(self, task_id: str) -> Path:
+        return self.root / "tasks" / task_id
 
-    def run_dir(self, project_id: str, run_id: str) -> Path:
-        return self.project_dir(project_id) / "runs" / run_id
+    def run_dir(self, task_id: str, run_id: str) -> Path:
+        return self.task_dir(task_id) / "runs" / run_id
 
-    def project_lock(self, project_id: str) -> threading.RLock:
+    def task_lock(self, task_id: str) -> threading.RLock:
         with self._locks_guard:
-            return self._locks.setdefault(project_id, threading.RLock())
+            return self._locks.setdefault(task_id, threading.RLock())
 
-    def create_project(self, project: Project) -> None:
-        target = self.project_dir(project.project_id)
-        with self.project_lock(project.project_id):
+    def create_task(self, task: Task) -> None:
+        target = self.task_dir(task.task_id)
+        with self.task_lock(task.task_id):
             if target.exists():
-                raise FileExistsError(f"Project already exists: {project.project_id}")
+                raise FileExistsError(f"Task already exists: {task.task_id}")
             (target / "inputs").mkdir(parents=True)
-            self._write_json(target / "project.json", project.to_dict())
+            self._write_json(target / "task.json", task.to_dict())
 
-    def get_project(self, project_id: str) -> Project:
-        path = self.project_dir(project_id) / "project.json"
+    def get_task(self, task_id: str) -> Task:
+        path = self.task_dir(task_id) / "task.json"
         if not path.is_file():
-            raise NotFoundError("项目不存在")
-        return Project.from_dict(self._read_json(path))
+            raise NotFoundError("任务不存在")
+        return Task.from_dict(self._read_json(path))
 
-    def save_project(self, project: Project) -> None:
-        with self.project_lock(project.project_id):
-            current = self.get_project(project.project_id)
-            project.revision = current.revision + 1
-            project.updated_at = utc_now()
-            self._write_json(self.project_dir(project.project_id) / "project.json", project.to_dict())
+    def save_task(self, task: Task) -> None:
+        with self.task_lock(task.task_id):
+            current = self.get_task(task.task_id)
+            task.revision = current.revision + 1
+            task.updated_at = utc_now()
+            self._write_json(self.task_dir(task.task_id) / "task.json", task.to_dict())
 
     def create_run(self, run: Run) -> None:
-        target = self.run_dir(run.project_id, run.run_id)
-        with self.project_lock(run.project_id):
-            if not (self.project_dir(run.project_id) / "project.json").is_file():
-                raise NotFoundError("项目不存在")
+        target = self.run_dir(run.task_id, run.run_id)
+        with self.task_lock(run.task_id):
+            if not (self.task_dir(run.task_id) / "task.json").is_file():
+                raise NotFoundError("任务不存在")
             if target.exists():
                 raise FileExistsError(f"Run already exists: {run.run_id}")
             for child in ("artifacts", "media", "observability", "diagnostics"):
@@ -61,15 +61,15 @@ class FilesystemProjectRepository:
             self._write_json(target / "run.json", run.to_dict())
             self._write_json(target / "artifacts" / "index.json", {"schema_version": 1, "artifacts": {}})
 
-    def get_run(self, project_id: str, run_id: str) -> Run:
-        path = self.run_dir(project_id, run_id) / "run.json"
+    def get_run(self, task_id: str, run_id: str) -> Run:
+        path = self.run_dir(task_id, run_id) / "run.json"
         if not path.is_file():
             raise NotFoundError("运行记录不存在")
         return Run.from_dict(self._read_json(path))
 
     def save_run(self, run: Run) -> None:
-        with self.project_lock(run.project_id):
-            self._write_json(self.run_dir(run.project_id, run.run_id) / "run.json", run.to_dict())
+        with self.task_lock(run.task_id):
+            self._write_json(self.run_dir(run.task_id, run.run_id) / "run.json", run.to_dict())
 
     def read_json(self, path: Path) -> dict:
         return self._read_json(path)

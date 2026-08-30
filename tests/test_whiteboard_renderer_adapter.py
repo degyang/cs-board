@@ -78,8 +78,8 @@ class TestWhiteboardRendererAdapterRender(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             # Create project structure
-            project_dir = tmpdir / "projects" / "test-project"
-            run_dir = project_dir / "runs" / "test-run"
+            task_dir = tmpdir / "projects" / "test-project"
+            run_dir = task_dir / "runs" / "test-run"
             artifacts_dir = run_dir / "artifacts"
             output_dir = run_dir / "render"
             artifacts_dir.mkdir(parents=True)

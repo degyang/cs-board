@@ -11,13 +11,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { ProjectWorkbenchPage } from '../src/pages/ProjectWorkbenchPage'
+import { TaskWorkbenchPage } from '../src/pages/TaskWorkbenchPage'
 import { RunDiagnosticsPage } from '../src/pages/RunDiagnosticsPage'
 
 // ── Mock the API client ─────────────────────────────────────────────────
 
 vi.mock('../src/lib/api/client', () => ({
-  fetchProject: vi.fn(),
+  fetchTask: vi.fn(),
   fetchRun: vi.fn(),
   fetchCapabilities: vi.fn(),
   fetchUnits: vi.fn(),
@@ -34,12 +34,12 @@ vi.mock('../src/lib/api/client', () => ({
 }))
 
 import {
-  fetchProject, fetchRun, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
+  fetchTask, fetchRun, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
   startRun, cancelRun, retryRun, runStage, retryStage,
   uploadInputs, fetchInputs, getFinalUrl,
 } from '../src/lib/api/client'
 
-const mockFetchProject = vi.mocked(fetchProject)
+const mockFetchTask = vi.mocked(fetchTask)
 const mockFetchRun = vi.mocked(fetchRun)
 const mockFetchCapabilities = vi.mocked(fetchCapabilities)
 const mockFetchUnits = vi.mocked(fetchUnits)
@@ -56,10 +56,10 @@ const mockGetFinalUrl = vi.mocked(getFinalUrl)
 
 // ── Fixtures ────────────────────────────────────────────────────────────
 
-const RUNNING_PROJECT = {
-  project: {
-    project_id: 'proj-abc123def456',
-    title: '测试视频项目',
+const RUNNING_TASK = {
+  task: {
+    task_id: 'proj-abc123def456',
+    title: '测试视频任务',
     status: 'running',
     created_at: '2025-06-01T08:00:00Z',
     updated_at: '2025-06-01T08:05:00Z',
@@ -67,7 +67,7 @@ const RUNNING_PROJECT = {
   active_run: {
     run_id: 'run-xyz789abc123',
     trace_id: 'trace-aaa111bbb222',
-    project_id: 'proj-abc123def456',
+    task_id: 'proj-abc123def456',
     command: 'start',
     command_id: 'cmd-aaa111',
     status: 'running',
@@ -101,7 +101,7 @@ const RUNNING_PROJECT = {
   artifacts: [
     {
       artifact_key: 'segments',
-      relative_path: 'projects/proj-abc123def456/artifacts/segments.json',
+      relative_path: 'tasks/proj-abc123def456/artifacts/segments.json',
       status: 'succeeded',
       size_bytes: 2048,
       producer_stage: 'segment-script',
@@ -110,7 +110,7 @@ const RUNNING_PROJECT = {
     },
     {
       artifact_key: 'storyboard',
-      relative_path: 'projects/proj-abc123def456/artifacts/storyboard.json',
+      relative_path: 'tasks/proj-abc123def456/artifacts/storyboard.json',
       status: 'succeeded',
       size_bytes: 4096,
       producer_stage: 'plan-storyboard',
@@ -119,7 +119,7 @@ const RUNNING_PROJECT = {
     },
     {
       artifact_key: 'voice_001',
-      relative_path: 'projects/proj-abc123def456/artifacts/voice_001.wav',
+      relative_path: 'tasks/proj-abc123def456/artifacts/voice_001.wav',
       status: 'succeeded',
       size_bytes: 512000,
       producer_stage: 'clone-voice',
@@ -175,7 +175,7 @@ const CAPABILITIES_RESPONSE = {
     {
       name: 'clone-voice',
       required_providers: ['fish-speech'],
-      bound_project_id: 'proj-abc123def456',
+      bound_task_id: 'proj-abc123def456',
       requested_at: '2025-06-01T08:00:00Z',
       reason_code: null,
       message: null,
@@ -197,10 +197,10 @@ const CAPABILITIES_RESPONSE = {
   },
 }
 
-const NO_RUN_PROJECT = {
-  project: {
-    project_id: 'proj-abc123def456',
-    title: '测试视频项目',
+const NO_RUN_TASK = {
+  task: {
+    task_id: 'proj-abc123def456',
+    title: '测试视频任务',
     status: 'created',
     created_at: '2025-06-01T08:00:00Z',
     updated_at: '2025-06-01T08:00:00Z',
@@ -212,33 +212,33 @@ const NO_RUN_PROJECT = {
   warnings: [],
 }
 
-const PENDING_PROJECT = {
-  ...RUNNING_PROJECT,
+const PENDING_TASK = {
+  ...RUNNING_TASK,
   active_run: {
-    ...RUNNING_PROJECT.active_run,
+    ...RUNNING_TASK.active_run,
     status: 'pending',
     current_stage: null,
     progress: 0,
-    stages: RUNNING_PROJECT.active_run.stages.map((s) => ({ ...s, status: 'pending' })),
+    stages: RUNNING_TASK.active_run.stages.map((s) => ({ ...s, status: 'pending' })),
   },
-  stages: RUNNING_PROJECT.stages.map((s) => ({ ...s, status: 'pending' })),
+  stages: RUNNING_TASK.stages.map((s) => ({ ...s, status: 'pending' })),
 }
 
-const COMPLETED_PROJECT = {
-  ...RUNNING_PROJECT,
+const COMPLETED_TASK = {
+  ...RUNNING_TASK,
   active_run: {
-    ...RUNNING_PROJECT.active_run,
+    ...RUNNING_TASK.active_run,
     status: 'succeeded',
     finished_at: '2025-06-01T08:05:00Z',
     progress: 1,
     current_stage: null,
   },
-  stages: RUNNING_PROJECT.stages.map((s) => ({ ...s, status: 'succeeded' })),
+  stages: RUNNING_TASK.stages.map((s) => ({ ...s, status: 'succeeded' })),
   artifacts: [
-    ...RUNNING_PROJECT.artifacts,
+    ...RUNNING_TASK.artifacts,
     {
       artifact_key: 'final',
-      relative_path: 'projects/proj-abc123def456/artifacts/final.mp4',
+      relative_path: 'tasks/proj-abc123def456/artifacts/final.mp4',
       status: 'succeeded',
       size_bytes: 15_000_000,
       producer_stage: 'compose-video',
@@ -253,7 +253,7 @@ const CAPABILITY_UNAVAILABLE = {
     {
       name: 'clone-voice',
       required_providers: ['fish-speech'],
-      bound_project_id: null,
+      bound_task_id: null,
       requested_at: null,
       reason_code: 'CAPABILITY_NOT_AVAILABLE',
       message: 'Provider fish-speech not available',
@@ -275,10 +275,10 @@ const CAPABILITY_UNAVAILABLE = {
   },
 }
 
-const FAILED_PROJECT = {
-  ...RUNNING_PROJECT,
+const FAILED_TASK = {
+  ...RUNNING_TASK,
   active_run: {
-    ...RUNNING_PROJECT.active_run,
+    ...RUNNING_TASK.active_run,
     status: 'failed',
     finished_at: '2025-06-01T08:04:00Z',
     error: { code: 'GPU_TIMEOUT', message: 'GPU allocation timeout', retryable: true },
@@ -288,14 +288,14 @@ const FAILED_PROJECT = {
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 const UNSAVED_INPUTS = {
-  project_id: 'proj-abc123def456',
+  task_id: 'proj-abc123def456',
   saved: false,
   inputs: null,
   reference_audio: { uploaded: false, filename: null, content_type: null, size_bytes: null },
 }
 
 const SAVED_INPUTS = {
-  project_id: 'proj-abc123def456',
+  task_id: 'proj-abc123def456',
   saved: true,
   inputs: {
     script: '这是一段已保存的测试文案，包含多个句子用于验证回填功能。',
@@ -313,21 +313,21 @@ const SAVED_INPUTS = {
 }
 
 function setupDefaultMocks() {
-  mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
+  mockFetchTask.mockResolvedValue(RUNNING_TASK)
   mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
   mockFetchUnits.mockResolvedValue(UNITS_RESPONSE)
   mockFetchEvents.mockResolvedValue(EVENTS_RESPONSE)
   mockFetchLogs.mockResolvedValue(LOGS_RESPONSE)
   mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
-  mockGetFinalUrl.mockReturnValue('/api/v1/projects/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
+  mockGetFinalUrl.mockReturnValue('/api/v1/tasks/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
 }
 
-function renderWorkbench(initialPath = '/projects/proj-abc123def456') {
+function renderWorkbench(initialPath = '/tasks/proj-abc123def456') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
-        <Route path="/projects/:projectId" element={<ProjectWorkbenchPage />} />
-        <Route path="/projects/:projectId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
+        <Route path="/tasks/:taskId" element={<TaskWorkbenchPage />} />
+        <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
       </Routes>
     </MemoryRouter>
   )
@@ -341,15 +341,15 @@ describe('Workbench contract: active_run display', () => {
     setupDefaultMocks()
   })
 
-  it('shows project title', async () => {
+  it('shows task title', async () => {
     renderWorkbench()
-    await screen.findByText('测试视频项目')
-    expect(screen.getByText('测试视频项目')).toBeDefined()
+    await screen.findByText('测试视频任务')
+    expect(screen.getByText('测试视频任务')).toBeDefined()
   })
 
   it('shows run status badge', async () => {
     renderWorkbench()
-    await screen.findByText('测试视频项目')
+    await screen.findByText('测试视频任务')
     const badges = screen.getAllByText(/运行中|running/)
     expect(badges.length).toBeGreaterThan(0)
   })
@@ -362,7 +362,7 @@ describe('Workbench contract: active_run display', () => {
 
   it('shows creation timestamp', async () => {
     renderWorkbench()
-    await screen.findByText('测试视频项目')
+    await screen.findByText('测试视频任务')
     expect(screen.getByText(/创建于/)).toBeDefined()
   })
 })
@@ -509,7 +509,7 @@ describe('Workbench contract: events & logs', () => {
 describe('Workbench contract: empty state (no run)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(NO_RUN_PROJECT)
+    mockFetchTask.mockResolvedValue(NO_RUN_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
@@ -523,25 +523,25 @@ describe('Workbench contract: empty state (no run)', () => {
     expect(screen.getByText('任务尚未启动运行')).toBeDefined()
   })
 
-  it('shows project title even without run', async () => {
+  it('shows task title even without run', async () => {
     renderWorkbench()
-    await screen.findByText('测试视频项目')
-    expect(screen.getByText('测试视频项目')).toBeDefined()
+    await screen.findByText('测试视频任务')
+    expect(screen.getByText('测试视频任务')).toBeDefined()
   })
 
-  it('shows project trace when available', async () => {
-    // NO_RUN_PROJECT has no trace — check no trace chip
+  it('shows task trace when available', async () => {
+    // NO_RUN_TASK has no trace — check no trace chip
     renderWorkbench()
-    await screen.findByText('测试视频项目')
-    // Only project id chip should be present
-    expect(screen.getByText(/project:/)).toBeDefined()
+    await screen.findByText('测试视频任务')
+    // Only task id chip should be present
+    expect(screen.getByText(/task:/)).toBeDefined()
   })
 })
 
 describe('Workbench contract: run not found', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockRejectedValue(new Error('API error: 404 Not Found'))
+    mockFetchTask.mockRejectedValue(new Error('API error: 404 Not Found'))
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
@@ -572,19 +572,19 @@ describe('Workbench contract: getFinalUrl', () => {
   it('returns correct download path', () => {
     mockGetFinalUrl('proj-abc123def456', 'run-xyz789abc123')
     expect(mockGetFinalUrl).toHaveBeenCalledWith('proj-abc123def456', 'run-xyz789abc123')
-    expect(mockGetFinalUrl).toHaveReturnedWith('/api/v1/projects/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
+    expect(mockGetFinalUrl).toHaveReturnedWith('/api/v1/tasks/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
   })
 })
 
 describe('Workbench contract: finished_at display', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(COMPLETED_PROJECT)
+    mockFetchTask.mockResolvedValue(COMPLETED_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue(UNITS_RESPONSE)
     mockFetchEvents.mockResolvedValue(EVENTS_RESPONSE)
     mockFetchLogs.mockResolvedValue(LOGS_RESPONSE)
-    mockGetFinalUrl.mockReturnValue('/api/v1/projects/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
+    mockGetFinalUrl.mockReturnValue('/api/v1/tasks/proj-abc123def456/runs/run-xyz789abc123/artifacts/final.mp4')
   })
 
   it('shows final.mp4 artifact', async () => {
@@ -612,14 +612,14 @@ describe('Workbench contract: diagnostics link', () => {
     renderWorkbench()
     await screen.findByText('诊断')
     const link = screen.getByText('诊断')
-    expect(link.getAttribute('href')).toBe('/projects/proj-abc123def456/runs/run-xyz789abc123/diagnostics')
+    expect(link.getAttribute('href')).toBe('/tasks/proj-abc123def456/runs/run-xyz789abc123/diagnostics')
   })
 })
 
 describe('Workbench contract: capability warning', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(PENDING_PROJECT)
+    mockFetchTask.mockResolvedValue(PENDING_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITY_UNAVAILABLE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
@@ -656,7 +656,7 @@ describe('Workbench contract: capability warning', () => {
 describe('Workbench contract: Start button disabled', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(PENDING_PROJECT)
+    mockFetchTask.mockResolvedValue(PENDING_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
@@ -690,13 +690,13 @@ describe('Workbench contract: Start button disabled', () => {
 describe('Workbench contract: uploadInputs FormData', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(PENDING_PROJECT)
+    mockFetchTask.mockResolvedValue(PENDING_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })
     mockFetchLogs.mockResolvedValue({ items: [] })
     mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
-    mockUploadInputs.mockResolvedValue({ ok: true, project_id: 'proj-abc123def456', input_saved: true })
+    mockUploadInputs.mockResolvedValue({ ok: true, task_id: 'proj-abc123def456', input_saved: true })
   })
 
   it('calls uploadInputs with FormData when saved audio exists', async () => {
@@ -716,8 +716,8 @@ describe('Workbench contract: uploadInputs FormData', () => {
 
     await waitFor(() => {
       expect(mockUploadInputs).toHaveBeenCalled()
-      const [projectId, formData] = mockUploadInputs.mock.calls[0]
-      expect(projectId).toBe('proj-abc123def456')
+      const [taskId, formData] = mockUploadInputs.mock.calls[0]
+      expect(taskId).toBe('proj-abc123def456')
       expect(formData).toBeInstanceOf(FormData)
     })
   })
@@ -774,14 +774,14 @@ describe('Workbench contract: cancel & retry run', () => {
   })
 
   it('shows Cancel button when running', async () => {
-    mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
+    mockFetchTask.mockResolvedValue(RUNNING_TASK)
     renderWorkbench()
     await screen.findByText('取消')
     expect(screen.getByText('取消')).toBeDefined()
   })
 
   it('calls cancelRun on Cancel click', async () => {
-    mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
+    mockFetchTask.mockResolvedValue(RUNNING_TASK)
     mockCancelRun.mockResolvedValue({ ok: true, status: 'cancelled' })
     renderWorkbench()
     await screen.findByText('取消')
@@ -792,16 +792,16 @@ describe('Workbench contract: cancel & retry run', () => {
   })
 
   it('shows Retry button when failed', async () => {
-    mockFetchProject.mockResolvedValue(FAILED_PROJECT)
+    mockFetchTask.mockResolvedValue(FAILED_TASK)
     renderWorkbench()
     await screen.findByText('重试')
     expect(screen.getByText('重试')).toBeDefined()
   })
 
   it('calls retryRun on Retry click', async () => {
-    mockFetchProject.mockResolvedValue(FAILED_PROJECT)
+    mockFetchTask.mockResolvedValue(FAILED_TASK)
     mockRetryRun.mockResolvedValue({
-      ok: true, command: 'retry', project_id: 'proj-abc123def456',
+      ok: true, command: 'retry', task_id: 'proj-abc123def456',
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-retry-1',
     })
     renderWorkbench()
@@ -816,7 +816,7 @@ describe('Workbench contract: cancel & retry run', () => {
 describe('Workbench contract: stage run/retry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
+    mockFetchTask.mockResolvedValue(RUNNING_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue(EVENTS_RESPONSE)
@@ -825,7 +825,7 @@ describe('Workbench contract: stage run/retry', () => {
 
   it('calls runStage for pending stage', async () => {
     mockRunStage.mockResolvedValue({
-      ok: true, command: 'run-stage', project_id: 'proj-abc123def456',
+      ok: true, command: 'run-stage', task_id: 'proj-abc123def456',
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-stage-1',
     })
     renderWorkbench()
@@ -838,14 +838,14 @@ describe('Workbench contract: stage run/retry', () => {
 
   it('calls retryStage for failed stage', async () => {
     const withFailedStage = {
-      ...RUNNING_PROJECT,
-      stages: RUNNING_PROJECT.stages.map((s) =>
+      ...RUNNING_TASK,
+      stages: RUNNING_TASK.stages.map((s) =>
         s.stage === 'render-visuals' ? { ...s, status: 'failed' } : s
       ),
     }
-    mockFetchProject.mockResolvedValue(withFailedStage)
+    mockFetchTask.mockResolvedValue(withFailedStage)
     mockRetryStage.mockResolvedValue({
-      ok: true, command: 'retry-stage', project_id: 'proj-abc123def456',
+      ok: true, command: 'retry-stage', task_id: 'proj-abc123def456',
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-retry-stage-1',
     })
     renderWorkbench()
@@ -860,7 +860,7 @@ describe('Workbench contract: stage run/retry', () => {
 describe('Workbench contract: log filters', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
+    mockFetchTask.mockResolvedValue(RUNNING_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue(UNITS_RESPONSE)
     mockFetchEvents.mockResolvedValue(EVENTS_RESPONSE)
@@ -879,11 +879,11 @@ describe('Workbench contract: log filters', () => {
 describe('Diagnostics contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(RUNNING_PROJECT)
+    mockFetchTask.mockResolvedValue(RUNNING_TASK)
     mockFetchRun.mockResolvedValue({
       run_id: 'run-xyz789abc123',
       trace_id: 'trace-aaa111bbb222',
-      project_id: 'proj-abc123def456',
+      task_id: 'proj-abc123def456',
       command: 'start',
       command_id: 'cmd-aaa111',
       status: 'running',
@@ -910,9 +910,9 @@ describe('Diagnostics contract', () => {
 
   it('renders diagnostics page with stages', async () => {
     render(
-      <MemoryRouter initialEntries={['/projects/proj-abc123def456/runs/run-xyz789abc123/diagnostics']}>
+      <MemoryRouter initialEntries={['/tasks/proj-abc123def456/runs/run-xyz789abc123/diagnostics']}>
         <Routes>
-          <Route path="/projects/:projectId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
+          <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -924,7 +924,7 @@ describe('Diagnostics contract', () => {
 describe('Workbench contract: inputs readback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockFetchProject.mockResolvedValue(PENDING_PROJECT)
+    mockFetchTask.mockResolvedValue(PENDING_TASK)
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
     mockFetchUnits.mockResolvedValue({ items: [] })
     mockFetchEvents.mockResolvedValue({ items: [], next_cursor: 0 })

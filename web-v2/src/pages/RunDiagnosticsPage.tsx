@@ -7,25 +7,25 @@ import { BackButton } from '../components/ui/BackButton'
 import { CopyButton } from '../components/ui/CopyButton'
 
 export function RunDiagnosticsPage() {
-  const { projectId, runId } = useParams<{ projectId: string; runId: string }>()
+  const { taskId, runId } = useParams<{ taskId: string; runId: string }>()
 
   const runLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve(null)
-    return fetchRun(projectId, runId)
-  }, [projectId, runId])
-  const { data: run, loading, error } = useAsync(runLoader, [projectId, runId])
+    if (!taskId || !runId) return Promise.resolve(null)
+    return fetchRun(taskId, runId)
+  }, [taskId, runId])
+  const { data: run, loading, error } = useAsync(runLoader, [taskId, runId])
 
   const eventsLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [], next_cursor: 0 })
-    return fetchEvents(projectId, runId)
-  }, [projectId, runId])
-  const { data: eventsData } = useAsync(eventsLoader, [projectId, runId], 10_000)
+    if (!taskId || !runId) return Promise.resolve({ items: [], next_cursor: 0 })
+    return fetchEvents(taskId, runId)
+  }, [taskId, runId])
+  const { data: eventsData } = useAsync(eventsLoader, [taskId, runId], 10_000)
 
   const logsLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [] })
-    return fetchLogs(projectId, runId)
-  }, [projectId, runId])
-  const { data: logsData } = useAsync(logsLoader, [projectId, runId], 10_000)
+    if (!taskId || !runId) return Promise.resolve({ items: [] })
+    return fetchLogs(taskId, runId)
+  }, [taskId, runId])
+  const { data: logsData } = useAsync(logsLoader, [taskId, runId], 10_000)
 
   const events = eventsData?.items ?? []
   const logs = logsData?.items ?? []
@@ -45,7 +45,7 @@ export function RunDiagnosticsPage() {
   if (error) {
     return (
       <div className="page">
-        <BackButton to={projectId ? `/projects/${projectId}` : '/'} label="返回工作台" />
+        <BackButton to={taskId ? `/tasks/${taskId}` : '/'} label="返回工作台" />
         <div className="error-card"><span className="code">加载失败</span><p className="sug">{error}</p></div>
       </div>
     )
@@ -54,7 +54,7 @@ export function RunDiagnosticsPage() {
   if (!run) {
     return (
       <div className="page">
-        <BackButton to={projectId ? `/projects/${projectId}` : '/'} label="返回工作台" />
+        <BackButton to={taskId ? `/tasks/${taskId}` : '/'} label="返回工作台" />
         <div className="empty-state">
           <div className="empty-illu">🔍</div>
           <div className="empty-title">运行不存在</div>
@@ -66,7 +66,7 @@ export function RunDiagnosticsPage() {
 
   return (
     <div className="page">
-      <BackButton to={projectId ? `/projects/${projectId}` : '/'} label="返回工作台" />
+      <BackButton to={taskId ? `/tasks/${taskId}` : '/'} label="返回工作台" />
 
       <div className="page-head">
         <h1 className="page-title">运行诊断</h1>

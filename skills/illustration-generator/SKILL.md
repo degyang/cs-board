@@ -20,13 +20,13 @@ description: Generate illustrations for each Visual Item based on the storyboard
 
 ```bash
 # 运行插画生成
-python -m cli.csboard stage run --project <id> --run <run-id> --stage generate-illustrations --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage generate-illustrations --json
 
 # 重试特定 Visual
-python -m cli.csboard stage retry --project <id> --run <run-id> --stage generate-illustrations --visual visual-003-01 --json
+python -m cli.csboard stage retry --task <id> --run <run-id> --stage generate-illustrations --visual visual-003-01 --json
 
 # 查看插画清单
-python -m cli.csboard artifact show --project <id> --run <run-id> --key illustrations.manifest --json
+python -m cli.csboard artifact show --task <id> --run <run-id> --key illustrations.manifest --json
 ```
 
 ## 输出格式
