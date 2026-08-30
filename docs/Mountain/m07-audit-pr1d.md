@@ -31,8 +31,14 @@
 - **修正**: `store.delete()` 返回 `None`（非 `True`），增加 `mask_secret` 边界断言
 
 ### 新增: test_provider_dto_contract_no_deprecated_status_field
-- 对 `/api/v1/providers`、`/health`、`/capabilities` 三个端点断言 Provider 字段不包含已淘汰的 `status` 字段
-- 断言当前契约字段结构（`config_status`、`availability`）
+- 提取 `_assert_availability_contract(av)` helper，统一断言每个 Provider availability：
+  - `"status" not in av`（不包含已淘汰字段）
+  - `available` 是 bool，`component` 是 str
+  - `error_code` 与 `suggestion` 字段存在
+- 对三个端点均使用该 helper 验证 `providers["providers"]` 中每个 Provider：
+  - `GET /api/v1/providers`：同时验证 `config_status` 结构（`configured`/`missing_secrets`/`configured_secrets`/`is_encrypted`）
+  - `GET /api/v1/health`：验证 `health_body["providers"]["providers"]` 中每个 Provider availability
+  - `GET /api/v1/capabilities`：验证 `cap_body["items"]` 结构 + `cap_body["providers"]["providers"]` 中每个 Provider availability
 
 ## 门禁结果
 

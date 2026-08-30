@@ -58,6 +58,15 @@ def test_v1_health(client: TestClient) -> None:
 # ── Provider DTO 契约测试 ────────────────────────────────────────────────
 
 
+def _assert_availability_contract(av: dict) -> None:
+    """统一断言单个 Provider availability 字段符合现行契约。"""
+    assert "status" not in av, "availability must not contain deprecated 'status'"
+    assert isinstance(av["available"], bool)
+    assert isinstance(av["component"], str)
+    assert "error_code" in av
+    assert "suggestion" in av
+
+
 def test_provider_dto_contract_no_deprecated_status_field(
     client: TestClient, tmp_state: Path
 ) -> None:
@@ -66,14 +75,12 @@ def test_provider_dto_contract_no_deprecated_status_field(
     断言 /api/v1/providers、/health、/capabilities 的 Provider 字段均使用
     当前契约（config_status + availability），不包含旧版 'status'。
     """
-    # GET /api/v1/providers
+    # GET /api/v1/providers —— 每个 entry 含 config_status + availability
     resp = client.get("/api/v1/providers")
     assert resp.status_code == 200
     providers_body = resp.json()
     for name, entry in providers_body["providers"].items():
-        # 不得存在旧版 status 字段
         assert "status" not in entry, f"providers/{name} contains deprecated 'status'"
-        # 当前契约字段
         assert "config_status" in entry
         assert "availability" in entry
         cs = entry["config_status"]
@@ -81,25 +88,17 @@ def test_provider_dto_contract_no_deprecated_status_field(
         assert isinstance(cs["missing_secrets"], list)
         assert isinstance(cs["configured_secrets"], list)
         assert isinstance(cs["is_encrypted"], bool)
-        av = entry["availability"]
-        assert isinstance(av["available"], bool)
-        assert isinstance(av["component"], str)
-        assert "error_code" in av
-        assert "suggestion" in av
+        _assert_availability_contract(entry["availability"])
 
-    # GET /api/v1/health
+    # GET /api/v1/health —— providers.providers 中每个 Provider availability
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
     health_body = resp.json()
     assert "providers" in health_body
-    health_providers = health_body["providers"].get("providers", {})
-    for name, av in health_providers.items():
-        assert isinstance(av["available"], bool)
-        assert isinstance(av["component"], str)
-        assert "error_code" in av
-        assert "suggestion" in av
+    for name, av in health_body["providers"]["providers"].items():
+        _assert_availability_contract(av)
 
-    # GET /api/v1/capabilities
+    # GET /api/v1/capabilities —— providers.providers 中每个 Provider availability
     resp = client.get("/api/v1/capabilities")
     assert resp.status_code == 200
     cap_body = resp.json()
@@ -109,6 +108,9 @@ def test_provider_dto_contract_no_deprecated_status_field(
         assert "visual_source" in item
         assert "supported" in item
         assert isinstance(item["supported"], bool)
+    assert "providers" in cap_body
+    for name, av in cap_body["providers"]["providers"].items():
+        _assert_availability_contract(av)
 
 
 # ── Provider 配置测试 ──────────────────────────────────────────────────
