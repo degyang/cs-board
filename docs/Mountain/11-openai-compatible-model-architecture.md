@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-Mountain 不把文本和图片生成固化到 OpenLux、OpenAI 或其他品牌。共享内核只依赖 `TextModelPort` 与 `ImageModelPort`；基础设施层提供 OpenAI API-compatible adapter。
+Mountain 不把文本、图片、语音、对齐、渲染或媒体能力固化到 OpenLux、OpenAI 或其他品牌。共享内核只依赖能力端口；基础设施层可提供 OpenAI API-compatible、Local Service 或 Codex Skill adapter。
 
 “ChatGPT兼容”在代码和文档中统一称为“OpenAI API-compatible”，首版基线协议为：
 
@@ -20,6 +20,25 @@ Mountain 不把文本和图片生成固化到 OpenLux、OpenAI 或其他品牌�
 ```
 
 不是所有兼容服务都实现全部端点，因此系统必须按 capability 使用能力，不能从 Provider 名称猜测。
+
+## 1.1 动态 Provider Registry 与能力绑定
+
+产品不以固定六个 Provider Profile 作为长期模型。后端应提供可扩展的 Provider Registry：用户可新增、编辑、启停或删除供应商；前端只消费 Registry 与可用性 View，不能在 localStorage 中创建伪 Provider。
+
+一个 Provider 可以声明多个能力，而“模型类别”是能力过滤器，不是强制的一对一 Provider 类型。首版能力键建议为：
+
+```text
+text.generate
+image.generate
+speech.synthesize
+audio.align
+video.render
+media.compose
+```
+
+当前默认绑定为：本地 Codex Skills 提供 `image.generate`，本地 IndexTTS 提供 `speech.synthesize`，Whisper 提供 `audio.align`，白板/FFmpeg 提供本地 `video.render`/`media.compose`。它们都是可见的运行时能力；尚未接入外部图片、音频或视频 API 时，不能在 UI 假装已有可选远程模型。
+
+未来接入外部服务时，新增 Registry 条目和 capability binding，不改 Stage 业务规则。Task/Run 只保存已选择 binding 的非敏感快照与版本，不保存 API Key。
 
 ## 2. 端口与适配器
 
@@ -117,7 +136,7 @@ class ImageModelPort(Protocol):
 }
 ```
 
-`secret_ref` 指向 Secret Store，Artifact、Project 和普通配置 view 不保存明文 API Key。
+`secret_ref` 指向 Secret Store，Artifact、Task 和普通配置 view 不保存明文 API Key。
 
 ## 4. 协议兼容
 
@@ -220,13 +239,14 @@ MODEL_RESPONSE_INVALID
 
 WebUI 的“API设置”调整为“模型服务”：
 
-- profile 名称；
-- OpenAI-compatible base URL；
-- API Key；
-- 文本协议与模型；
-- 图片协议与模型；
-- 连接与 capability 测试；
-- 默认文本/图片 profile 选择。
+- Provider 名称、来源（本地 Skill / 本地服务 / 远程 API）与能力类别；
+- 每个 capability 的模型、协议与非敏感 endpoint 配置；
+- 密钥状态、连接测试和真实 capability；
+- 默认 binding 与 Task 可选 binding。
+
+新增/删除 Provider 是后端 Registry API 的职责，不能做成仅前端有效的 CRUD。密钥输入只向 SecretStore 提交，提交后清空；不显示完整 Key，不写入 localStorage/sessionStorage、Task、Artifact、事件、日志、诊断包或普通 API 响应。
+
+“工具链”不属于模型服务 CRUD：Renderer、FFmpeg 与本地 Whisper 等应显示版本、探测状态、error_code 和 suggestion；没有真实配置 API 时只读展示。“存储”同理，在不存在保留策略/配额 API 前不得提供假的可保存表单。Task 级日志、Trace 和诊断包归任务工作台，不伪装为全局设置。
 
 Skills 只接受 `text_profile_id` 和 `image_profile_id`，不能传入或显示 API Key，也不能在 Skill 内写死服务 URL。
 
@@ -252,7 +272,7 @@ legacy Responses    → profile.text.protocol=responses
 4. `/responses` profile 可以完成相同内部请求；
 5. 文本与图片允许使用不同 base URL 和 secret；
 6. capability 缺失时返回稳定错误而不是调用到一半失败；
-7. API Key 不出现在日志、Artifact、CLI、Project View 或浏览器响应；
+7. API Key 不出现在日志、Artifact、CLI、Task View 或浏览器响应；
 8. 切换 profile/model/protocol 会正确失效下游 Artifact；
 9. WebUI 与 Skills 对相同 profile 显示一致 capability；
 10. 现有 OpenLux 配置能迁移为普通 OpenAI-compatible profile，而不是保留专用业务分支。

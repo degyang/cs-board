@@ -2,6 +2,11 @@
 
 > 术语说明：`source/` 是外部原型的原样镜像，可能保留旧的 Project/项目命名或历史交互；它不是现行产品术语权威。现行产品统一使用 Task/任务、任务队列和任务工作台，规则见 [`../14-task-and-script-preparation.md`](../14-task-and-script-preparation.md)。
 
+## 已同步的增量原型
+
+- 语音与对齐：`VoiceAlignmentPage`、共享 `SettingsSubnav`、两张服务状态卡和加载/不可用 fixture 已从 workbuddy 同步；基准中的任务文案与链接已按当前 Task 术语校正。
+- 此页仅定义展示模型与交互边界：运行时应由真实 capability/provider 数据替代 fixture，不得复制 mock、localStorage 或密钥逻辑进 `web-v2`。
+
 本目录是 Mountain 新 WebUI 的**唯一视觉、页面结构与交互层级基准**。
 
 ## 来源与快照

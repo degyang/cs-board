@@ -6,6 +6,7 @@ import { AssetManagementPage } from '../features/asset-management/AssetManagemen
 import { ProjectWorkbenchPage } from '../pages/ProjectWorkbenchPage'
 import { RunDiagnosticsPage } from '../pages/RunDiagnosticsPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
+import { VoiceAlignmentPage } from '../pages/VoiceAlignmentPage'
 import { HelpPage } from '../pages/HelpPage'
 
 // 路由结构对应 docs/Mountain/04-webui-redesign.md §3 信息架构
@@ -20,9 +21,9 @@ export function AppRouter() {
         <Route path="/projects/:projectId" element={<ProjectWorkbenchPage />} />
         <Route path="/projects/:projectId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/voice-alignment" element={<VoiceAlignmentPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>
     </Routes>
   )
 }
-
