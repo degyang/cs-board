@@ -8,8 +8,8 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
 
   const loadRunInfo = useCallback(async () => {
     try {
-      const { items } = await fetchTasks(20)
-      const running = items.find((p) => p.status === 'running')
+      const { items } = await fetchTasks({ limit: 20 })
+      const running = items.find((t) => t.status === 'running')
       setRunInfo(running ? { title: running.title, status: running.status } : null)
     } catch {
       // ignore — footer is non-critical

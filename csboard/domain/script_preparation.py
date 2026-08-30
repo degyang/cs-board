@@ -3,24 +3,52 @@
 Splits raw script text into Voice Units at task-creation / input-save time.
 This is a pure, deterministic operation — no LLM involved.
 
-Called from:
-  - csboard.application.commands.MountainCommands.task_create()
-  - csboard.application.commands.MountainCommands.task_save_inputs()
-  - webapp.mountain_v1_api  POST /api/v1/tasks/{task_id}/inputs
+Algorithm: split by sentence boundaries, then merge consecutive sentences
+into units whose char count is as close to ``target_chars`` as possible,
+respecting ``min_chars`` (won't start a new unit below this threshold) and
+``max_chars`` (hard cap per unit).
 
 Output is stored in task.json under the ``script_preparation`` field.
 """
 
 from __future__ import annotations
 
-from csboard.domain.av_timing import VoiceUnit, segment_script
+import re
+from dataclasses import dataclass
 
-__all__ = ["prepare_script"]
+__all__ = ["prepare_script", "PREPARATION_ALGORITHM_VERSION"]
+
+PREPARATION_ALGORITHM_VERSION = "deterministic-v1"
 
 # Default rules — callers may override.
 DEFAULT_TARGET_CHARS = 80
 DEFAULT_MIN_CHARS = 35
 DEFAULT_MAX_CHARS = 140
+
+
+@dataclass(frozen=True, slots=True)
+class _Sentence:
+    start: int
+    end: int
+    text: str
+
+
+def _split_sentences(text: str) -> list[_Sentence]:
+    """Split text by Chinese/English sentence-ending punctuation."""
+    sentences: list[_Sentence] = []
+    start = 0
+    for match in re.finditer(r"[。！？!?；;]", text):
+        end = match.end()
+        t = text[start:end]
+        if t.strip():
+            sentences.append(_Sentence(start, end, t))
+        start = end
+    # Trailing text without punctuation
+    if start < len(text):
+        t = text[start:]
+        if t.strip():
+            sentences.append(_Sentence(start, len(text), t))
+    return sentences
 
 
 def prepare_script(
@@ -37,43 +65,75 @@ def prepare_script(
     text:
         Raw script text (文案).
     target_chars:
-        Target characters per Voice Unit.
-    min_chars / max_chars:
-        Bounds that the segmentation algorithm respects.
+        Target characters per Voice Unit. The algorithm tries to make each
+        unit as close to this size as possible.
+    min_chars:
+        Minimum characters for a unit. If adding the next sentence would
+        push the unit above ``target_chars`` but the current unit is below
+        ``min_chars``, the sentence is still added.
+    max_chars:
+        Hard cap. A unit will never exceed this size; if a single sentence
+        exceeds ``max_chars`` it becomes its own unit.
 
     Returns
     -------
     dict
         ``{"algorithm_version": ..., "rules": ..., "voice_units": [...]}``
         ready to store under ``task.json["script_preparation"]``.
+
+    Raises
+    ------
+    ValueError
+        If text is empty or all-whitespace.
     """
     if not text or not text.strip():
         raise ValueError("文案不能为空")
 
-    # The existing segment_script uses target_sentences / max_unit_chars.
-    # We translate the char-based parameters into sentence-count heuristics:
-    #   target_sentences ≈ target_chars / avg_sentence_len  (assume ~40 chars/sentence)
-    #   max_unit_chars maps directly.
-    # For the deterministic baseline we keep 2 sentences per unit and use
-    # max_unit_chars as the hard cap.
-    units: tuple[VoiceUnit, ...] = segment_script(
-        text,
-        target_sentences=2,
-        max_unit_chars=max_chars,
-    )
+    sentences = _split_sentences(text)
+    if not sentences:
+        raise ValueError("文案不能为空")
 
-    voice_units = [
-        {
-            "unit_id": u.unit_id,
-            "order": u.order,
-            "source_range": {"start": u.source_range.start, "end": u.source_range.end},
-            "text": u.text,
-        }
-        for u in units
-    ]
+    voice_units: list[dict] = []
+    cursor = 0  # index into sentences list
+
+    while cursor < len(sentences):
+        unit_start = cursor
+        unit_char_count = len(sentences[cursor].text)
+
+        # Greedily add sentences while we're under target_chars,
+        # or if we haven't reached min_chars yet.
+        while cursor + 1 < len(sentences):
+            next_chars = len(sentences[cursor + 1].text)
+            # Hard cap: stop if adding next sentence exceeds max_chars
+            if unit_char_count + next_chars > max_chars:
+                break
+            # If we're already at/above target_chars and above min_chars, stop
+            if unit_char_count >= target_chars and unit_char_count >= min_chars:
+                break
+            cursor += 1
+            unit_char_count += len(sentences[cursor].text)
+
+        # Build unit from sentences[unit_start .. cursor]
+        selected = sentences[unit_start : cursor + 1]
+        unit_order = len(voice_units) + 1
+        source_start = selected[0].start
+        source_end = selected[-1].end
+        unit_text = text[source_start:source_end]
+
+        voice_units.append({
+            "unit_id": f"unit-{unit_order:03d}",
+            "order": unit_order,
+            "source_range": {"start": source_start, "end": source_end},
+            "text": unit_text,
+        })
+
+        cursor += 1
+
+    # Validate coverage: units must be contiguous and cover full text
+    _validate_coverage(text, voice_units)
 
     return {
-        "algorithm_version": "deterministic-v1",
+        "algorithm_version": PREPARATION_ALGORITHM_VERSION,
         "rules": {
             "target_chars": target_chars,
             "min_chars": min_chars,
@@ -81,3 +141,18 @@ def prepare_script(
         },
         "voice_units": voice_units,
     }
+
+
+def _validate_coverage(text: str, voice_units: list[dict]) -> None:
+    """Ensure units are contiguous and cover the full text."""
+    if not voice_units:
+        raise ValueError("文案分割未产生任何 Voice Unit")
+    if voice_units[0]["source_range"]["start"] != 0:
+        raise ValueError("Voice Unit 原文范围未从 0 开始")
+    if voice_units[-1]["source_range"]["end"] != len(text):
+        raise ValueError("Voice Unit 原文范围未覆盖到文案末尾")
+    expected = 0
+    for unit in voice_units:
+        if unit["source_range"]["start"] != expected:
+            raise ValueError("Voice Unit 原文范围不连续")
+        expected = unit["source_range"]["end"]

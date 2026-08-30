@@ -151,7 +151,7 @@ export interface SecretOperationResponse {
 }
 
 // ── Tasks ────────────────────────────────────────────────────────────
-// GET /tasks → { items: Task[] }
+// GET /tasks → TaskListResponse
 // Task.to_dict() from dataclasses.asdict()
 
 export interface Task {
@@ -167,8 +167,24 @@ export interface Task {
   schema_version: number
 }
 
+export interface ActiveRunSummary {
+  run_id: string
+  status: string
+  current_stage: string | null
+  started_at: string
+  retryable: boolean
+  error_code: string | null
+  final_available: boolean
+  fallback_unit_count: number | null
+}
+
+export interface TaskQueueItem extends Task {
+  active_run: ActiveRunSummary | null
+}
+
 export interface TaskListResponse {
-  items: Task[]
+  items: TaskQueueItem[]
+  next_cursor: string | null
 }
 
 // POST /tasks → { ok, command, task_id, run_id, trace_id, command_id, event_sequence }
@@ -343,6 +359,26 @@ export interface SaveInputsResponse {
   input_saved: boolean
 }
 
+// Script preparation DTO
+export interface VoiceUnitDTO {
+  unit_id: string
+  order: number
+  source_range: { start: number; end: number }
+  text: string
+}
+
+export interface ScriptPreparation {
+  algorithm_version: string
+  rules: { target_chars: number; min_chars: number; max_chars: number }
+  voice_units: VoiceUnitDTO[]
+}
+
+export interface InputsRules {
+  target_chars: number
+  min_chars: number
+  max_chars: number
+}
+
 // GET /tasks/{id}/inputs
 
 export interface InputsReadback {
@@ -361,6 +397,9 @@ export interface InputsReadback {
     content_type: string | null
     size_bytes: number | null
   }
+  rules: InputsRules | null
+  script_preparation: ScriptPreparation | null
+  visual_anchor_enabled: boolean
 }
 
 // ── API Error ───────────────────────────────────────────────────────────

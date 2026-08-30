@@ -197,8 +197,14 @@ export function deleteProviderSecret(
 
 // ── Tasks ────────────────────────────────────────────────────────────
 
-export function fetchTasks(limit = 50): Promise<TaskListResponse> {
-  return get<TaskListResponse>(`/tasks?limit=${limit}`)
+export function fetchTasks(params?: { limit?: number; cursor?: string; status?: string; q?: string }): Promise<TaskListResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.limit) searchParams.set('limit', String(params.limit))
+  if (params?.cursor) searchParams.set('cursor', params.cursor)
+  if (params?.status) searchParams.set('status', params.status)
+  if (params?.q) searchParams.set('q', params.q)
+  const qs = searchParams.toString()
+  return get<TaskListResponse>(`/tasks${qs ? '?' + qs : ''}`)
 }
 
 export function createTask(

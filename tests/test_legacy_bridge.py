@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from csboard.application import LegacyJobBridge
+from csboard.application.legacy_bridge import LegacyJobBridge
 from csboard.domain.enums import Engine, RunStatus
 
 

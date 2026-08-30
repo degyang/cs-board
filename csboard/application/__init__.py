@@ -1,4 +1,7 @@
-"""Application services will be added without framework dependencies."""
-from csboard.application.legacy_bridge import LegacyJobBridge, LegacyRunLink
+"""Application services — new product only.
 
-__all__ = ["LegacyJobBridge", "LegacyRunLink"]
+Legacy exports (LegacyJobBridge, LegacyRunLink) are NOT re-exported here.
+Legacy code must import directly from csboard.application.legacy_bridge.
+"""
+
+__all__: list[str] = []

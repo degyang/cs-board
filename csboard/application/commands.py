@@ -96,15 +96,17 @@ class MountainCommands:
             # 文案整理：auto-prepare script if present
             script_text = request.get("script", "").strip()
             if script_text:
-                try:
-                    preparation = prepare_script(script_text)
-                    task_json_path = self.repository.task_dir(task_id) / "task.json"
-                    task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
-                    task_data["script_preparation"] = preparation
-                    task_data["visual_anchor_enabled"] = True
-                    task_json_path.write_text(json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8")
-                except ValueError:
-                    pass  # Script too short — skip
+                preparation = prepare_script(
+                    script_text,
+                    target_chars=request.get("target_chars", 80),
+                    min_chars=request.get("min_chars", 35),
+                    max_chars=request.get("max_chars", 140),
+                )
+                task_json_path = self.repository.task_dir(task_id) / "task.json"
+                task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+                task_data["script_preparation"] = preparation
+                task_data["visual_anchor_enabled"] = request.get("visual_anchor_enabled", True)
+                task_json_path.write_text(json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8")
         event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "TaskCreated",
             "command": "task.create",
@@ -141,27 +143,191 @@ class MountainCommands:
         path = self.telemetry.export_diagnostic_bundle(task_id, run_id)
         return {"ok": True, "task_id": task_id, "run_id": run_id, "bundle": str(path)}
 
-    def generate_visual_anchors(self, task_id: str, run_id: str, script: str, context: CommandContext | None = None) -> dict[str, Any]:
+    def generate_visual_anchors(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
+        """Generate visual anchors for each saved Voice Unit.
+
+        Reads script_preparation.voice_units from task.json — does NOT re-segment.
+        If visual_anchor_enabled is false, writes default anchors (no LLM call).
+        If visual_anchor_enabled is true, calls TextModel per unit for visual intent.
+        """
         run = self.repository.get_run(task_id, run_id)
         task = self.repository.get_task(task_id)
         if task.pipeline_id != "mountain-av-v1":
-            raise ValueError("仅 mountain-av-v1 可运行 generate-visual-anchors")
+            raise DomainError("VALIDATION_ERROR", "仅 mountain-av-v1 可运行 generate-visual-anchors")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
+
+        # Read saved script_preparation from task.json
+        task_json_path = self.repository.task_dir(task_id) / "task.json"
+        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+        preparation = task_data.get("script_preparation")
+        if not preparation or not preparation.get("voice_units"):
+            raise DomainError("VALIDATION_ERROR", "请先保存文案并完成文案整理")
+        saved_units = preparation["voice_units"]
+        visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
+
         run.status = RunStatus.RUNNING
-        units = segment_script(script)
-        document = av_plan_document(task_id, run_id, units, script, task.engine)
+        warnings: list[str] = []
+
+        # Build voice_units with visual_items for av-plan artifact
+        voice_units_for_plan: list[dict[str, Any]] = []
+        for unit in saved_units:
+            unit_id = unit["unit_id"]
+            source_range = unit["source_range"]
+
+            if not visual_anchor_enabled:
+                # Default anchor — no LLM call
+                visual_items = [{
+                    "visual_id": f"visual-{unit['order']:03d}-01",
+                    "order": 1,
+                    "source_range": source_range,
+                    "text": unit["text"],
+                    "anchor_text": unit["text"],
+                    "highlight_text": "",
+                    "visual_intent": "default",
+                    "source": "default",
+                }]
+            else:
+                # LLM anchor — call TextModel
+                visual_items = self._generate_llm_anchors(
+                    task_id, run_id, unit, context, warnings,
+                )
+
+            voice_units_for_plan.append({
+                "unit_id": unit_id,
+                "order": unit["order"],
+                "source_range": source_range,
+                "text": unit["text"],
+                "visual_items": visual_items,
+            })
+
+        # Build and commit av-plan artifact
+        source_text = preparation.get("source_text", "")
+        document = {
+            "schema_version": 1,
+            "artifact_type": "av-plan",
+            "task_id": task_id,
+            "run_id": run_id,
+            "pipeline_id": "mountain-av-v1",
+            "engine": task.engine.value,
+            "producer_stage": "generate-visual-anchors",
+            "voice_units": voice_units_for_plan,
+        }
         artifact = FilesystemArtifactStore(self.repository).commit_bytes(
-            task_id, run_id, "planning.av-plan", "planning/av-plan.json", json_bytes(document), "generate-visual-anchors"
+            task_id, run_id, "planning.av-plan", "planning/av-plan.json",
+            json_bytes(document), "generate-visual-anchors",
         )
+
         run.command_ids.append(context.command_id)
         run.stages["generate-visual-anchors"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
-        event = self.telemetry.append_event(task_id, run_id, {"event_type": "VisualAnchorsGenerated", "unit_count": len(units), "visual_count": sum(len(unit.visual_items) for unit in units)})
-        self.telemetry.append_audit(task_id, run_id, {"action": "stage.run", "stage": "generate-visual-anchors", "command_id": context.command_id})
-        return {"ok": True, "command": "stage.run", "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "command_id": context.command_id, "stage": "generate-visual-anchors", "result": "succeeded", "artifacts": [artifact.artifact_key], "event_sequence": event["sequence"], "warnings": [], "next_stage": "clone-voice"}
 
-    # Backward-compatible alias for legacy mountain_api.py
-    segment_script = generate_visual_anchors
+        event = self.telemetry.append_event(task_id, run_id, {
+            "event_type": "VisualAnchorsGenerated",
+            "unit_count": len(saved_units),
+            "visual_anchor_enabled": visual_anchor_enabled,
+        })
+        self.telemetry.append_audit(task_id, run_id, {
+            "action": "stage.run",
+            "stage": "generate-visual-anchors",
+            "command_id": context.command_id,
+        })
+
+        result_status = "succeeded"
+        if not visual_anchor_enabled:
+            result_status = "skipped"
+
+        return {
+            "ok": True, "command": "stage.run",
+            "task_id": task_id, "run_id": run_id,
+            "trace_id": run.trace_id, "command_id": context.command_id,
+            "stage": "generate-visual-anchors", "result": result_status,
+            "artifacts": [artifact.artifact_key],
+            "event_sequence": event["sequence"],
+            "warnings": warnings, "next_stage": "clone-voice",
+        }
+
+    def _generate_llm_anchors(
+        self,
+        task_id: str,
+        run_id: str,
+        unit: dict[str, Any],
+        context: CommandContext,
+        warnings: list[str],
+    ) -> list[dict[str, Any]]:
+        """Call TextModel to generate visual anchors for a single unit.
+
+        Falls back to default anchors on LLM failure.
+        """
+        if self.provider_factory is None:
+            warnings.append(f"{unit['unit_id']}: TextModel 不可用，使用默认锚定")
+            self.telemetry.append_event(task_id, run_id, {
+                "event_type": "VisualAnchorFallback",
+                "unit_id": unit["unit_id"],
+                "reason": "PROVIDER_NOT_AVAILABLE",
+            })
+            return [self._default_visual_item(unit)]
+
+        try:
+            text_model = self.provider_factory.create_text()
+        except Exception:
+            warnings.append(f"{unit['unit_id']}: TextModel 创建失败，使用默认锚定")
+            self.telemetry.append_event(task_id, run_id, {
+                "event_type": "VisualAnchorFallback",
+                "unit_id": unit["unit_id"],
+                "reason": "TEXT_MODEL_CREATE_FAILED",
+            })
+            return [self._default_visual_item(unit)]
+
+        prompt = (
+            f"以下是视频旁白的一个段落：\n\n{unit['text']}\n\n"
+            "请为这个段落生成画面锚定信息，返回 JSON：\n"
+            '{"anchor_text": "核心旁白关键词", "highlight_text": "需要视觉强调的部分", '
+            '"visual_intent": "画面描述意图"}\n'
+            "只返回 JSON，不要其他内容。"
+        )
+
+        try:
+            response = text_model.generate(prompt)
+            import json as _json
+            parsed = _json.loads(response)
+
+            # Strict validation: unit_id must match, no new text/order/source_range changes
+            anchor_text = str(parsed.get("anchor_text", ""))[:200]
+            highlight_text = str(parsed.get("highlight_text", ""))[:200]
+            visual_intent = str(parsed.get("visual_intent", ""))[:500]
+
+            return [{
+                "visual_id": f"visual-{unit['order']:03d}-01",
+                "order": 1,
+                "source_range": unit["source_range"],  # Must not change
+                "text": unit["text"],  # Must not change
+                "anchor_text": anchor_text,
+                "highlight_text": highlight_text,
+                "visual_intent": visual_intent,
+                "source": "llm",
+            }]
+        except Exception as exc:
+            warnings.append(f"{unit['unit_id']}: LLM 锚定失败 ({exc})，降级为默认")
+            self.telemetry.append_event(task_id, run_id, {
+                "event_type": "VisualAnchorFallback",
+                "unit_id": unit["unit_id"],
+                "reason": "LLM_OUTPUT_INVALID",
+                "error": str(exc)[:200],
+            })
+            return [self._default_visual_item(unit)]
+
+    @staticmethod
+    def _default_visual_item(unit: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "visual_id": f"visual-{unit['order']:03d}-01",
+            "order": 1,
+            "source_range": unit["source_range"],
+            "text": unit["text"],
+            "anchor_text": unit["text"],
+            "highlight_text": "",
+            "visual_intent": "default",
+            "source": "default",
+        }
 
     def clone_voice(
         self,
@@ -380,12 +546,8 @@ class MountainCommands:
     # ── Stage executor wrappers ──────────────────────────────────────
 
     def _exec_generate_visual_anchors(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for generate-visual-anchors. Reads script from task request."""
-        request = self._read_request(task_id)
-        script = request.get("script", "")
-        if not script:
-            raise DomainError("VALIDATION_ERROR", "任务请求中缺少 script 字段")
-        return self.generate_visual_anchors(task_id, run_id, script, context)
+        """Stage executor for generate-visual-anchors. Reads from task.json script_preparation."""
+        return self.generate_visual_anchors(task_id, run_id, context)
 
     def _exec_clone_voice(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for clone-voice. Uses ProviderFactory for adapters."""

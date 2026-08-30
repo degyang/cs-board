@@ -23,6 +23,7 @@ import {
   fetchProviderSecrets,
   setProviderSecret,
   deleteProviderSecret,
+  fetchTasks,
 } from '../src/lib/api/client'
 
 // ── Mock global.fetch ───────────────────────────────────────────────────
@@ -357,5 +358,92 @@ describe('HTTP contract: deleteProviderSecret', () => {
     const [url, opts] = mockFetch.mock.calls[0]
     expect(url).toContain('/api/v1/providers/text_model/secrets/api_key')
     expect(opts.method).toBe('DELETE')
+  })
+})
+
+// ── fetchTasks: query params and response shape ──────────────────────────
+
+describe('HTTP contract: fetchTasks', () => {
+  it('sends GET to /tasks with default limit', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: null }))
+
+    await fetchTasks()
+
+    const [url, opts] = mockFetch.mock.calls[0]
+    expect(url).toContain('/api/v1/tasks')
+    expect(opts.method).toBeUndefined() // GET is default
+  })
+
+  it('appends limit query param', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: null }))
+
+    await fetchTasks({ limit: 20 })
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('limit=20')
+  })
+
+  it('appends cursor query param', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: null }))
+
+    await fetchTasks({ cursor: 'task-abc' })
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('cursor=task-abc')
+  })
+
+  it('appends status query param', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: null }))
+
+    await fetchTasks({ status: 'running' })
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('status=running')
+  })
+
+  it('appends q query param', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: null }))
+
+    await fetchTasks({ q: 'test' })
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('q=test')
+  })
+
+  it('combines multiple query params', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ items: [], next_cursor: null }))
+
+    await fetchTasks({ limit: 10, status: 'failed', q: 'video' })
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('limit=10')
+    expect(url).toContain('status=failed')
+    expect(url).toContain('q=video')
+  })
+
+  it('returns TaskQueueItem with active_run and next_cursor', async () => {
+    const queueItem = {
+      task_id: 'task-1',
+      title: 'Test',
+      status: 'running',
+      active_run: {
+        run_id: 'run-1',
+        status: 'running',
+        current_stage: 'clone-voice',
+        retryable: false,
+        error_code: null,
+        final_available: false,
+        fallback_unit_count: null,
+      },
+    }
+    mockFetch.mockResolvedValue(jsonResponse({ items: [queueItem], next_cursor: null }))
+
+    const result = await fetchTasks()
+
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0].active_run).toBeDefined()
+    expect(result.items[0].active_run?.current_stage).toBe('clone-voice')
+    expect(result.items[0].active_run?.fallback_unit_count).toBeNull()
+    expect(result.next_cursor).toBeNull()
   })
 })

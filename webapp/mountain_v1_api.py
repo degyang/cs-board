@@ -211,12 +211,18 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         status: str | None = None,
         q: str | None = None,
     ):
-        """列出任务，支持 cursor/status/q 过滤。"""
+        """列出任务，支持 cursor/status/q 过滤。
+
+        排序：运行中/失败待处理优先，其余按 updated_at DESC。
+        q 同时匹配 title 和 task_id。
+        不返回文案全文、参考音频、Secret、日志、诊断包。
+        """
         items = []
         tasks_dir = data_dir / "tasks"
         if not tasks_dir.exists():
             return {"items": [], "next_cursor": None}
 
+        # Collect all task paths with their metadata for sorting
         all_paths = sorted(tasks_dir.glob("*/task.json"), reverse=True)
 
         # cursor: skip tasks until we find the cursor task_id
@@ -229,8 +235,25 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             if cursor_idx > 0:
                 all_paths = all_paths[cursor_idx:]
 
+        # Priority sort: running/failed first, then updated_at DESC
+        _PRIORITY = {"running": 0, "failed": 1}
+
+        def _sort_key(path: Path) -> tuple[int, str]:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                status_val = data.get("status", "draft")
+                priority = _PRIORITY.get(status_val, 2)
+                updated = data.get("updated_at", "")
+                return (priority, updated)
+            except Exception:
+                return (99, "")
+
+        all_paths = sorted(all_paths, key=_sort_key, reverse=True)
+
+        effective_limit = max(1, min(limit, 100))
+
         for path in all_paths:
-            if len(items) >= max(1, min(limit, 100)):
+            if len(items) >= effective_limit:
                 break
             try:
                 task = repository.get_task(path.parent.name)
@@ -239,16 +262,20 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 # status filter
                 if status and task_dict.get("status") != status:
                     continue
-                # search filter
-                if q and q.lower() not in task_dict.get("title", "").lower():
-                    continue
+                # search filter: q matches title AND task_id
+                if q:
+                    q_lower = q.lower()
+                    title_match = q_lower in task_dict.get("title", "").lower()
+                    id_match = q_lower in task_dict.get("task_id", "").lower()
+                    if not title_match and not id_match:
+                        continue
 
                 # Build active_run summary if run exists
                 active_run = None
                 if task.active_run_id:
                     try:
                         run = repository.get_run(task.task_id, task.active_run_id)
-                        # Determine current_stage: last non-terminal stage
+                        # Determine current_stage
                         current_stage = None
                         for stage_name in reversed(STAGE_ORDER):
                             stage_state = run.stages.get(stage_name)
@@ -256,9 +283,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                                 current_stage = stage_name
                                 break
                             if stage_state and stage_state.status == StageStatus.SUCCEEDED:
-                                # All stages succeeded — no current stage
                                 break
-                        # If no current_stage found and run is running, use first pending
                         if current_stage is None and run.status == RunStatus.RUNNING:
                             for stage_name in STAGE_ORDER:
                                 stage_state = run.stages.get(stage_name)
@@ -270,25 +295,32 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                         final_path = repository.run_dir(task.task_id, task.active_run_id) / "artifacts" / "final.mp4"
                         final_available = final_path.is_file()
 
+                        # error_code: only from real failure records; null if not available
+                        error_code = getattr(run, 'error_code', None)
+
                         active_run = {
                             "run_id": run.run_id,
                             "status": run.status.value,
                             "current_stage": current_stage,
                             "started_at": run.started_at,
                             "retryable": run.status == RunStatus.FAILED,
-                            "error_code": run.error_code if hasattr(run, 'error_code') else None,
+                            "error_code": error_code,
                             "final_available": final_available,
-                            "fallback_unit_count": 0,
+                            "fallback_unit_count": None,  # Not available yet — null, not fabricated
                         }
                     except NotFoundError:
                         pass
+
+                # Strip sensitive/internal fields from task_dict
+                task_dict.pop("script_preparation", None)
+                task_dict.pop("visual_anchor_enabled", None)
 
                 task_dict["active_run"] = active_run
                 items.append(task_dict)
             except NotFoundError:
                 continue
 
-        next_cursor = items[-1]["task_id"] if len(items) >= max(1, min(limit, 100)) else None
+        next_cursor = items[-1]["task_id"] if len(items) >= effective_limit else None
         return {"items": items, "next_cursor": next_cursor}
 
     @router.get("/tasks/{task_id}")
@@ -316,6 +348,10 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         include_subtitles: bool = Form(True),
         pen_text: str = Form(""),
         stroke_detail: str = Form("detailed"),
+        target_chars: int = Form(80),
+        min_chars: int = Form(35),
+        max_chars: int = Form(140),
+        visual_anchor_enabled: bool = Form(True),
     ):
         """上传任务输入（文案和参考音频）。
 
@@ -353,7 +389,7 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             if not has_audio:
                 raise HTTPException(400, "首次保存必须提供参考音频")
 
-        # 保存 request.json（新 Task request）
+        # 保存 request.json（含文案整理规则）
         request_data = {
             "script": script.strip(),
             "reference_audio": str(target),
@@ -363,6 +399,10 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
             "stroke_detail": stroke_detail
             if stroke_detail in {"light", "standard", "detailed", "full"}
             else "detailed",
+            "target_chars": target_chars,
+            "min_chars": min_chars,
+            "max_chars": max_chars,
+            "visual_anchor_enabled": visual_anchor_enabled,
         }
         request_path = repository.task_dir(task_id) / "request.json"
         request_path.write_text(
@@ -370,18 +410,27 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
         )
 
         # ── 文案整理：deterministic script preparation ──
+        # Always regenerate — never silently reuse stale preparation
         try:
-            preparation = prepare_script(script.strip())
-            task_json_path = repository.task_dir(task_id) / "task.json"
-            task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
-            task_data["script_preparation"] = preparation
-            task_data["visual_anchor_enabled"] = True
-            task_json_path.write_text(
-                json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8"
+            preparation = prepare_script(
+                script.strip(),
+                target_chars=target_chars,
+                min_chars=min_chars,
+                max_chars=max_chars,
             )
-        except ValueError:
-            # Script too short for preparation — skip silently
-            pass
+        except ValueError as exc:
+            raise HTTPException(
+                400,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            ) from exc
+
+        task_json_path = repository.task_dir(task_id) / "task.json"
+        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+        task_data["script_preparation"] = preparation
+        task_data["visual_anchor_enabled"] = visual_anchor_enabled
+        task_json_path.write_text(
+            json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         return {"ok": True, "task_id": task_id, "input_saved": True}
 
@@ -435,6 +484,11 @@ def mountain_v1_router(data_dir: Path) -> APIRouter:
                 "stroke_detail": request_data.get("stroke_detail", "detailed"),
             },
             "reference_audio": audio_meta,
+            "rules": {
+                "target_chars": request_data.get("target_chars", 80),
+                "min_chars": request_data.get("min_chars", 35),
+                "max_chars": request_data.get("max_chars", 140),
+            },
             "script_preparation": preparation,
             "visual_anchor_enabled": visual_anchor_enabled,
         }

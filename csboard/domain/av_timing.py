@@ -128,7 +128,7 @@ def _sentence_ranges(text: str) -> list[TextRange]:
 
 def _validate_coverage(text: str, units: tuple[VoiceUnit, ...]) -> None:
     if not units or units[0].source_range.start != 0 or units[-1].source_range.end != len(text):
-        raise ValueError("文案分割未完整覆盖原文")
+        raise ValueError("Voice Unit 未完整覆盖原文")
     expected = 0
     for unit in units:
         if unit.source_range.start != expected:

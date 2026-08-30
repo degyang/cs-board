@@ -27,8 +27,11 @@ from gradio_client import Client, handle_file
 # Mountain M07+ 新功能禁止依赖这些模块；新代码只使用 /api/v1 端点。
 # 待旧 WebUI 完全下线后，以下三行及 mountain_router/mountain_stages_router
 # 注册可整体移除。
+#
+# 注意：LegacyJobBridge 从 legacy_bridge 直接导入，不经过 __init__.py。
+# csboard.application.__init__ 不再导出 LegacyJobBridge。
 # ═══════════════════════════════════════════════════════════════════════════════
-from csboard.application import LegacyJobBridge
+from csboard.application.legacy_bridge import LegacyJobBridge
 from webapp.mountain_api import mountain_router
 from webapp.mountain_v1_api import mountain_v1_router
 

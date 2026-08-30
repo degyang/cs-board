@@ -1,5 +1,8 @@
 # M07 Task 语义纠偏 PR — 审计文档
 
+> **历史记录，不构成当前契约。** 本文档记录的是 c72b358 提交时的状态，
+> 后续提交已对文案整理算法、generate-visual-anchors 实现和 Legacy 隔离做了实质性修改。
+
 **日期**: 2026-08-30
 **分支**: `feat/mountain-m07-project-api-web-v2`
 **前序提交**: `b44ad5c` (Project → Task 全栈术语迁移)

@@ -5,7 +5,7 @@ import { fetchTasks } from '../lib/api/client'
 import { formatTime, shortId } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { Tabs } from '../components/ui/Tabs'
-import type { Task } from '../lib/api/types'
+import type { TaskQueueItem } from '../lib/api/types'
 
 const STATUS_TABS = [
   { key: 'all', label: '全部' },
@@ -20,7 +20,7 @@ export function TasksPage() {
   const [tab, setTab] = useState('all')
   const [search, setSearch] = useState('')
 
-  const loader = useCallback(() => fetchTasks(50), [])
+  const loader = useCallback(() => fetchTasks({ limit: 50 }), [])
   const { data, loading, error } = useAsync(loader, [], 15_000)
 
   const tasks = data?.items ?? []
@@ -84,7 +84,7 @@ export function TasksPage() {
   )
 }
 
-function TaskCard({ task: t, onOpen }: { task: Task; onOpen: () => void }) {
+function TaskCard({ task: t, onOpen }: { task: TaskQueueItem; onOpen: () => void }) {
   return (
     <div className="task-card">
       <div className="task-top">

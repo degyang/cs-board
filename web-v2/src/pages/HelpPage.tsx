@@ -13,7 +13,7 @@ export function HelpPage() {
         <h2>六阶段流水线</h2>
         <p>每个任务按以下六个阶段依次执行：</p>
         <ul>
-          <li><strong>文案分割</strong> — 将长文案按句分割为独立单元</li>
+          <li><strong>生成画面锚定重点</strong> — 从已整理的 Voice Units 生成视觉锚定信息</li>
           <li><strong>克隆配音</strong> — 使用 TTS 为每个单元生成配音</li>
           <li><strong>拆分分镜</strong> — 规划每个单元的视觉呈现方式</li>
           <li><strong>生成插画</strong> — 为每个分镜生成配图</li>
