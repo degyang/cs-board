@@ -325,6 +325,9 @@ a { color: var(--nt-primary-700); }
 .log-line .log-level-ERROR { color: var(--nt-danger); }
 .log-line .log-level-WARN { color: var(--nt-accent-700); }
 
+/* ---------------- Run Actions ---------------- */
+.run-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* ---------------- Unit List ---------------- */
 .unit-list { list-style: none; padding: 0; margin: 0; }
 .unit-item {

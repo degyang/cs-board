@@ -286,6 +286,63 @@ export interface LogsResponse {
   items: Record<string, unknown>[]
 }
 
+// ── Pipeline Run Response ───────────────────────────────────────────────
+// POST /projects/{id}/runs/{runId}/start
+// POST /projects/{id}/runs/{runId}/stages/{stage}/run
+// POST /projects/{id}/runs/{runId}/stages/{stage}/retry
+
+export interface PipelineRunResponse {
+  ok: boolean
+  command: string
+  project_id: string
+  run_id: string
+  trace_id: string
+  command_id: string
+  policy?: string
+  stages_executed?: string[]
+  results?: PipelineStageResult[]
+  next_stage?: string | null
+  status?: string
+  message?: string
+}
+
+export interface PipelineStageResult {
+  ok: boolean
+  command: string
+  project_id: string
+  run_id: string
+  stage: string
+  trace_id?: string
+  command_id?: string
+  result?: string
+  artifacts?: string[]
+  event_sequence?: number
+  warnings?: unknown[]
+  next_stage?: string | null
+  error?: {
+    code: string
+    message: string
+    retryable: boolean
+  }
+}
+
+// ── Cancel Run Response ─────────────────────────────────────────────────
+// POST /projects/{id}/runs/{runId}/cancel
+
+export interface CancelRunResponse {
+  ok: boolean
+  status: string
+}
+
+// ── Save Inputs Response ────────────────────────────────────────────────
+// POST /projects/{id}/inputs (multipart/form-data)
+
+export interface SaveInputsResponse {
+  ok: boolean
+  project_id: string
+  input_saved: boolean
+}
+
 // ── API Error ───────────────────────────────────────────────────────────
 
 export interface ApiError {

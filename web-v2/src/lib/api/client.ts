@@ -21,6 +21,9 @@ import type {
   ArtifactListResponse,
   EventsResponse,
   LogsResponse,
+  PipelineRunResponse,
+  CancelRunResponse,
+  SaveInputsResponse,
   ApiError,
 } from './types'
 
@@ -85,6 +88,50 @@ function put<T>(path: string, body: unknown): Promise<T> {
 
 function del<T>(path: string): Promise<T> {
   return request<T>(path, { method: 'DELETE' })
+}
+
+/**
+ * POST multipart/form-data — 必须由浏览器自动设置 Content-Type（含 boundary）。
+ * 禁止手工设置 Content-Type。
+ */
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const url = `${BASE}${path}`
+  const res = await fetch(url, {
+    method: 'POST',
+    body: form,
+    // 不设置 Content-Type，浏览器自动设置 multipart/form-data + boundary
+  })
+
+  if (!res.ok) {
+    let apiError: ApiError | null = null
+    try {
+      const body = await res.json()
+      apiError = typeof body.detail === 'object' ? body.detail : null
+    } catch {
+      // ignore
+    }
+    throw new MountainApiError(
+      res.status,
+      apiError,
+      apiError?.message ?? `API error: ${res.status}`,
+    )
+  }
+
+  return res.json() as Promise<T>
+}
+
+// ── Inputs ──────────────────────────────────────────────────────────────
+
+/**
+ * 保存制作输入（multipart/form-data）
+ * 禁止手工设置 Content-Type — 浏览器自动设置 boundary。
+ * 禁止读取/缓存/打印参考音频内容。
+ */
+export function uploadInputs(projectId: string, form: FormData): Promise<SaveInputsResponse> {
+  return postForm<SaveInputsResponse>(
+    `/projects/${encodeURIComponent(projectId)}/inputs`,
+    form,
+  )
 }
 
 // ── Health ──────────────────────────────────────────────────────────────
@@ -161,16 +208,16 @@ export function fetchRun(projectId: string, runId: string): Promise<RunDetail> {
   return get<RunDetail>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`)
 }
 
-export function startRun(projectId: string, runId: string): Promise<unknown> {
-  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/start`)
+export function startRun(projectId: string, runId: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/start`)
 }
 
-export function cancelRun(projectId: string, runId: string): Promise<unknown> {
-  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`)
+export function cancelRun(projectId: string, runId: string): Promise<CancelRunResponse> {
+  return post<CancelRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/cancel`)
 }
 
-export function retryRun(projectId: string, runId: string): Promise<unknown> {
-  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/retry`)
+export function retryRun(projectId: string, runId: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/retry`)
 }
 
 // ── Stages ──────────────────────────────────────────────────────────────
@@ -179,12 +226,12 @@ export function fetchStages(projectId: string, runId: string): Promise<{ items: 
   return get(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages`)
 }
 
-export function runStage(projectId: string, runId: string, stage: string): Promise<unknown> {
-  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/run`)
+export function runStage(projectId: string, runId: string, stage: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/run`)
 }
 
-export function retryStage(projectId: string, runId: string, stage: string): Promise<unknown> {
-  return post(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/retry`)
+export function retryStage(projectId: string, runId: string, stage: string): Promise<PipelineRunResponse> {
+  return post<PipelineRunResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stages/${encodeURIComponent(stage)}/retry`)
 }
 
 // ── Units ───────────────────────────────────────────────────────────────
