@@ -262,9 +262,25 @@ describe('ProvidersPage', () => {
     })
   })
 
-  it('does not use localStorage or sessionStorage', () => {
-    const lsSpy = vi.spyOn(Storage.prototype, 'getItem')
-    const ssSpy = vi.spyOn(Storage.prototype, 'setItem')
+  it('Provider 页面不读写业务/密钥 localStorage', async () => {
+    // AppShell may use localStorage for sidebar pin state — that's allowed.
+    // This test verifies ProvidersPage itself never reads/writes business
+    // or secret data to localStorage.
+    const ALLOWED_LS_KEYS = new Set(['sidebar-pinned'])
+    const businessReads: string[] = []
+    const businessWrites: string[] = []
+
+    const origGetItem = Storage.prototype.getItem
+    const origSetItem = Storage.prototype.setItem
+
+    Storage.prototype.getItem = function (key: string) {
+      if (!ALLOWED_LS_KEYS.has(key)) businessReads.push(key)
+      return origGetItem.call(this, key)
+    }
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (!ALLOWED_LS_KEYS.has(key)) businessWrites.push(key)
+      return origSetItem.call(this, key, value)
+    }
 
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
@@ -273,11 +289,16 @@ describe('ProvidersPage', () => {
       </MemoryRouter>,
     )
 
-    // No business state should use localStorage
-    expect(lsSpy).not.toHaveBeenCalled()
-    expect(ssSpy).not.toHaveBeenCalled()
+    // Wait for async render to settle
+    await waitFor(() => {
+      expect(screen.getByText('Text Model (OpenAI-compatible)')).toBeInTheDocument()
+    })
 
-    lsSpy.mockRestore()
-    ssSpy.mockRestore()
+    // No business state should use localStorage
+    expect(businessReads).toEqual([])
+    expect(businessWrites).toEqual([])
+
+    Storage.prototype.getItem = origGetItem
+    Storage.prototype.setItem = origSetItem
   })
 })

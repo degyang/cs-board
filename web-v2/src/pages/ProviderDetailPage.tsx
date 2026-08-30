@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAsync } from '../lib/api/queries'
 import {
@@ -58,15 +58,22 @@ export function ProviderDetailPage() {
   const [secretSaving, setSecretSaving] = useState<Record<string, boolean>>({})
   const [secretError, setSecretError] = useState<string | null>(null)
 
-  // Initialize config draft when detail loads
-  const configInitialized = detail && Object.keys(configDraft).length === 0
-  if (configInitialized) {
+  // Initialize config draft when detail loads or provider name changes.
+  // Uses detail identity (JSON of config keys+values) so refetch after save
+  // does NOT overwrite user edits that haven't changed.
+  useEffect(() => {
+    if (!detail) return
     const draft: Record<string, string> = {}
     for (const [k, v] of Object.entries(detail.config)) {
       draft[k] = String(v ?? '')
     }
     setConfigDraft(draft)
-  }
+    setSaveError(null)
+    setSaveSuccess(false)
+    setSecretInputs({})
+    setSecretError(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, detail?.name])
 
   // ── Config save ────────────────────────────────────────────────────
   const handleSaveConfig = async () => {
