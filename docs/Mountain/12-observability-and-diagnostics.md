@@ -1,5 +1,7 @@
 # WebUI / Skills 可观测性与诊断设计
 
+> 术语迁移：本文中当前实现遗留的 `project_id`/Project 均将随 Task 迁移改为 `task_id`/Task。用户可见界面统一称“任务工作台”；Project 不是当前制作对象。
+
 状态：目标架构约束
 
 更新时间：2026-08-29
@@ -218,7 +220,7 @@ Run 汇总至少计算：
 
 ## 7. WebUI 能力
 
-项目工作台增加“活动与诊断”面板：
+任务工作台增加“活动与诊断”面板：
 
 - 显示 `trace_id`、Run、入口、开始/结束和总耗时；
 - 按 Stage、Voice Unit、Visual Item、level 和 event 筛选；

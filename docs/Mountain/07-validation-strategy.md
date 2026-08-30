@@ -41,7 +41,8 @@ Schema 变化必须升级 `schema_version` 或提供兼容读取测试。
 
 使用 fake Provider 与小型真实媒体：
 
-- `segment-script` → AV Plan；
+- 保存 Task 输入 → 确定性文案整理计划；
+- `generate-visual-anchors` → 可选锚点及原文范围；
 - `clone-voice` → Unit WAV、Whisper/fallback Timeline 和母带；
 - `plan-storyboard` → Visual planning/prompt hash；
 - `generate-illustrations` → source/final image；
@@ -70,9 +71,9 @@ M06 先用短文案、固定 fake 图片、短 WAV 和 fake Whisper 跑通 `whit
 
 | 场景 | Web/API | CLI/Skills | 必须一致 |
 | --- | --- | --- | --- |
-| 创建同配置项目 | form | request JSON | 归一化 settings |
+| 创建同配置任务 | form | request JSON | 文案整理结果与归一化 settings |
 | 执行 Stage | API command | CLI command | fingerprint、Artifact Schema |
-| 查看项目 | Project View | `project show --json` | 状态、Stage、Artifact keys |
+| 查看任务 | Task View | `task show --json` | 状态、Stage、Artifact keys |
 | 查看运行 | 活动/诊断面板 | events/trace/logs | 同一 `run_id/trace_id` 和事件事实 |
 | 失败重试 | 页面按钮 | `stage retry` | attempt、复用范围、Error |
 | 单图重生成 | Visual 工作区 | `--visual` | 只失效对应 clip/final |
@@ -81,17 +82,18 @@ M06 先用短文案、固定 fake 图片、短 WAV 和 fake Whisper 跑通 `whit
 | 诊断导出 | 下载诊断包 | `diagnostics export` | 相同 bundle schema 和脱敏规则 |
 | 最终交付 | 下载 | artifact show/path | 同一 final hash |
 
-分别新建两个项目并调用随机模型时不要求字节相同；精确一致性针对同一 Project/Run 或 deterministic fake。
+分别新建两个任务并调用随机模型时不要求字节相同；精确一致性针对同一 Task/Run 或 deterministic fake。
 
 ## 4. 关键不变量
 
 ### 4.1 文案与规划
 
 - `source_text[source_range.start:source_range.end] == unit.text/visual.text`；
-- Unit 完整覆盖有效原文且互不重叠；
-- 每个 Unit 至少一个 Visual，Visual 完整覆盖父 Unit；
+- 文案整理后的 Unit 完整覆盖有效原文且互不重叠；
+- 锚点若启用，必须属于所属 Unit 的连续原文范围；
+- Storyboard 决定每个 Unit 的一个或多个 Visual，Visual 的范围/锚点可追溯；
 - 2–3 句话、1–2 张图允许合理偏离；
-- Storyboard 不改变 Unit/Visual 原文、范围、数量或顺序。
+- Storyboard 不改变 Unit 原文或范围；可基于锚点与 Voice 时长确定 Visual 数量及顺序。
 
 ### 4.2 Voice 与 Timeline
 
@@ -137,7 +139,7 @@ M06 先用短文案、固定 fake 图片、短 WAV 和 fake Whisper 跑通 `whit
 
 自动覆盖：
 
-1. AV Plan 成功后服务重启；
+1. 文案整理计划保存后服务重启；
 2. 第三个 Unit 配音写完 partial 前退出；
 3. Voice 提交后、Timeline 提交前退出；
 4. Whisper 超时、低覆盖、非单调和缺少可执行文件；
@@ -162,10 +164,10 @@ M06 先用短文案、固定 fake 图片、短 WAV 和 fake Whisper 跑通 `whit
 
 ## 7. 性能与资源
 
-- 20 个排队项目公平性，一个长任务不能占满 Unit 队列；
-- 项目内 1/2 路 TTS 的音色和墙钟对比；
+- 20 个排队任务公平性，一个长任务不能占满 Unit 队列；
+- 任务内 1/2 路 TTS 的音色和墙钟对比；
 - 图片并发和本地渲染不超过策略；
-- 大项目 View 不读取二进制；
+- 大任务 View 不读取二进制；
 - 10 万 Event/Log 条目下 cursor 查询、筛选和 UI 首屏延迟；
 - Log 轮转与诊断包不阻塞 Stage 提交；
 - `/mnt/*` 等慢文件系统的原子操作和性能 warning；
@@ -173,11 +175,11 @@ M06 先用短文案、固定 fake 图片、短 WAV 和 fake Whisper 跑通 `whit
 
 ## 8. 安全与隐私
 
-- API key/Authorization/Secret 不出现在 Project、Artifact、Event、Log、Audit、CLI、API、错误和诊断包；
+- API key/Authorization/Secret 不出现在 Task、Artifact、Event、Log、Audit、CLI、API、错误和诊断包；
 - 用唯一 canary Secret 扫描所有输出文件和压缩包；
 - 默认不记录完整正文、prompt、Provider 响应、参考音频内容；
 - 用户名、绝对路径和局域网地址按诊断包策略脱敏；
-- 下载只能访问注册 Artifact，路径不能逃逸 Project 根；
+- 下载只能访问注册 Artifact，路径不能逃逸 Task 根；
 - 上传类型、大小和媒体有效性；
 - prompt、错误、任务名不能形成命令注入；
 - CLI 不通过命令行参数传 Secret；

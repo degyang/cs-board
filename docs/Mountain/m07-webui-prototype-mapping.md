@@ -1,5 +1,7 @@
 # M07 WebUI Prototype Mapping
 
+> **迁移说明：** 本映射记录的是 Task 术语迁移前的实现差异。最终产品以 Task/`task_id`/`/tasks`、任务队列和任务工作台为准；文中 `/projects`、Project 和“项目列表/工作台”不构成最终术语或接口承诺。
+
 > 原型唯一来源（只读）：`/mnt/d/Workstation/SynologyDrive/workbuddy/Workshop/mountain/`
 > 本文档逐项记录原型文件与 web-v2 的对应关系、处理方式、mock 排除与 API gap。
 

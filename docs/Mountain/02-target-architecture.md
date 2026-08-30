@@ -23,14 +23,14 @@ flowchart TB
     end
 
     subgraph Domain[领域层]
-        Project[Project / Run / Stage]
+        Task[Task / Run / Stage]
         AVModel[Voice Unit / Visual Item]
         Artifact[Artifact Contracts]
         StateMachine[State Machine]
     end
 
     subgraph Ports[端口]
-        ProjectRepo[Project Repository]
+        TaskRepo[Task Repository]
         ArtifactStore[Artifact Store]
         TextPort[Text Model Port]
         ImagePort[Image Model Port]
@@ -73,7 +73,7 @@ flowchart TB
 ```text
 csboard/
 ├── domain/
-│   ├── models.py             # Project、Run、Stage、VoiceUnit、VisualItem、ArtifactRef
+│   ├── models.py             # Task、Run、Stage、VoiceUnit、VisualItem、ArtifactRef
 │   ├── enums.py              # engine、stage/status、timing_source
 │   ├── errors.py             # 稳定错误码与领域异常
 │   └── validation.py         # 跨产物不变量
@@ -85,7 +85,7 @@ csboard/
 │   ├── observability.py      # 领域事件、日志、审计和指标门面
 │   └── pipelines.py          # mountain-av-v1 与 legacy 定义
 ├── stages/
-│   ├── segment_script.py
+│   ├── generate_visual_anchors.py
 │   ├── clone_voice.py
 │   ├── plan_storyboard.py
 │   ├── generate_illustrations.py
@@ -127,7 +127,7 @@ web-v2/                       # 新 React + Vite SPA；与 legacy web/ 物理隔
 
 领域层只保存稳定概念和规则，不执行网络或进程调用：
 
-- Project、Run、Stage 的身份、版本和状态机；
+- Task、Run、Stage 的身份、版本和状态机；Task 是当前制作聚合根，Project 保留给未来多 Task 的上层组织；
 - Voice Unit 的连续原文范围、顺序、独立 Voice 和 TTS 状态；
 - Visual Item 的父单元、连续原文范围、图片和实际时间区间；
 - `timing_source=whisper|equal_fallback` 的完整单元级约束；
@@ -141,15 +141,15 @@ web-v2/                       # 新 React + Vite SPA；与 legacy web/ 物理隔
 所有入口共同使用以下命令：
 
 ```python
-create_project(request, command_context) -> ProjectView
-run_pipeline(project_id, execution_policy, command_context) -> RunView
-run_stage(project_id, stage_name, options, command_context) -> StageResult
-retry_stage(project_id, stage_name, command_context) -> StageResult
-invalidate_from(project_id, artifact_key, reason, command_context) -> InvalidationResult
-cancel_run(project_id, run_id, command_context) -> RunView
-get_project(project_id) -> ProjectView
-get_run_trace(project_id, run_id) -> TraceView
-list_projects(query) -> list[ProjectSummary]
+create_task(request, command_context) -> TaskView
+run_pipeline(task_id, execution_policy, command_context) -> RunView
+run_stage(task_id, stage_name, options, command_context) -> StageResult
+retry_stage(task_id, stage_name, command_context) -> StageResult
+invalidate_from(task_id, artifact_key, reason, command_context) -> InvalidationResult
+cancel_run(task_id, run_id, command_context) -> RunView
+get_task(task_id) -> TaskView
+get_run_trace(task_id, run_id) -> TraceView
+list_tasks(query) -> list[TaskSummary]
 ```
 
 `CommandContext` 至少包含 `entrypoint`、`command_id`、actor 和调用时间。新 Run 生成唯一 `trace_id`；同一 Run 从 WebUI、Skill 或 CLI 恢复时保持该 `trace_id`，但每次动作使用新的 `command_id`。命令返回结构化 View，并公开这些关联 ID，不返回框架对象。
@@ -186,7 +186,7 @@ class Stage(Protocol):
 固定顺序：
 
 ```text
-锁定项目
+锁定任务
 → 开始 Stage span 并写 running 事件
 → 校验输入和 fingerprint
 → 可复用则返回 cached
@@ -195,7 +195,7 @@ class Stage(Protocol):
 → 原子移动候选 Artifact，但暂不注册
 → 追加 succeeded/failed Domain Event
 → 更新 Artifact 索引与状态投影、写指标和诊断摘要
-→ 结束 span 并解锁项目
+→ 结束 span 并解锁任务
 ```
 
 阶段失败不得把 `.partial` 文件注册为正式 Artifact。异常必须保留稳定 `error_code`、`retryable`、关联 ID 和经过脱敏的原因链。
@@ -206,7 +206,7 @@ class Stage(Protocol):
 
 | Port | 能力 |
 | --- | --- |
-| `ProjectRepository` | 读取/写入 Project、Run、Stage 状态并做并发控制 |
+| `TaskRepository` | 读取/写入 Task、Run、Stage 状态并做并发控制 |
 | `ArtifactStore` | 解析逻辑 key、临时写入、原子提交、哈希、校验和失效 |
 | `TextModelPort` | Provider-neutral 文案和分镜生成，由 OpenAI-compatible adapter 翻译协议 |
 | `ImageModelPort` | Provider-neutral 文生图/参考图请求，能力不支持时显式返回 unsupported |
@@ -219,7 +219,7 @@ class Stage(Protocol):
 | `AuditSink` | 谁从何入口执行了哪个命令及其结果 |
 | `Redactor` | Secret、正文、提示词和外部响应的统一脱敏策略 |
 
-三类观测数据共享 `project_id/run_id/trace_id/command_id/span_id`，但职责和存储分离。完整规范见 [12-observability-and-diagnostics.md](12-observability-and-diagnostics.md)。
+三类观测数据共享 `task_id/run_id/trace_id/command_id/span_id`，但职责和存储分离。完整规范见 [12-observability-and-diagnostics.md](12-observability-and-diagnostics.md)。
 
 ## 4. 两种工作方式如何保持一致
 
@@ -227,11 +227,11 @@ class Stage(Protocol):
 
 ```text
 React form
-→ POST /api/projects
-→ create_project()
-→ POST /api/projects/{id}/runs
+→ POST /api/tasks
+→ create_task()
+→ POST /api/tasks/{id}/runs
 → run_pipeline()
-→ 事件游标 API + 项目查询 API + 诊断 API
+→ 事件游标 API + 任务查询 API + 诊断 API
 → React task workbench
 ```
 
@@ -240,9 +240,9 @@ React form
 ```text
 用户自然语言
 → workflow skill 归一化参数
-→ python -m cli.csboard project create --request request.json --json
-→ python -m cli.csboard pipeline run --project <id> --json --events jsonl
-→ 同一个 create_project() / run_pipeline()
+→ python -m cli.csboard task create --request request.json --json
+→ python -m cli.csboard pipeline run --task <id> --json --events jsonl
+→ 同一个 create_task() / run_pipeline()
 → 使用 trace_id 查询状态、解释 fallback 或导出诊断包
 ```
 
@@ -255,7 +255,7 @@ Electron/Tauri 薄壳
 → 启动并监管 FastAPI sidecar
 → FastAPI 同源托管 React + Vite dist 与 /api
 → 健康检查通过后加载本机 URL
-→ 同一个 create_project() / run_pipeline()
+→ 同一个 create_task() / run_pipeline()
 → 平台数据目录、工具链、系统密钥和日志 adapter
 ```
 
@@ -276,8 +276,9 @@ Electron/Tauri 薄壳
 
 ```mermaid
 flowchart LR
-    Input[项目输入] --> Segment[segment-script<br/>Voice Unit + Visual Item 文本范围]
-    Segment --> Voice[clone-voice<br/>逐单元 TTS + Whisper / fallback]
+    Input[任务制作输入<br/>含文案整理结果] --> Anchor[generate-visual-anchors<br/>可选 LLM 画面锚定重点]
+    Input --> Voice[clone-voice<br/>逐单元 TTS + Whisper / fallback]
+    Anchor --> Storyboard[plan-storyboard]
     Voice --> Storyboard[plan-storyboard]
     Storyboard --> Illustration[generate-illustrations]
     Voice --> Render[render-visuals]
@@ -288,7 +289,7 @@ flowchart LR
 
 默认 UI 和 Skills 都展示这六个生产阶段；第七个 Skill 是跨阶段 orchestrator。
 
-`segment-script` 在 TTS 前确定 Voice Unit 以及每个 Visual Item 对应的连续文字范围。`clone-voice` 对每个单元独立生成 Voice，并用 Whisper 获取文字边界；成功时按边界设置图片切换点，失败或结果不合法时，整个 Voice Unit 根据实际音频总时长按 Visual Item 数量等分。一个单元不能混用精确时间和估算时间。
+文案整理在 Task 创建时确定 Voice Unit，不属于 Run 中的 LLM 生产阶段。`generate-visual-anchors` 可选地产生可追溯的重点文字与原文范围；`clone-voice` 对每个 Unit 独立生成 Voice，并用 Whisper 获取文字边界。`plan-storyboard` 决定每个 Unit 的 Visual Item 数量和对应锚点。成功时按边界设置图片切换点，失败或结果不合法时，整个 Voice Unit 根据实际音频总时长按 Visual Item 数量等分。一个 Unit 不能混用精确时间和估算时间。
 
 白板和动态信息图使用同一个阶段图和 Artifact 契约，区别由 `engine=whiteboard|infographic-remotion` 选择视觉规划与 renderer adapter。现有动态信息图专有流程作为 legacy adapter 保留，不能继续演化为第二套新内核。
 
@@ -296,10 +297,10 @@ flowchart LR
 
 ## 6. 运行状态与事件
 
-### 6.1 Project 与 Stage
+### 6.1 Task 与 Stage
 
 ```text
-Project: draft → ready → running → succeeded
+Task: draft → ready → running → succeeded
                            ├→ failed
                            └→ cancelled
 
@@ -310,7 +311,7 @@ Stage: pending → running → succeeded
        succeeded → stale → running
 ```
 
-`cached` 是本次调用结果，不是持久状态。输入改变后，Project 回到 `ready`，受影响 Stage 进入 `stale`。
+`cached` 是本次调用结果，不是持久状态。输入改变后，Task 回到 `ready`，受影响 Stage 进入 `stale`。
 
 ### 6.2 结构化进度事件
 
@@ -322,7 +323,7 @@ Stage: pending → running → succeeded
   "timestamp": "2026-08-29T10:30:00.000+08:00",
   "event_name": "voice_unit.progress",
   "entrypoint": "web",
-  "project_id": "project-123",
+  "task_id": "task-123",
   "run_id": "run-456",
   "trace_id": "trace-456",
   "command_id": "command-789",
@@ -339,8 +340,8 @@ WebUI 渲染同一事件流，Skills/CLI 可按游标消费并总结。`message`
 
 ## 7. 并发与资源治理
 
-- 同一 Project 同时只允许一个改变产物的 Run；读取、日志查看和下载不受影响。
-- TTS 按 Voice Unit 调度；项目内默认串行，验证音色一致性后可配置最多 2 个并行单元。
+- 同一 Task 同时只允许一个改变产物的 Run；读取、日志查看和下载不受影响。
+- TTS 按 Voice Unit 调度；任务内默认串行，验证音色一致性后可配置最多 2 个并行单元。
 - 图片可在全局模型并发限制内按 Visual Item 并行，结果必须按 `visual_id` 原子登记。
 - 本地渲染并发由共享资源策略控制，不由 WebUI 或 Skill 自行设置。
 - 取消 token 传播到 Provider 等待、子进程以及 unit/visual 循环。
@@ -365,7 +366,7 @@ WebUI 渲染同一事件流，Skills/CLI 可按游标消费并总结。`message`
   "code": "TTS_NODE_UNAVAILABLE",
   "stage": "clone-voice",
   "retryable": true,
-  "project_id": "project-123",
+  "task_id": "task-123",
   "run_id": "run-456",
   "trace_id": "trace-456",
   "span_id": "span-voice-003",
