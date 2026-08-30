@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 export interface AsyncState<T> {
   data: T | null
   loading: boolean
   error: string | null
+  refetch: () => void
 }
 
 export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], pollMs?: number): AsyncState<T> {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [trigger, setTrigger] = useState(0)
+  const loaderRef = useRef(loader)
+  loaderRef.current = loader
+
+  const refetch = useCallback(() => setTrigger((n) => n + 1), [])
 
   useEffect(() => {
     let alive = true
@@ -17,7 +23,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], poll
 
     const load = async () => {
       try {
-        const d = await loader()
+        const d = await loaderRef.current()
         if (!alive) return
         setData(d)
         setError(null)
@@ -36,7 +42,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], poll
       if (timer) clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [...deps, trigger])
 
-  return { data, loading, error }
+  return { data, loading, error, refetch }
 }

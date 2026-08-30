@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ProvidersPage } from '../src/pages/ProvidersPage'
 
@@ -33,7 +32,7 @@ const mockProviderData = {
     },
     tts: {
       profile: {
-        provider_type: 'text_to_speech',
+        provider_type: 'tts',
         name: 'Text-to-Speech (IndexTTS)',
         description: 'IndexTTS 语音克隆服务',
         required_secrets: [],
@@ -55,11 +54,11 @@ const mockProviderData = {
 
 describe('ProvidersPage', () => {
   beforeEach(() => {
-    mockFetchProviders.mockReset()
+    vi.clearAllMocks()
   })
 
   it('shows loading state initially', () => {
-    mockFetchProviders.mockReturnValue(new Promise(() => {})) // Never resolves
+    mockFetchProviders.mockReturnValue(new Promise(() => {}))
     render(
       <MemoryRouter>
         <ProvidersPage />
@@ -69,7 +68,7 @@ describe('ProvidersPage', () => {
   })
 
   it('renders provider list after loading', async () => {
-    mockFetchProviders.mockResolvedValueOnce(mockProviderData)
+    mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
       <MemoryRouter>
         <ProvidersPage />
@@ -82,8 +81,76 @@ describe('ProvidersPage', () => {
     })
   })
 
+  it('shows "模型服务" as page title', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('模型服务')).toBeInTheDocument()
+    })
+  })
+
+  it('shows category badges from provider_type', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      // text_model → 文本
+      expect(screen.getByText('文本')).toBeInTheDocument()
+      // tts → 语音
+      expect(screen.getByText('语音')).toBeInTheDocument()
+    })
+  })
+
+  it('shows model chip from config.model', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument()
+    })
+  })
+
+  it('shows Base URL from config', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('https://api.openai.com/v1')).toBeInTheDocument()
+    })
+  })
+
+  it('shows TTS URL from config', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('http://127.0.0.1:7860')).toBeInTheDocument()
+    })
+  })
+
   it('shows warning when not all providers are available', async () => {
-    mockFetchProviders.mockResolvedValueOnce(mockProviderData)
+    mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
       <MemoryRouter>
         <ProvidersPage />
@@ -96,7 +163,7 @@ describe('ProvidersPage', () => {
   })
 
   it('shows success when all providers are available', async () => {
-    mockFetchProviders.mockResolvedValueOnce({
+    mockFetchProviders.mockResolvedValue({
       ...mockProviderData,
       all_configured: true,
       all_available: true,
@@ -113,7 +180,7 @@ describe('ProvidersPage', () => {
   })
 
   it('shows configured/unconfigured badges correctly', async () => {
-    mockFetchProviders.mockResolvedValueOnce(mockProviderData)
+    mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
       <MemoryRouter>
         <ProvidersPage />
@@ -121,18 +188,41 @@ describe('ProvidersPage', () => {
     )
 
     await waitFor(() => {
-      // text_model should show "未配置"
       const unconfigured = screen.getAllByText('未配置')
       expect(unconfigured.length).toBeGreaterThan(0)
-
-      // tts should show "已配置"
       const configured = screen.getAllByText('已配置')
       expect(configured.length).toBeGreaterThan(0)
     })
   })
 
+  it('shows error_code when provider unavailable', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('MISSING_API_KEY')).toBeInTheDocument()
+    })
+  })
+
+  it('shows suggestion when provider unavailable', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/请配置 API Key/)).toBeInTheDocument()
+    })
+  })
+
   it('renders links to provider detail pages', async () => {
-    mockFetchProviders.mockResolvedValueOnce(mockProviderData)
+    mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
       <MemoryRouter>
         <ProvidersPage />
@@ -142,6 +232,19 @@ describe('ProvidersPage', () => {
     await waitFor(() => {
       const links = screen.getAllByText('配置 →')
       expect(links.length).toBe(2)
+    })
+  })
+
+  it('shows CRUD gap notice', async () => {
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/当前版本由后端管理 Provider Profile/)).toBeInTheDocument()
     })
   })
 
@@ -157,5 +260,24 @@ describe('ProvidersPage', () => {
       expect(screen.getByText('加载失败')).toBeInTheDocument()
       expect(screen.getByText('网络错误')).toBeInTheDocument()
     })
+  })
+
+  it('does not use localStorage or sessionStorage', () => {
+    const lsSpy = vi.spyOn(Storage.prototype, 'getItem')
+    const ssSpy = vi.spyOn(Storage.prototype, 'setItem')
+
+    mockFetchProviders.mockResolvedValue(mockProviderData)
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    )
+
+    // No business state should use localStorage
+    expect(lsSpy).not.toHaveBeenCalled()
+    expect(ssSpy).not.toHaveBeenCalled()
+
+    lsSpy.mockRestore()
+    ssSpy.mockRestore()
   })
 })
