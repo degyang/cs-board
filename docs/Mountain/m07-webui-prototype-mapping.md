@@ -103,3 +103,164 @@
 | `RunView` 含 voice_units/artifacts 嵌套 | 需分别调用 `/units`、`/artifacts` | PR-3 分别获取 |
 | `CapabilityView` 按 engine+visual_source 查询 | `GET /api/v1/capabilities` 返回全部 | 适配查询方式 |
 | `SettingsSectionView` 设置分组 | Provider API 已覆盖 | 不迁移设置页 |
+
+## 11. 后端 DTO 对照（webapp/mountain_v1_api.py → web-v2/src/lib/api/types.ts）
+
+逐项对照后端实际响应，确认前端 DTO 字段完全匹配。
+
+### GET /health
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `status: str` | `HealthResponse.status: string` | ✅ |
+| `providers.all_available: bool` | `HealthResponse.providers.all_available: boolean` | ✅ |
+| `providers.providers.<name>.available: bool` | `ProviderAvailability.available: boolean` | ✅ |
+| `providers.providers.<name>.component: str` | `ProviderAvailability.component?: string` | ✅ |
+| `providers.providers.<name>.error_code: str\|null` | `ProviderAvailability.error_code?: string\|null` | ✅ |
+| `providers.providers.<name>.suggestion: str\|null` | `ProviderAvailability.suggestion?: string\|null` | ✅ |
+| `providers.unavailable: [str]` | `HealthResponse.providers.unavailable: string[]` | ✅ |
+
+### GET /capabilities
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `items[].engine: str` | `CapabilityItem.engine: string` | ✅ |
+| `items[].visual_source: str` | `CapabilityItem.visual_source: string` | ✅ |
+| `items[].supported: bool` | `CapabilityItem.supported: boolean` | ✅ |
+| `items[].pipeline_id: str` | `CapabilityItem.pipeline_id: string` | ✅ |
+| `items[].reason_code: str\|null` | `CapabilityItem.reason_code: string\|null` | ✅ |
+
+### GET /providers
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `providers.<name>.profile.*` | `ProviderProfile` | ✅ |
+| `providers.<name>.config_status.*` | `ConfigStatus` | ✅ |
+| `providers.<name>.availability.*` | `ProviderAvailability` | ✅ |
+| `all_configured: bool` | `ProviderListResponse.all_configured: boolean` | ✅ |
+| `all_available: bool` | `ProviderListResponse.all_available: boolean` | ✅ |
+
+### GET /providers/{name}
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `name, profile, config, config_status, availability` | `ProviderDetail` | ✅ |
+
+### PUT /providers/{name}/config
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `ok: true, provider: str, config: {}` | `UpdateConfigResponse` | ✅ |
+
+### GET /providers/{name}/secrets
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `provider: str` | `SecretStatusResponse.provider: string` | ✅ |
+| `secrets.<key>.configured: bool` | `SecretInfo.configured: boolean` | ✅ |
+| `secrets.<key>.masked_value: str\|null` | `SecretInfo.masked_value: string\|null` | ✅ |
+
+### POST /providers/{name}/secrets
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `ok: true, provider: str, key: str` | `SecretOperationResponse` | ✅ |
+
+### DELETE /providers/{name}/secrets/{key}
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `ok: true, provider: str, key: str` | `SecretOperationResponse` | ✅ |
+
+### GET /projects
+| 后端字段 (Project.to_dict) | 前端类型 | 匹配 |
+|---|---|---|
+| `project_id: str` | `Project.project_id: string` | ✅ |
+| `title: str` | `Project.title: string` | ✅ |
+| `pipeline_id: str` | `Project.pipeline_id: string` | ✅ |
+| `engine: str` | `Project.engine: string` | ✅ |
+| `status: str` | `Project.status: string` | ✅ |
+| `created_at: str` | `Project.created_at: string` | ✅ |
+| `updated_at: str` | `Project.updated_at: string` | ✅ |
+| `active_run_id: str\|null` | `Project.active_run_id: string\|null` | ✅ |
+| `revision: int` | `Project.revision: number` | ✅ |
+| `schema_version: int` | `Project.schema_version: number` | ✅ |
+
+### POST /projects
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `ok: true` | `CreateProjectResponse.ok: boolean` | ✅ |
+| `command: str` | `CreateProjectResponse.command: string` | ✅ |
+| `project_id: str` | `CreateProjectResponse.project_id: string` | ✅ |
+| `run_id: str` | `CreateProjectResponse.run_id: string` | ✅ |
+| `trace_id: str` | `CreateProjectResponse.trace_id: string` | ✅ |
+| `command_id: str` | `CreateProjectResponse.command_id: string` | ✅ |
+| `event_sequence: int` | `CreateProjectResponse.event_sequence: number` | ✅ |
+
+### GET /projects/{id}
+| 后端字段 (_project_detail_view) | 前端类型 | 匹配 |
+|---|---|---|
+| `project: Project.to_dict()` | `ProjectDetail.project: Project` | ✅ |
+| `active_run: Run.to_dict()\|null` | `ProjectDetail.active_run: RunDetail\|null` | ✅ |
+| `stages: [{stage, status, attempt}]` | `ProjectDetail.stages: StageListItem[]` | ✅ |
+| `warnings: [...]` | `ProjectDetail.warnings: unknown[]` | ✅ |
+| `artifacts: [{artifact_key, relative_path, sha256, size_bytes, producer_stage, status}]` | `ProjectDetail.artifacts: Artifact[]` | ✅ |
+| `trace: {trace_id, command_ids}\|null` | `ProjectDetail.trace: TraceInfo\|null` | ✅ |
+
+### GET /projects/{id}/runs/{runId}
+| 后端字段 (Run.to_dict) | 前端类型 | 匹配 |
+|---|---|---|
+| `schema_version: int` | `RunDetail.schema_version: number` | ✅ |
+| `run_id: str` | `RunDetail.run_id: string` | ✅ |
+| `project_id: str` | `RunDetail.project_id: string` | ✅ |
+| `trace_id: str` | `RunDetail.trace_id: string` | ✅ |
+| `entrypoint: str` | `RunDetail.entrypoint: string` | ✅ |
+| `command_ids: [str]` | `RunDetail.command_ids: string[]` | ✅ |
+| `status: str` | `RunDetail.status: string` | ✅ |
+| `target_stage: str\|null` | `RunDetail.target_stage: string\|null` | ✅ |
+| `started_at: str` | `RunDetail.started_at: string` | ✅ |
+| `finished_at: str\|null` | `RunDetail.finished_at: string\|null` | ✅ |
+| `stages.<name>.status: str` | `StageState.status: string` | ✅ |
+| `stages.<name>.attempt: int` | `StageState.attempt: number` | ✅ |
+| `warnings: [...]` | `RunDetail.warnings: unknown[]` | ✅ |
+
+### GET /projects/{id}/runs/{runId}/stages
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `items[].stage: str` | `StageListItem.stage: string` | ✅ |
+| `items[].status: str` | `StageListItem.status: string` | ✅ |
+| `items[].attempt: int` | `StageListItem.attempt: number` | ✅ |
+
+### GET /projects/{id}/runs/{runId}/units
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `items[]` (merged av-plan + timeline) | `Unit` (flexible dict with `unit_id`, optional `text`, `order`, `timing`) | ✅ |
+
+### GET /projects/{id}/runs/{runId}/artifacts
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `items[].artifact_key: str` | `Artifact.artifact_key: string` | ✅ |
+| `items[].relative_path: str` | `Artifact.relative_path: string` | ✅ |
+| `items[].sha256: str` | `Artifact.sha256: string` | ✅ |
+| `items[].size_bytes: int` | `Artifact.size_bytes: number` | ✅ |
+| `items[].producer_stage: str` | `Artifact.producer_stage: string` | ✅ |
+| `items[].status: str` | `Artifact.status: string` | ✅ |
+
+### GET /projects/{id}/runs/{runId}/events?after=N
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `items[]` (arbitrary event dicts) | `EventsResponse.items: Record<string, unknown>[]` | ✅ |
+| `next_cursor: int` | `EventsResponse.next_cursor: number` | ✅ |
+
+### GET /projects/{id}/runs/{runId}/logs?level=&component=&stage=
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `items[]` (parsed JSONL) | `LogsResponse.items: Record<string, unknown>[]` | ✅ |
+| Query: `level`, `component`, `stage` | `fetchLogs(filters?)` | ✅ |
+
+### POST /projects/{id}/runs/{runId}/cancel
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| `ok: true, status: "cancelled"` | `cancelRun()` returns `unknown` | ✅ |
+
+### POST /projects/{id}/runs/{runId}/retry
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| Pipeline result shape | `retryRun()` returns `unknown` | ✅ |
+
+### GET /projects/{id}/runs/{runId}/final
+| 后端字段 | 前端类型 | 匹配 |
+|---|---|---|
+| FileResponse (video/mp4) | `getFinalUrl()` returns URL string | ✅ |

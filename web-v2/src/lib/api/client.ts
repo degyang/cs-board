@@ -207,9 +207,10 @@ export function fetchEvents(projectId: string, runId: string, after = 0): Promis
 
 // ── Logs ────────────────────────────────────────────────────────────────
 
-export function fetchLogs(projectId: string, runId: string, filters?: { level?: string; stage?: string }): Promise<LogsResponse> {
+export function fetchLogs(projectId: string, runId: string, filters?: { level?: string; component?: string; stage?: string }): Promise<LogsResponse> {
   const params = new URLSearchParams()
   if (filters?.level) params.set('level', filters.level)
+  if (filters?.component) params.set('component', filters.component)
   if (filters?.stage) params.set('stage', filters.stage)
   const qs = params.toString()
   return get<LogsResponse>(`/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/logs${qs ? '?' + qs : ''}`)

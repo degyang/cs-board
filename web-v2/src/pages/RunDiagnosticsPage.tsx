@@ -1,16 +1,13 @@
 import { useParams } from 'react-router-dom'
 import { useState, useCallback } from 'react'
 import { useAsync } from '../lib/api/queries'
-import { fetchProject, fetchRun, fetchEvents, fetchLogs } from '../lib/api/client'
+import { fetchRun, fetchEvents, fetchLogs } from '../lib/api/client'
 import { formatTime, shortId } from '../lib/formatting'
 import { BackButton } from '../components/ui/BackButton'
 import { CopyButton } from '../components/ui/CopyButton'
 
 export function RunDiagnosticsPage() {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>()
-
-  const projectLoader = useCallback(() => fetchProject(projectId!), [projectId])
-  const { data: projectData } = useAsync(projectLoader, [projectId])
 
   const runLoader = useCallback(() => {
     if (!projectId || !runId) return Promise.resolve(null)
@@ -74,7 +71,7 @@ export function RunDiagnosticsPage() {
       <div className="page-head">
         <h1 className="page-title">运行诊断</h1>
         <p className="page-desc">
-          {projectData?.project?.title ?? '—'} · 运行 {shortId(run.run_id)}
+          运行 {shortId(run.run_id)}
         </p>
       </div>
 
@@ -100,17 +97,35 @@ export function RunDiagnosticsPage() {
           <span className="v">{run.status}</span>
         </div>
         <div className="settings-row">
+          <span className="k">目标阶段</span>
+          <span className="v">{run.target_stage ?? '—'}</span>
+        </div>
+        <div className="settings-row">
           <span className="k">开始时间</span>
           <span className="v">{run.started_at ? formatTime(run.started_at) : '—'}</span>
         </div>
         <div className="settings-row">
           <span className="k">完成时间</span>
-          <span className="v">{run.completed_at ? formatTime(run.completed_at) : '—'}</span>
+          <span className="v">{run.finished_at ? formatTime(run.finished_at) : '—'}</span>
         </div>
-        <div className="settings-row">
-          <span className="k">命令数</span>
-          <span className="v">{run.command_ids?.length ?? 0}</span>
-        </div>
+      </div>
+
+      {/* Stages */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3 className="card-title">阶段状态</h3>
+        {Object.keys(run.stages).length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--nt-text-muted)', padding: '8px 0' }}>暂无阶段数据</p>
+        ) : (
+          <div>
+            {Object.entries(run.stages).map(([stage, state]) => (
+              <div key={stage} style={{ padding: '6px 0', borderBottom: '1px solid var(--nt-border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <span style={{ fontWeight: 600, minWidth: 160 }}>{stage}</span>
+                <span>{state.status}</span>
+                <span style={{ color: 'var(--nt-text-muted)', fontSize: 12 }}>attempt {state.attempt}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Events */}
@@ -120,14 +135,14 @@ export function RunDiagnosticsPage() {
           <p style={{ fontSize: 13, color: 'var(--nt-text-muted)', padding: '8px 0' }}>暂无事件</p>
         ) : (
           <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-            {events.map((ev) => (
-              <div key={ev.sequence} style={{ padding: '6px 0', borderBottom: '1px solid var(--nt-border)', fontSize: 12 }}>
+            {events.map((ev, i) => (
+              <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid var(--nt-border)', fontSize: 12 }}>
                 <span style={{ color: 'var(--nt-text-muted)', fontFamily: 'var(--nt-font-mono)', marginRight: 8 }}>
-                  {ev.timestamp ? formatTime(ev.timestamp) : ''}
+                  {ev.timestamp ? formatTime(String(ev.timestamp)) : ''}
                 </span>
-                <span style={{ fontWeight: 600, marginRight: 8 }}>{ev.event_type}</span>
-                {ev.stage && <span style={{ color: 'var(--nt-text-secondary)' }}>[{ev.stage}]</span>}
-                <span style={{ marginLeft: 8 }}>{ev.action}</span>
+                <span style={{ fontWeight: 600, marginRight: 8 }}>{String(ev.event_type ?? '')}</span>
+                {ev.stage != null && <span style={{ color: 'var(--nt-text-secondary)' }}>[{String(ev.stage)}]</span>}
+                {ev.action != null && <span style={{ marginLeft: 8 }}>{String(ev.action)}</span>}
               </div>
             ))}
           </div>
@@ -152,11 +167,11 @@ export function RunDiagnosticsPage() {
           <div className="activity-body" style={{ maxHeight: 400 }}>
             {filteredLogs.map((log, i) => (
               <div key={i} className="log-line">
-                <span className="log-ts">{log.timestamp ? formatTime(log.timestamp) : ''}</span>
-                <span className={`log-level-${log.level}`}>[{log.level}]</span>
-                {log.component && <span> {log.component}</span>}
-                {log.stage && <span> [{log.stage}]</span>}
-                <span> {log.message}</span>
+                <span className="log-ts">{log.timestamp ? formatTime(String(log.timestamp)) : ''}</span>
+                <span className={`log-level-${String(log.level ?? '')}`}>[{String(log.level ?? '')}]</span>
+                {log.component != null && <span> {String(log.component)}</span>}
+                {log.stage != null && <span> [{String(log.stage)}]</span>}
+                <span> {String(log.message ?? '')}</span>
               </div>
             ))}
           </div>

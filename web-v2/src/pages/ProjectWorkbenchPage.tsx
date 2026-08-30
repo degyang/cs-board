@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useState, useCallback } from 'react'
 import { useAsync } from '../lib/api/queries'
-import { fetchProject, fetchUnits, fetchArtifacts, cancelRun, retryRun, getFinalUrl, fetchStages } from '../lib/api/client'
+import { fetchProject, fetchUnits, cancelRun, retryRun, getFinalUrl } from '../lib/api/client'
 import { formatTime, shortId, formatBytes, statusText } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
@@ -16,9 +16,12 @@ export function ProjectWorkbenchPage() {
   const { data: projectData, loading: projectLoading, error: projectError } = useAsync(projectLoader, [projectId], 15_000)
 
   const project = projectData?.project
-  const run = projectData?.run
+  const activeRun = projectData?.active_run ?? null
+  const stages = projectData?.stages ?? []
+  const artifacts = projectData?.artifacts ?? []
+  const trace = projectData?.trace ?? null
 
-  const runId = run?.run_id
+  const runId = activeRun?.run_id
 
   const unitsLoader = useCallback(() => {
     if (!projectId || !runId) return Promise.resolve({ items: [] })
@@ -26,21 +29,7 @@ export function ProjectWorkbenchPage() {
   }, [projectId, runId])
   const { data: unitsData } = useAsync(unitsLoader, [projectId, runId], 15_000)
 
-  const artifactsLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [] })
-    return fetchArtifacts(projectId, runId)
-  }, [projectId, runId])
-  const { data: artifactsData } = useAsync(artifactsLoader, [projectId, runId], 15_000)
-
-  const stagesLoader = useCallback(() => {
-    if (!projectId || !runId) return Promise.resolve({ items: [] })
-    return fetchStages(projectId, runId)
-  }, [projectId, runId])
-  const { data: stagesData } = useAsync(stagesLoader, [projectId, runId], 15_000)
-
   const units = unitsData?.items ?? []
-  const artifacts = artifactsData?.items ?? []
-  const stages = stagesData?.items ?? []
 
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -100,18 +89,17 @@ export function ProjectWorkbenchPage() {
     )
   }
 
-  // Derive stage statuses from stages data
+  // Derive stage statuses from project detail stages array
   const stageStatuses: Record<string, string> = {}
   for (const s of stages) {
-    stageStatuses[s.stage] = (s as Record<string, unknown>).status as string ?? 'pending'
+    stageStatuses[s.stage] = s.status ?? 'pending'
   }
-  // Fill missing stages as pending
   for (const key of STAGE_KEYS) {
     if (!stageStatuses[key]) stageStatuses[key] = 'pending'
   }
 
   const completedCount = STAGE_KEYS.filter((k) => stageStatuses[k] === 'succeeded').length
-  const hasFinal = artifacts.some((a) => a.stage === 'compose-video' && a.status === 'succeeded')
+  const hasFinal = artifacts.some((a) => a.producer_stage === 'compose-video' && a.status === 'succeeded')
 
   return (
     <div className="page">
@@ -121,7 +109,7 @@ export function ProjectWorkbenchPage() {
       <div className="topbar" style={{ position: 'static', padding: 0, border: 'none', background: 'none', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h1 className="page-title">{project.title || `任务 ${shortId(project.project_id)}`}</h1>
-          <StatusBadge status={run?.status ?? project.status} />
+          <StatusBadge status={activeRun?.status ?? project.status} />
           <span style={{ fontSize: 12, color: 'var(--nt-text-muted)' }}>
             创建于 {formatTime(project.created_at)}
           </span>
@@ -133,39 +121,45 @@ export function ProjectWorkbenchPage() {
             project: {shortId(project.project_id)}
             <CopyButton text={project.project_id} />
           </span>
-          {run && (
+          {activeRun && (
             <>
               <span className="id-chip">
-                run: {shortId(run.run_id)}
-                <CopyButton text={run.run_id} />
+                run: {shortId(activeRun.run_id)}
+                <CopyButton text={activeRun.run_id} />
               </span>
               <span className="id-chip">
-                trace: {shortId(run.trace_id)}
-                <CopyButton text={run.trace_id} />
+                trace: {shortId(activeRun.trace_id)}
+                <CopyButton text={activeRun.trace_id} />
               </span>
             </>
+          )}
+          {!activeRun && trace && (
+            <span className="id-chip">
+              trace: {shortId(trace.trace_id)}
+              <CopyButton text={trace.trace_id} />
+            </span>
           )}
         </div>
 
         {/* Actions */}
         <div className="run-actions">
-          {run && (run.status === 'pending' || run.status === 'running') && (
+          {activeRun && (activeRun.status === 'pending' || activeRun.status === 'running') && (
             <button className="btn btn-danger btn-sm" onClick={handleCancel} disabled={actionLoading}>
               取消
             </button>
           )}
-          {run && (run.status === 'failed' || run.status === 'cancelled') && (
+          {activeRun && (activeRun.status === 'failed' || activeRun.status === 'cancelled') && (
             <button className="btn btn-primary btn-sm" onClick={handleRetry} disabled={actionLoading}>
               重试
             </button>
           )}
-          {hasFinal && run && (
-            <a href={getFinalUrl(project.project_id, run.run_id)} className="btn btn-ghost btn-sm" download>
+          {hasFinal && activeRun && (
+            <a href={getFinalUrl(project.project_id, activeRun.run_id)} className="btn btn-ghost btn-sm" download>
               下载成片
             </a>
           )}
-          {run && (
-            <Link to={`/projects/${project.project_id}/runs/${run.run_id}/diagnostics`} className="btn btn-ghost btn-sm">
+          {activeRun && (
+            <Link to={`/projects/${project.project_id}/runs/${activeRun.run_id}/diagnostics`} className="btn btn-ghost btn-sm">
               诊断
             </Link>
           )}
@@ -202,8 +196,8 @@ export function ProjectWorkbenchPage() {
             <ul className="unit-list">
               {units.map((u) => (
                 <li key={u.unit_id} className="unit-item">
-                  <div className="unit-label">单元 {u.order + 1}</div>
-                  <div className="unit-text">{u.text}</div>
+                  <div className="unit-label">单元 {(u.order ?? 0) + 1}</div>
+                  <div className="unit-text">{(u.text as string) ?? ''}</div>
                 </li>
               ))}
             </ul>
@@ -216,7 +210,7 @@ export function ProjectWorkbenchPage() {
             阶段工作区
             <span className="badge">{completedCount}/{STAGE_KEYS.length}</span>
           </div>
-          {run ? (
+          {activeRun ? (
             <div>
               {STAGE_KEYS.map((key) => {
                 const st = stageStatuses[key]
@@ -226,11 +220,6 @@ export function ProjectWorkbenchPage() {
                       <StatusBadge status={st} />
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{STAGE_NAMES[key]}</span>
                     </div>
-                    {run.stages?.[key]?.error && (
-                      <div className="error-card" style={{ marginTop: 6 }}>
-                        <span className="code">{run.stages[key].error}</span>
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -257,6 +246,7 @@ export function ProjectWorkbenchPage() {
               <thead>
                 <tr>
                   <th>文件</th>
+                  <th>阶段</th>
                   <th>状态</th>
                   <th>大小</th>
                 </tr>
@@ -265,8 +255,9 @@ export function ProjectWorkbenchPage() {
                 {artifacts.map((a) => (
                   <tr key={a.artifact_key}>
                     <td style={{ fontFamily: 'var(--nt-font-mono)', fontSize: 12 }}>{a.artifact_key}</td>
+                    <td style={{ fontSize: 12 }}>{a.producer_stage}</td>
                     <td><StatusBadge status={a.status} /></td>
-                    <td style={{ fontSize: 12 }}>{formatBytes(a.size_bytes ?? undefined)}</td>
+                    <td style={{ fontSize: 12 }}>{formatBytes(a.size_bytes)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -287,10 +278,11 @@ export function ProjectWorkbenchPage() {
         </button>
         {showActivity && (
           <div className="activity-body">
-            {run ? (
+            {activeRun ? (
               <p style={{ fontSize: 12, color: 'var(--nt-text-muted)', padding: 8 }}>
-                运行 {shortId(run.run_id)} — {statusText(run.status)}
-                {run.started_at && <>，开始于 {formatTime(run.started_at)}</>}
+                运行 {shortId(activeRun.run_id)} — {statusText(activeRun.status)}
+                {activeRun.started_at && <>，开始于 {formatTime(activeRun.started_at)}</>}
+                {activeRun.finished_at && <>，完成于 {formatTime(activeRun.finished_at)}</>}
               </p>
             ) : (
               <p style={{ fontSize: 12, color: 'var(--nt-text-muted)', padding: 8 }}>暂无运行记录</p>

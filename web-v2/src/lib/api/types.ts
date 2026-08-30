@@ -1,6 +1,6 @@
 /* ==========================================================================
    Mountain API TypeScript DTOs
-   对应 /api/v1 端点的请求/响应类型
+   对应 webapp/mountain_v1_api.py 的实际响应结构
    ========================================================================== */
 
 // ── Stage Keys & Names ──────────────────────────────────────────────────
@@ -37,6 +37,14 @@ export const ENGINE_NAMES: Record<string, string> = {
 }
 
 // ── Health ──────────────────────────────────────────────────────────────
+// GET /health → { status, providers: { all_available, providers, unavailable } }
+
+export interface ProviderAvailability {
+  available: boolean
+  component?: string
+  error_code?: string | null
+  suggestion?: string | null
+}
 
 export interface HealthResponse {
   status: string
@@ -48,6 +56,7 @@ export interface HealthResponse {
 }
 
 // ── Capabilities ────────────────────────────────────────────────────────
+// GET /capabilities → { items[], providers }
 
 export interface CapabilityItem {
   engine: string
@@ -67,6 +76,7 @@ export interface CapabilitiesResponse {
 }
 
 // ── Providers ───────────────────────────────────────────────────────────
+// GET /providers → { providers: { <name>: ProviderEntry }, all_configured, all_available }
 
 export interface ProviderProfile {
   provider_type: string
@@ -75,12 +85,6 @@ export interface ProviderProfile {
   required_secrets: string[]
   optional_secrets: string[]
   config: Record<string, unknown>
-}
-
-export interface ProviderAvailability {
-  available: boolean
-  error_code?: string
-  suggestion?: string
 }
 
 export interface ConfigStatus {
@@ -102,6 +106,8 @@ export interface ProviderListResponse {
   all_available: boolean
 }
 
+// GET /providers/{name} → { name, profile, config, config_status, availability }
+
 export interface ProviderDetail {
   name: string
   profile: ProviderProfile
@@ -110,6 +116,8 @@ export interface ProviderDetail {
   availability: ProviderAvailability
 }
 
+// PUT /providers/{name}/config → { ok, provider, config }
+
 export interface UpdateConfigResponse {
   ok: boolean
   provider: string
@@ -117,6 +125,7 @@ export interface UpdateConfigResponse {
 }
 
 // ── Secrets ─────────────────────────────────────────────────────────────
+// GET /providers/{name}/secrets → { provider, secrets: { <key>: SecretInfo } }
 
 export interface SecretInfo {
   configured: boolean
@@ -127,6 +136,8 @@ export interface SecretStatusResponse {
   provider: string
   secrets: Record<string, SecretInfo>
 }
+
+// POST /providers/{name}/secrets → { ok, provider, key }
 
 export interface SetSecretRequest {
   key: string
@@ -140,21 +151,27 @@ export interface SecretOperationResponse {
 }
 
 // ── Projects ────────────────────────────────────────────────────────────
+// GET /projects → { items: Project[] }
+// Project.to_dict() from dataclasses.asdict()
 
 export interface Project {
   project_id: string
   title: string
-  status: string
-  engine: string
   pipeline_id: string
-  active_run_id: string | null
+  engine: string
+  status: string
   created_at: string
   updated_at: string
+  active_run_id: string | null
+  revision: number
+  schema_version: number
 }
 
 export interface ProjectListResponse {
   items: Project[]
 }
+
+// POST /projects → { ok, command, project_id, run_id, trace_id, command_id, event_sequence }
 
 export interface CreateProjectRequest {
   title: string
@@ -163,20 +180,21 @@ export interface CreateProjectRequest {
 }
 
 export interface CreateProjectResponse {
+  ok: boolean
+  command: string
   project_id: string
   run_id: string
   trace_id: string
   command_id: string
+  event_sequence: number
 }
 
-export interface ProjectDetail {
-  project: Project
-  run: RunDetail | null
-}
-
-// ── Run & Stages ────────────────────────────────────────────────────────
+// ── Run ─────────────────────────────────────────────────────────────────
+// GET /projects/{id}/runs/{runId} → RunView
+// Run.to_dict() + computed fields
 
 export interface RunDetail {
+  schema_version: number
   run_id: string
   project_id: string
   trace_id: string
@@ -185,7 +203,7 @@ export interface RunDetail {
   status: string
   target_stage: string | null
   started_at: string
-  completed_at: string | null
+  finished_at: string | null
   stages: Record<string, StageState>
   warnings: unknown[]
 }
@@ -193,29 +211,42 @@ export interface RunDetail {
 export interface StageState {
   status: string
   attempt: number
-  started_at?: string
-  finished_at?: string
-  error?: string | null
+}
+
+// ── Project Detail ──────────────────────────────────────────────────────
+// GET /projects/{id} → _project_detail_view()
+// { project, active_run, stages, warnings, artifacts, trace }
+
+export interface ProjectDetail {
+  project: Project
+  active_run: RunDetail | null
+  stages: StageListItem[]
+  warnings: unknown[]
+  artifacts: Artifact[]
+  trace: TraceInfo | null
+}
+
+export interface StageListItem {
+  stage: string
+  status: string
+  attempt: number
+}
+
+export interface TraceInfo {
+  trace_id: string
+  command_ids: string[]
 }
 
 // ── Units ───────────────────────────────────────────────────────────────
+// GET /projects/{id}/runs/{runId}/units → { items }
+// Merged from av-plan.json voice_units + timeline.json timings
 
 export interface Unit {
   unit_id: string
-  text: string
-  order: number
-  timing?: {
-    alignment_source?: string
-    duration_ms?: number
-    fallback?: boolean
-  } | null
-  visual_items?: VisualItem[]
-}
-
-export interface VisualItem {
-  visual_id: string
-  text: string
-  status: string
+  text?: string
+  order?: number
+  timing?: Record<string, unknown> | null
+  [key: string]: unknown
 }
 
 export interface UnitListResponse {
@@ -223,14 +254,15 @@ export interface UnitListResponse {
 }
 
 // ── Artifacts ───────────────────────────────────────────────────────────
+// GET /projects/{id}/runs/{runId}/artifacts → { items }
 
 export interface Artifact {
   artifact_key: string
-  stage: string
+  relative_path: string
+  sha256: string
+  size_bytes: number
+  producer_stage: string
   status: string
-  sha256: string | null
-  size_bytes: number | null
-  created_at: string
 }
 
 export interface ArtifactListResponse {
@@ -238,34 +270,20 @@ export interface ArtifactListResponse {
 }
 
 // ── Events ──────────────────────────────────────────────────────────────
-
-export interface RunEvent {
-  sequence: number
-  event_type: string
-  stage: string | null
-  action: string
-  timestamp: string
-  data: Record<string, unknown>
-}
+// GET /projects/{id}/runs/{runId}/events?after=N → { items, next_cursor }
+// Items are arbitrary event dicts from telemetry
 
 export interface EventsResponse {
-  items: RunEvent[]
+  items: Record<string, unknown>[]
   next_cursor: number
 }
 
 // ── Logs ────────────────────────────────────────────────────────────────
-
-export interface LogEntry {
-  timestamp: string
-  level: string
-  component: string
-  stage: string | null
-  message: string
-  trace_id: string | null
-}
+// GET /projects/{id}/runs/{runId}/logs?level=&component=&stage= → { items }
+// Items are parsed JSONL log entries
 
 export interface LogsResponse {
-  items: LogEntry[]
+  items: Record<string, unknown>[]
 }
 
 // ── API Error ───────────────────────────────────────────────────────────
