@@ -134,55 +134,70 @@ class FilesystemTaskRepository:
         preparation: dict,
         visual_anchor_enabled: bool,
         reference_filename: str | None = None,
+        preserve_reference: bool = False,
     ) -> None:
         """原子提交：request + task preparation + reference。
 
-        所有文件都在 txn_dir 中准备，然后通过 _install_target() 安装。
-        事务失败时先删除本事务已安装的新 target，再恢复旧 backup。
+        在 task_lock 内完成：读取当前状态、准备最终数据、备份、安装、回滚和清理。
+        preserve_reference=True 时在锁内从当前已提交状态保留 reference。
         """
         task_dir = self.task_dir(task_id)
         if not task_dir.exists():
             raise FileNotFoundError(f"Task {task_id} 不存在")
 
-        # 在事务目录中准备所有新文件
-        request_target = task_dir / "request.json"
-        task_target = task_dir / "task.json"
+        with self.task_lock(task_id):
+            # 在锁内读取当前状态
+            request_target = task_dir / "request.json"
+            task_target = task_dir / "task.json"
 
-        # 准备 request
-        tmp_request = txn_dir / "request.json"
-        self._write_json(tmp_request, request_data)
+            # 如果需要保留 reference，在锁内读取当前已提交的 reference
+            if preserve_reference and not reference_filename:
+                current_request = self._read_json(request_target) if request_target.exists() else {}
+                current_ref = current_request.get("reference_audio")
+                if current_ref:
+                    request_data = {**request_data, "reference_audio": current_ref}
 
-        # 准备 task
-        tmp_task = txn_dir / "task.json"
-        existing_task = self._read_json(task_target) if task_target.exists() else {}
-        existing_task["script_preparation"] = preparation
-        existing_task["visual_anchor_enabled"] = visual_anchor_enabled
-        self._write_json(tmp_task, existing_task)
+            # 在事务目录中准备所有新文件
+            tmp_request = txn_dir / "request.json"
+            self._write_json(tmp_request, request_data)
 
-        # 准备 reference（如果有）
-        tmp_ref: Path | None = None
-        if reference_filename:
-            suffix = Path(reference_filename).suffix.lower() or ".wav"
-            staging_ref = txn_dir / f"reference{suffix}"
-            if staging_ref.exists():
-                tmp_ref = staging_ref
+            tmp_task = txn_dir / "task.json"
+            existing_task = self._read_json(task_target) if task_target.exists() else {}
+            existing_task["script_preparation"] = preparation
+            existing_task["visual_anchor_enabled"] = visual_anchor_enabled
+            self._write_json(tmp_task, existing_task)
 
-        # 查找旧 reference 路径
-        old_request_data = self.get_request(task_id) or {}
-        old_ref_relative = old_request_data.get("reference_audio")
-        old_ref_path: Path | None = task_dir / old_ref_relative if old_ref_relative else None
+            # 准备 reference（如果有）
+            tmp_ref: Path | None = None
+            if reference_filename:
+                suffix = Path(reference_filename).suffix.lower() or ".wav"
+                staging_ref = txn_dir / f"reference{suffix}"
+                if staging_ref.exists():
+                    tmp_ref = staging_ref
 
-        # 调用可故障注入的安装方法
-        self._install_target(
-            task_id=task_id,
-            txn_dir=txn_dir,
-            tmp_request=tmp_request,
-            tmp_task=tmp_task,
-            tmp_ref=tmp_ref,
-            request_target=request_target,
-            task_target=task_target,
-            old_ref_path=old_ref_path,
-        )
+            # 查找旧 reference 路径
+            old_request_data = self._read_json(request_target) if request_target.exists() else {}
+            old_ref_relative = old_request_data.get("reference_audio")
+            old_ref_path: Path | None = task_dir / old_ref_relative if old_ref_relative else None
+
+            # 调用安装方法（含 checkpoint hook）
+            self._install_target(
+                task_id=task_id,
+                txn_dir=txn_dir,
+                tmp_request=tmp_request,
+                tmp_task=tmp_task,
+                tmp_ref=tmp_ref,
+                request_target=request_target,
+                task_target=task_target,
+                old_ref_path=old_ref_path,
+            )
+
+    def _input_txn_checkpoint(self, name: str, context: dict) -> None:
+        """事务 checkpoint hook。默认 no-op，测试子类可覆盖以注入故障。
+
+        name: checkpoint 名称，如 "request.after_backup", "task.after_install"
+        context: 包含 task_id, txn_id 等信息
+        """
 
     def _install_target(
         self,
@@ -195,13 +210,14 @@ class FilesystemTaskRepository:
         task_target: Path,
         old_ref_path: Path | None,
     ) -> None:
-        """安装所有目标文件。可被测试子类覆盖以注入故障。
+        """安装所有目标文件。
 
         事务 ID 从 txn_dir 名称提取。
         回滚策略：先删除本事务已安装的新 target，再恢复旧 backup。
         """
         task_dir = self.task_dir(task_id)
         txn_id = txn_dir.name
+        ctx = {"task_id": task_id, "txn_id": txn_id}
 
         # 记录旧文件用于回滚
         old_request_bak: Path | None = None
@@ -218,41 +234,42 @@ class FilesystemTaskRepository:
             if request_target.exists():
                 old_request_bak = task_dir / f"request.json.{txn_id}.bak"
                 request_target.rename(old_request_bak)
+            self._input_txn_checkpoint("request.after_backup", ctx)
             tmp_request.rename(request_target)
             installed_request = request_target
+            self._input_txn_checkpoint("request.after_install", ctx)
 
             # 步骤 2：备份并安装 task
             if task_target.exists():
                 old_task_bak = task_dir / f"task.json.{txn_id}.bak"
                 task_target.rename(old_task_bak)
+            self._input_txn_checkpoint("task.after_backup", ctx)
             tmp_task.rename(task_target)
             installed_task = task_target
+            self._input_txn_checkpoint("task.after_install", ctx)
 
             # 步骤 3：备份并安装 reference（如果有）
             if tmp_ref and tmp_ref.exists():
                 if old_ref_path and old_ref_path.exists():
                     old_ref_bak = task_dir / f"{old_ref_path.name}.{txn_id}.bak"
                     old_ref_path.rename(old_ref_bak)
+                self._input_txn_checkpoint("reference.after_backup", ctx)
 
                 if old_ref_path:
-                    # 同扩展：移动到旧路径位置
-                    # 跨扩展：移动到新扩展路径
                     if old_ref_path.suffix == tmp_ref.suffix:
-                        # 同扩展
                         tmp_ref.rename(old_ref_path)
                         installed_ref = old_ref_path
                     else:
-                        # 跨扩展：使用新扩展名
                         new_ref_path = old_ref_path.parent / f"reference{tmp_ref.suffix}"
                         tmp_ref.rename(new_ref_path)
                         installed_ref = new_ref_path
                 else:
-                    # 首次上传
                     inputs_dir = task_dir / "inputs"
                     inputs_dir.mkdir(exist_ok=True)
                     final_ref = inputs_dir / f"reference{tmp_ref.suffix}"
                     tmp_ref.rename(final_ref)
                     installed_ref = final_ref
+                self._input_txn_checkpoint("reference.after_install", ctx)
 
         except Exception:
             # 回滚：先删除本事务已安装的新 target，再恢复旧 backup

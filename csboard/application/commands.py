@@ -283,16 +283,10 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", str(exc))
 
         # 所有验证通过，执行原子提交
-        # 读取已有 request 以保留 reference_audio
-        existing = self.repository.get_request(task_id) or {}
-
         reference_audio_relative = None
         if reference_audio_filename:
             suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
             reference_audio_relative = f"inputs/reference{suffix}"
-        else:
-            # 保留旧 reference
-            reference_audio_relative = existing.get("reference_audio")
 
         request_data = {
             "script": script.strip(),
@@ -308,6 +302,7 @@ class MountainCommands:
         }
 
         # 原子提交：request + task preparation + reference
+        # preserve_reference=True 时在 Repository 锁内从当前已提交状态保留 reference
         try:
             self.repository.commit_inputs(
                 task_id=task_id,
@@ -316,6 +311,7 @@ class MountainCommands:
                 preparation=preparation,
                 visual_anchor_enabled=visual_anchor_enabled,
                 reference_filename=reference_audio_filename,
+                preserve_reference=(reference_audio_filename is None),
             )
         except Exception as exc:
             # 不暴露绝对路径或异常原文
