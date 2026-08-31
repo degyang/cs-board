@@ -1,277 +1,246 @@
 /* ==========================================================================
-   Service Detail Page — Detailed view of a single service.
+   Service Detail Page /settings/models/:serviceId
    ========================================================================== */
 
-import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { StatusBadge } from '../components/ui/StatusBadge'
+import { BackButton } from '../components/ui/BackButton'
 import { MountainApiError } from '../lib/api/http'
-import {
-  fetchService,
-  updateServiceConfig,
-  fetchServiceSecrets,
-  setServiceSecret,
-  deleteServiceSecret,
-} from '../lib/api/services'
-import type { ServiceDetail, ServiceSecret } from '../lib/api/types'
+import { fetchService, activateService, deactivateService, probeService, setDefaultService } from '../lib/api/services'
+import { KNOWN_CAPABILITIES, KNOWN_ADAPTERS } from '../lib/api/types'
+import type { ServiceDefinition } from '../lib/api/types'
 
-export default function ServiceDetailPage() {
+export function ServiceDetailPage() {
   const { serviceId } = useParams<{ serviceId: string }>()
-
-  if (!serviceId) {
-    return <div className="set-error">服务 ID 不存在</div>
-  }
-
-  return <ServiceDetailContent serviceId={serviceId} />
-}
-
-function ServiceDetailContent({ serviceId }: { serviceId: string }) {
-  const [service, setService] = useState<ServiceDetail | null>(null)
-  const [secrets, setSecrets] = useState<ServiceSecret[]>([])
+  const [svc, setSvc] = useState<ServiceDefinition | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<MountainApiError | null>(null)
+  const [acting, setActing] = useState(false)
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
 
-  const [configJson, setConfigJson] = useState('')
-  const [configError, setConfigError] = useState<string | null>(null)
-  const [isSavingConfig, setIsSavingConfig] = useState(false)
-
-  const [newKey, setNewKey] = useState('')
-  const [newValue, setNewValue] = useState('')
-  const [secretError, setSecretError] = useState<string | null>(null)
-  const [isAddingSecret, setIsAddingSecret] = useState(false)
-
-  useEffect(() => {
-    Promise.all([
-      fetchService(serviceId),
-      fetchServiceSecrets(serviceId),
-    ])
-      .then(([svc, secs]) => {
-        setService(svc)
-        setSecrets(secs)
-        setConfigJson(JSON.stringify(svc.config, null, 2))
-      })
-      .catch(err => {
-        if (err instanceof MountainApiError) setError(err)
-      })
+  const load = () => {
+    if (!serviceId) return
+    setIsLoading(true)
+    setError(null)
+    fetchService(serviceId)
+      .then(setSvc)
+      .catch(err => { if (err instanceof MountainApiError) setError(err) })
       .finally(() => setIsLoading(false))
-  }, [serviceId])
+  }
 
-  const handleConfigSave = async () => {
+  useEffect(() => { load() }, [serviceId])
+
+  const doAction = async (label: string, fn: () => Promise<unknown>) => {
+    setActing(true)
+    setActionMsg(null)
     try {
-      const parsed = JSON.parse(configJson) as Record<string, unknown>
-      setIsSavingConfig(true)
-      setConfigError(null)
-      const updated = await updateServiceConfig(serviceId, parsed)
-      setService(updated)
+      await fn()
+      setActionMsg(`${label}成功`)
+      load()
     } catch (err) {
-      if (err instanceof SyntaxError) {
-        setConfigError('JSON 格式错误')
-      } else {
-        setConfigError(err instanceof MountainApiError ? err.message : '更新失败')
-      }
+      setActionMsg(err instanceof MountainApiError ? `${label}失败: ${err.message}` : `${label}失败`)
     } finally {
-      setIsSavingConfig(false)
+      setActing(false)
     }
   }
 
-  const handleAddSecret = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newKey.trim() || !newValue) return
-    setIsAddingSecret(true)
-    setSecretError(null)
-    try {
-      await setServiceSecret(serviceId, { key: newKey, value: newValue })
-      const secs = await fetchServiceSecrets(serviceId)
-      setSecrets(secs)
-      setNewKey('')
-      setNewValue('')
-    } catch (err) {
-      setSecretError(err instanceof MountainApiError ? err.message : '添加失败')
-    } finally {
-      setIsAddingSecret(false)
-    }
-  }
-
-  const handleDeleteSecret = async (key: string) => {
-    try {
-      await deleteServiceSecret(serviceId, key)
-      setSecrets(prev => prev.filter(s => s.key !== key))
-    } catch {
-      // ignore — will be refreshed on next load
-    }
-  }
-
-  if (isLoading) {
-    return <div className="set-loading">加载中...</div>
-  }
-
+  if (!serviceId) return <div className="error-card">缺少 serviceId</div>
+  if (isLoading) return <div className="loading"><span className="spinner" />加载中...</div>
   if (error) {
     return (
-      <div className="set-error">
-        <p>加载服务详情失败</p>
-        <p className="set-error__detail">{error.message}</p>
+      <div className="page">
+        <BackButton to="/settings/models" label="返回模型服务" />
+        <div className="error-card">
+          <div className="code">{error.code}</div>
+          <div>{error.message}</div>
+          {error.details && <div className="sug">{JSON.stringify(error.details)}</div>}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={load} style={{ marginTop: 8 }}>重试</button>
+        </div>
       </div>
     )
   }
-
-  if (!service) {
-    return <div className="set-error">服务不存在</div>
-  }
+  if (!svc) return <div className="page"><BackButton to="/settings/models" label="返回模型服务" /><div className="empty-state"><div className="empty-title">未找到服务</div></div></div>
 
   return (
-    <div className="mp-detail">
-      <header className="mp-detail__header">
-        <Link to="/settings" className="btn btn--secondary">
-          返回设置
-        </Link>
-        <h1 className="mp-detail__title">{service.display_name}</h1>
-        <span className="mp-detail__id">{service.service_id}</span>
-      </header>
+    <div className="page">
+      <BackButton to="/settings/models" label="返回模型服务" />
 
-      <div className="mp-detail__status">
-        <div className="mp-detail__status-item">
-          <span className="mp-detail__label">配置状态</span>
-          <StatusBadge status={service.config_status} />
-        </div>
-        <div className="mp-detail__status-item">
-          <span className="mp-detail__label">可用性</span>
-          <StatusBadge status={service.availability} />
-        </div>
-        <div className="mp-detail__status-item">
-          <span className="mp-detail__label">密钥状态</span>
-          <StatusBadge status={service.secret_status} />
-        </div>
+      <div className="page-head">
+        <h1 className="page-title">{svc.display_name}</h1>
+        <p className="page-desc">{svc.service_id}</p>
       </div>
 
-      <div className="mp-detail__info">
-        <div className="mp-detail__info-item">
-          <span className="mp-detail__label">适配器类型</span>
-          <span>{service.adapter_type}</span>
-        </div>
-        <div className="mp-detail__info-item">
-          <span className="mp-detail__label">能力</span>
-          <span>{service.capability}</span>
-        </div>
-        {service.model && (
-          <div className="mp-detail__info-item">
-            <span className="mp-detail__label">模型</span>
-            <span>{service.model}</span>
-          </div>
-        )}
-        {service.endpoint && (
-          <div className="mp-detail__info-item">
-            <span className="mp-detail__label">端点</span>
-            <span>{service.endpoint}</span>
-          </div>
-        )}
-        <div className="mp-detail__info-item">
-          <span className="mp-detail__label">优先级</span>
-          <span>{service.priority}</span>
-        </div>
-        <div className="mp-detail__info-item">
-          <span className="mp-detail__label">默认服务</span>
-          <span>{service.is_default ? '是' : '否'}</span>
-        </div>
-      </div>
-
-      {service.available_models && service.available_models.length > 0 && (
-        <div className="mp-detail__models">
-          <h2 className="mp-detail__section-title">可用模型</h2>
-          <ul className="mp-detail__model-list">
-            {service.available_models.map(model => (
-              <li key={model} className="mp-detail__model-item">{model}</li>
-            ))}
-          </ul>
+      {actionMsg && (
+        <div className={`notice ${actionMsg.includes('失败') ? 'notice-error' : 'notice-ok'}`} role="status" style={{ marginBottom: 12 }}>
+          {actionMsg}
         </div>
       )}
 
-      <div className="mp-detail__config">
-        <h2 className="mp-detail__section-title">配置</h2>
-        <textarea
-          className="mp-detail__config-editor"
-          value={configJson}
-          onChange={e => setConfigJson(e.target.value)}
-          rows={10}
-          aria-label="服务配置 JSON"
-        />
-        {configError && (
-          <div className="mp-detail__config-error" role="alert">
-            {configError}
-          </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={acting}
+          onClick={() => doAction(svc.enabled ? '停用' : '启用', () => svc.enabled ? deactivateService(svc.service_id) : activateService(svc.service_id))}
+        >
+          {svc.enabled ? '停用' : '启用'}
+        </button>
+        {!svc.is_default && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={acting}
+            onClick={() => doAction('设为默认', () => setDefaultService(svc.service_id))}
+          >
+            设为默认
+          </button>
         )}
         <button
           type="button"
-          className="btn btn--primary"
-          onClick={handleConfigSave}
-          disabled={isSavingConfig}
+          className="btn btn-ghost btn-sm"
+          disabled={acting}
+          onClick={() => doAction('Probe', () => probeService(svc.service_id))}
         >
-          {isSavingConfig ? '保存中...' : '保存配置'}
+          Probe
         </button>
       </div>
 
-      <div className="mp-secrets">
-        <h2 className="mp-detail__section-title">密钥管理</h2>
+      {/* Basic info */}
+      <div className="card">
+        <div className="card-title">基本信息</div>
+        <div className="settings-row">
+          <span className="k">显示名称</span>
+          <span className="v">{svc.display_name}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">能力</span>
+          <span className="v"><span className="mp-category-badge">{KNOWN_CAPABILITIES[svc.capability] ?? svc.capability}</span></span>
+        </div>
+        <div className="settings-row">
+          <span className="k">适配器</span>
+          <span className="v"><span className="mp-model-chip">{KNOWN_ADAPTERS[svc.adapter_type] ?? svc.adapter_type}</span></span>
+        </div>
+        <div className="settings-row">
+          <span className="k">模型</span>
+          <span className="v mono">{svc.model || '—'}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">端点</span>
+          <span className="v mono">{svc.endpoint || '—'}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">优先级</span>
+          <span className="v">{svc.priority}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">启用</span>
+          <span className="v"><StatusBadge status={svc.enabled ? 'succeeded' : 'pending'} /></span>
+        </div>
+        <div className="settings-row">
+          <span className="k">默认</span>
+          <span className="v">{svc.is_default ? '是' : '否'}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">Schema 版本</span>
+          <span className="v mono">{svc.schema_version}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">修订版本</span>
+          <span className="v mono">{svc.revision}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">创建时间</span>
+          <span className="v">{svc.created_at ? new Date(svc.created_at).toLocaleString('zh-CN') : '—'}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">更新时间</span>
+          <span className="v">{svc.updated_at ? new Date(svc.updated_at).toLocaleString('zh-CN') : '—'}</span>
+        </div>
+      </div>
 
-        {secrets.length > 0 && (
-          <div className="mp-secrets__list">
-            {secrets.map(secret => (
-              <div key={secret.key} className="mp-secret-item">
-                <span className="mp-secret-item__key">{secret.key}</span>
-                <span className="mp-secret-item__status">
-                  {secret.configured ? '已配置' : '未配置'}
-                </span>
-                {secret.masked_value && (
-                  <span className="mp-secret-item__value">{secret.masked_value}</span>
-                )}
-                {secret.configured && (
-                  <button
-                    type="button"
-                    className="btn btn--danger btn--sm"
-                    onClick={() => handleDeleteSecret(secret.key)}
-                    aria-label={`删除密钥 ${secret.key}`}
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
-            ))}
+      {/* Availability */}
+      <div className="card">
+        <div className="card-title">可用性</div>
+        <div className="settings-row">
+          <span className="k">可用</span>
+          <span className="v"><StatusBadge status={svc.availability.available ? 'succeeded' : 'failed'} /></span>
+        </div>
+        {svc.availability.checked_at && (
+          <div className="settings-row">
+            <span className="k">上次检查</span>
+            <span className="v">{new Date(svc.availability.checked_at).toLocaleString('zh-CN')}</span>
           </div>
         )}
-
-        <form className="mp-secrets__form" onSubmit={handleAddSecret}>
-          <div className="mp-secrets__form-row">
-            <input
-              type="text"
-              className="mp-secrets__key-input"
-              placeholder="密钥名称"
-              value={newKey}
-              onChange={e => setNewKey(e.target.value)}
-              required
-              aria-label="密钥名称"
-            />
-            <input
-              type="password"
-              className="mp-secrets__value-input"
-              placeholder="密钥值"
-              value={newValue}
-              onChange={e => setNewValue(e.target.value)}
-              required
-              aria-label="密钥值"
-            />
-            <button
-              type="submit"
-              className="btn btn--primary"
-              disabled={isAddingSecret || !newKey.trim() || !newValue}
-            >
-              {isAddingSecret ? '添加中...' : '添加'}
-            </button>
+        {svc.availability.latency_ms != null && (
+          <div className="settings-row">
+            <span className="k">延迟</span>
+            <span className="v mono">{svc.availability.latency_ms}ms</span>
           </div>
-          {secretError && (
-            <div className="mp-secrets__error" role="alert">
-              {secretError}
-            </div>
-          )}
-        </form>
+        )}
+        {svc.availability.component && (
+          <div className="settings-row">
+            <span className="k">组件</span>
+            <span className="v mono">{svc.availability.component}</span>
+          </div>
+        )}
+        {svc.availability.error_code && (
+          <div className="settings-row">
+            <span className="k">错误码</span>
+            <span className="v" style={{ color: 'var(--nt-danger)' }}>{svc.availability.error_code}</span>
+          </div>
+        )}
+        {svc.availability.suggestion && (
+          <div className="settings-row">
+            <span className="k">建议</span>
+            <span className="v">{svc.availability.suggestion}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Config */}
+      <div className="card">
+        <div className="card-title">配置</div>
+        <div className="settings-row">
+          <span className="k">配置状态</span>
+          <span className="v"><StatusBadge status={svc.config_status === 'ok' ? 'succeeded' : svc.config_status === 'error' ? 'failed' : 'running'} label={svc.config_status} /></span>
+        </div>
+        <div className="settings-row">
+          <span className="k">端点</span>
+          <span className="v mono">{svc.endpoint || '—'}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">模型</span>
+          <span className="v mono">{svc.model || '—'}</span>
+        </div>
+      </div>
+
+      {/* Secrets */}
+      <div className="card">
+        <div className="card-title">Secrets</div>
+        {svc.required_secrets.length > 0 && (
+          <div className="settings-row">
+            <span className="k">必填</span>
+            <span className="v">
+              {svc.required_secrets.map(s => <span key={s} className="badge tag-warn" style={{ marginRight: 4 }}>{s}</span>)}
+            </span>
+          </div>
+        )}
+        {svc.optional_secrets.length > 0 && (
+          <div className="settings-row">
+            <span className="k">可选</span>
+            <span className="v">
+              {svc.optional_secrets.map(s => <span key={s} className="badge" style={{ marginRight: 4 }}>{s}</span>)}
+            </span>
+          </div>
+        )}
+        {svc.required_secrets.length === 0 && svc.optional_secrets.length === 0 && (
+          <div className="empty-sub">无 Secret 配置</div>
+        )}
+        <div className="settings-row">
+          <span className="k">Secret 状态</span>
+          <span className="v"><StatusBadge status={svc.secret_status === 'ok' ? 'succeeded' : svc.secret_status === 'missing' ? 'pending' : 'failed'} label={svc.secret_status} /></span>
+        </div>
       </div>
     </div>
   )

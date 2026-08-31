@@ -1,50 +1,161 @@
 /* ==========================================================================
    Mountain HTTP Client — Base fetch utilities
    All API modules use this for consistent error handling.
-   ========================================================================== */
 
-import type { ApiError } from './types'
+   Error format (backend):
+   {
+     "error": {
+       "code": "ERROR_CODE",
+       "message": "错误说明",
+       "retryable": false,
+       "details": {}
+     }
+   }
+
+   Also compatible with FastAPI detail format.
+   ========================================================================== */
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1'
 
 export class MountainApiError extends Error {
+  public status: number
+  public code: string
+  public message: string
+  public retryable: boolean
+  public details: Record<string, unknown> | null
+
   constructor(
-    public status: number,
-    public apiError: ApiError | null,
+    status: number,
+    code: string,
     message: string,
+    retryable = false,
+    details: Record<string, unknown> | null = null,
   ) {
     super(message)
     this.name = 'MountainApiError'
+    this.status = status
+    this.code = code
+    this.message = message
+    this.retryable = retryable
+    this.details = details
   }
 }
 
-async function parseError(res: Response): Promise<MountainApiError> {
-  let apiError: ApiError | null = null
+/**
+ * Parse error response body.
+ * Supports both new format (body.error) and FastAPI format (body.detail).
+ */
+function parseErrorBody(body: unknown): { code: string; message: string; retryable: boolean; details: Record<string, unknown> | null } {
+  if (typeof body !== 'object' || body === null) {
+    return { code: 'UNKNOWN_ERROR', message: 'Unknown error', retryable: false, details: null }
+  }
+
+  const obj = body as Record<string, unknown>
+
+  // New format: { error: { code, message, retryable, details } }
+  if (obj.error && typeof obj.error === 'object') {
+    const err = obj.error as Record<string, unknown>
+    return {
+      code: typeof err.code === 'string' ? err.code : 'UNKNOWN_ERROR',
+      message: typeof err.message === 'string' ? err.message : 'Unknown error',
+      retryable: err.retryable === true,
+      details: typeof err.details === 'object' ? err.details as Record<string, unknown> : null,
+    }
+  }
+
+  // FastAPI format: { detail: "message" } or { detail: { ... } }
+  if (obj.detail !== undefined) {
+    if (typeof obj.detail === 'string') {
+      return { code: 'API_ERROR', message: obj.detail, retryable: false, details: null }
+    }
+    if (typeof obj.detail === 'object' && obj.detail !== null) {
+      const detail = obj.detail as Record<string, unknown>
+      return {
+        code: typeof detail.code === 'string' ? detail.code : 'API_ERROR',
+        message: typeof detail.message === 'string' ? detail.message : JSON.stringify(detail),
+        retryable: detail.retryable === true,
+        details: typeof detail.details === 'object' ? detail.details as Record<string, unknown> : null,
+      }
+    }
+  }
+
+  // Fallback: { message: "..." }
+  if (typeof obj.message === 'string') {
+    return { code: 'API_ERROR', message: obj.message, retryable: false, details: null }
+  }
+
+  return { code: 'UNKNOWN_ERROR', message: 'Unknown error', retryable: false, details: null }
+}
+
+async function parseErrorResponse(res: Response): Promise<MountainApiError> {
   try {
     const body = await res.json()
-    apiError = typeof body.detail === 'object' ? body.detail : null
+    const parsed = parseErrorBody(body)
+    return new MountainApiError(res.status, parsed.code, parsed.message, parsed.retryable, parsed.details)
   } catch {
-    // ignore parse errors
+    // Can't parse JSON — use status text
+    return new MountainApiError(
+      res.status,
+      'HTTP_ERROR',
+      `HTTP ${res.status}: ${res.statusText || 'Unknown error'}`,
+      false,
+      null,
+    )
   }
-  return new MountainApiError(
-    res.status,
-    apiError,
-    apiError?.message ?? `API error: ${res.status}`,
-  )
 }
 
+/**
+ * Create a network error (fetch failed, no response).
+ */
+function networkError(cause: unknown): MountainApiError {
+  const message = cause instanceof Error ? cause.message : 'Network request failed'
+  return new MountainApiError(0, 'NETWORK_ERROR', message, true, null)
+}
+
+/**
+ * Core request function.
+ * - Does NOT set Content-Type for GET requests
+ * - Does NOT set Content-Type for FormData (browser sets boundary)
+ * - Handles 204 No Content (returns undefined)
+ * - Parses error responses using body.error or body.detail
+ */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${BASE}${path}`
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  })
+
+  // Build headers — don't set Content-Type for GET or FormData
+  const headers: Record<string, string> = {}
+  const isFormData = init?.body instanceof FormData
+  const isGet = !init?.method || init.method === 'GET'
+
+  if (!isGet && !isFormData) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  // Merge user headers (but never override FormData Content-Type)
+  if (init?.headers) {
+    const userHeaders = init.headers instanceof Headers
+      ? Object.fromEntries(init.headers.entries())
+      : typeof init.headers === 'object' ? init.headers as Record<string, string> : {}
+    Object.assign(headers, userHeaders)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers,
+    })
+  } catch (err) {
+    throw networkError(err)
+  }
 
   if (!res.ok) {
-    throw await parseError(res)
+    throw await parseErrorResponse(res)
+  }
+
+  // 204 No Content
+  if (res.status === 204) {
+    return undefined as T
   }
 
   return res.json() as Promise<T>
@@ -83,37 +194,20 @@ export function del<T>(path: string): Promise<T> {
  * POST multipart/form-data — browser auto-sets Content-Type with boundary.
  * Never set Content-Type manually.
  */
-export async function postForm<T>(path: string, form: FormData): Promise<T> {
-  const url = `${BASE}${path}`
-  const res = await fetch(url, {
+export function postForm<T>(path: string, form: FormData): Promise<T> {
+  return request<T>(path, {
     method: 'POST',
     body: form,
   })
-
-  if (!res.ok) {
-    throw await parseError(res)
-  }
-
-  return res.json() as Promise<T>
-}
-
-/**
- * POST multipart/form-data returning raw Response (for file uploads).
- */
-export async function postFormRaw(path: string, form: FormData): Promise<Response> {
-  const url = `${BASE}${path}`
-  const res = await fetch(url, {
-    method: 'POST',
-    body: form,
-  })
-
-  if (!res.ok) {
-    throw await parseError(res)
-  }
-
-  return res
 }
 
 export function getBaseUrl(): string {
   return BASE
+}
+
+/**
+ * Build URL for voice content streaming.
+ */
+export function getVoiceContentUrl(voiceId: string): string {
+  return `${BASE}/assets/voices/${encodeURIComponent(voiceId)}/content`
 }

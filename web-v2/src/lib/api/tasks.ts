@@ -3,7 +3,7 @@
    All task lifecycle endpoints — create, fetch, run, cancel, retry.
    ========================================================================== */
 
-import { get, post, del, postFormRaw } from './http'
+import { get, post, del, postForm } from './http'
 import type {
   Task,
   TaskDetail,
@@ -66,7 +66,7 @@ export function uploadInputs(taskId: string, files: File[]): Promise<{ artifacts
   for (const file of files) {
     form.append('files', file)
   }
-  return postFormRaw(`/tasks/${encodeURIComponent(taskId)}/inputs`, form).then(r => r.json())
+  return postForm(`/tasks/${encodeURIComponent(taskId)}/inputs`, form)
 }
 
 export function fetchInputs(taskId: string): Promise<Artifact[]> {

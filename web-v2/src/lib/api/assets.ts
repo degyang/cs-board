@@ -1,81 +1,120 @@
 /* ==========================================================================
    Mountain Assets API
-   Preset styles (read-only), custom styles (CRUD), voice library (CRUD).
+   Styles (preset + custom) and voices.
    ========================================================================== */
 
-import { get, del, postFormRaw } from './http'
+import { get, post, patch, del, postForm, getVoiceContentUrl } from './http'
 import type {
-  PresetStyle,
-  CustomStyle,
-  CreateCustomStyleRequest,
-  VoiceAsset,
-  CreateVoiceAssetRequest,
-  PresetStyleListResponse,
-  CustomStyleListResponse,
-  VoiceAssetListResponse,
+  StyleTemplate,
+  StyleListResponse,
+  StyleListParams,
+  VoiceDefinition,
+  VoiceListResponse,
+  VoiceListParams,
 } from './types'
 
-// ---------------------------------------------------------------------------
-// Preset Styles (read-only)
-// ---------------------------------------------------------------------------
-
-export function fetchPresetStyles(): Promise<PresetStyleListResponse> {
-  return get('/assets/preset-styles')
-}
-
-export function fetchPresetStyle(styleId: string): Promise<PresetStyle> {
-  return get(`/assets/preset-styles/${encodeURIComponent(styleId)}`)
-}
+export { getVoiceContentUrl }
 
 // ---------------------------------------------------------------------------
-// Custom Styles (CRUD)
+// Styles (preset + custom, unified endpoint)
 // ---------------------------------------------------------------------------
 
-export function fetchCustomStyles(): Promise<CustomStyleListResponse> {
-  return get('/assets/custom-styles')
+export function fetchStyles(params: StyleListParams = {}): Promise<StyleListResponse> {
+  const qs = new URLSearchParams()
+  if (params.kind) qs.set('kind', params.kind)
+  if (params.status) qs.set('status', params.status)
+  if (params.engine) qs.set('engine', params.engine)
+  if (params.q) qs.set('q', params.q)
+  if (params.cursor) qs.set('cursor', params.cursor)
+  if (params.limit) qs.set('limit', String(params.limit))
+  const query = qs.toString()
+  return get(`/assets/styles${query ? `?${query}` : ''}`)
 }
 
-export function fetchCustomStyle(styleId: string): Promise<CustomStyle> {
-  return get(`/assets/custom-styles/${encodeURIComponent(styleId)}`)
+export function fetchStyle(styleId: string): Promise<StyleTemplate> {
+  return get(`/assets/styles/${encodeURIComponent(styleId)}`)
 }
 
-export async function createCustomStyle(req: CreateCustomStyleRequest): Promise<CustomStyle> {
-  const form = new FormData()
-  form.set('name', req.name)
-  if (req.description) form.set('description', req.description)
-  form.set('category', req.category)
-  for (const file of req.reference_images) {
-    form.append('reference_images', file)
-  }
-  const res = await postFormRaw('/assets/custom-styles', form)
-  return res.json() as Promise<CustomStyle>
+export function createStyle(body: {
+  name: string
+  description?: string
+  engine?: string
+  prompt_text?: string
+  negative_prompt?: string
+  tags?: string[]
+  preview_asset_id?: string
+}): Promise<StyleTemplate> {
+  return post('/assets/styles', body)
 }
 
-export function deleteCustomStyle(styleId: string): Promise<void> {
-  return del(`/assets/custom-styles/${encodeURIComponent(styleId)}`).then(() => undefined)
+export function updateStyle(
+  styleId: string,
+  body: {
+    name?: string
+    description?: string
+    engine?: string
+    prompt_text?: string
+    negative_prompt?: string
+    tags?: string[]
+    preview_asset_id?: string
+  },
+): Promise<StyleTemplate> {
+  return patch(`/assets/styles/${encodeURIComponent(styleId)}`, body)
+}
+
+export function deleteStyle(styleId: string): Promise<void> {
+  return del(`/assets/styles/${encodeURIComponent(styleId)}`)
+}
+
+export function activateStyle(styleId: string): Promise<StyleTemplate> {
+  return post(`/assets/styles/${encodeURIComponent(styleId)}/activate`)
+}
+
+export function deactivateStyle(styleId: string): Promise<StyleTemplate> {
+  return post(`/assets/styles/${encodeURIComponent(styleId)}/deactivate`)
+}
+
+export function copyStyle(styleId: string): Promise<StyleTemplate> {
+  return post(`/assets/styles/${encodeURIComponent(styleId)}/copy`)
 }
 
 // ---------------------------------------------------------------------------
-// Voice Library (CRUD)
+// Voices
 // ---------------------------------------------------------------------------
 
-export function fetchVoiceAssets(): Promise<VoiceAssetListResponse> {
-  return get('/assets/voices')
+export function fetchVoices(params: VoiceListParams = {}): Promise<VoiceListResponse> {
+  const qs = new URLSearchParams()
+  if (params.status) qs.set('status', params.status)
+  if (params.q) qs.set('q', params.q)
+  if (params.cursor) qs.set('cursor', params.cursor)
+  if (params.limit) qs.set('limit', String(params.limit))
+  const query = qs.toString()
+  return get(`/assets/voices${query ? `?${query}` : ''}`)
 }
 
-export function fetchVoiceAsset(assetId: string): Promise<VoiceAsset> {
-  return get(`/assets/voices/${encodeURIComponent(assetId)}`)
+export function fetchVoice(voiceId: string): Promise<VoiceDefinition> {
+  return get(`/assets/voices/${encodeURIComponent(voiceId)}`)
 }
 
-export async function createVoiceAsset(req: CreateVoiceAssetRequest): Promise<VoiceAsset> {
-  const form = new FormData()
-  form.set('name', req.name)
-  if (req.description) form.set('description', req.description)
-  form.set('audio_file', req.audio_file)
-  const res = await postFormRaw('/assets/voices', form)
-  return res.json() as Promise<VoiceAsset>
+export async function createVoice(form: FormData): Promise<VoiceDefinition> {
+  return postForm('/assets/voices', form)
 }
 
-export function deleteVoiceAsset(assetId: string): Promise<void> {
-  return del(`/assets/voices/${encodeURIComponent(assetId)}`).then(() => undefined)
+export function updateVoice(
+  voiceId: string,
+  body: { name?: string; tags?: string[] },
+): Promise<VoiceDefinition> {
+  return patch(`/assets/voices/${encodeURIComponent(voiceId)}`, body)
+}
+
+export function deleteVoice(voiceId: string): Promise<void> {
+  return del(`/assets/voices/${encodeURIComponent(voiceId)}`)
+}
+
+export function activateVoice(voiceId: string): Promise<VoiceDefinition> {
+  return post(`/assets/voices/${encodeURIComponent(voiceId)}/activate`)
+}
+
+export function deactivateVoice(voiceId: string): Promise<VoiceDefinition> {
+  return post(`/assets/voices/${encodeURIComponent(voiceId)}/deactivate`)
 }
