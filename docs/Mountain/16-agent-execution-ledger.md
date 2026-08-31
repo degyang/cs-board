@@ -1014,6 +1014,85 @@ docs(mountain): report readonly toolchain status
 
 先本地提交，不推送。报告列出视觉映射、真实 DTO 字段、敏感字段不渲染测试、门禁、两个 commit hash 和 API gap；执行者不得自行宣布审核通过。
 
+## 3K. CCF 单一垂直切片：运行时存储只读状态页
+
+### 3K.1 指令编号与已验收基线
+
+```text
+instruction: CCF-STORAGE-STATUS-07
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: 7b0f35c feat(mountain-web): align toolchain status with readonly design
+accepted report: 68166e0 docs(mountain): report readonly toolchain status
+```
+
+审核者已复现：build 通过、contract checker `48/48`、前端全量 `244/244`、fixture checker、禁止项扫描、diff check 和 clean status。系统工具链只读页验收通过。
+
+视觉与契约基准：
+
+```text
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/settings/systemStatus/SystemStatusTabs.tsx
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/settings/systemStatus/types.ts
+```
+
+当前真实后端契约是 `GET /api/v1/settings/storage`，字段为：`writable`、`assets_available`、`tasks_available`、`temp_available`、`free_bytes`、`used_bytes`、`cleanup_policy`、`error_code`、`suggestion`。原型提出“五类逻辑存储”，但后端目前只能证明资产、任务、临时三类；不得伪造另外两类。
+
+### 3K.2 唯一目标
+
+只整改 `/settings/storage` 为“运行时存储状态”只读页，不修改 Diagnostics、Voice Alignment、Models、Assets、Task、checker 核心或后端。
+
+1. 标题和说明明确这是全局运行时存储健康，不是某个 Task 的目录或可保存配置。
+2. 使用真实 `fetchStorageSettings()`；分别展示资产存储、任务存储、临时存储三类逻辑状态。`true` 显示正常，`false` 显示不可用；不得把目录尚未创建误写成“数据丢失”。
+3. 单独展示整体可写状态。`writable=false` 时显示后端真实 `error_code`、`suggestion`；字段为空时使用中性说明，不伪造错误码或修复命令。
+4. `free_bytes`、`used_bytes` 仅在非 null、有限且非负时格式化展示；异常值显示“未统计”，不得产生 `NaN`、负容量或崩溃。两者都有效时可展示用量比例，但必须清楚标为当前存储卷统计，不暗示 Mountain 独占空间。
+5. `cleanup_policy` 只作为后端返回的只读策略摘要展示。不得提供配额、保留天数、自动清理开关、立即清理、目录选择或保存按钮；当前后端没有这些写 API。
+6. 不展示或推导绝对路径、目录树、文件名、Task ID、命令、环境变量和 Secret。响应即使额外含这些字段，DOM 也不得出现。
+7. loading 使用同构骨架；请求失败显示独立错误和真实“重新加载”；响应成功但所有统计为 null 仍是正常响应，不得显示“未找到配置”。
+8. 使用与已验收 Toolchain 页同等级的请求生命周期保护：卸载或后发请求后，旧响应不得写回。不得使用 runtime fixture、mock fallback、localStorage 或 sessionStorage。
+
+### 3K.3 强制行为测试
+
+- 三类逻辑存储分别覆盖正常/不可用，不得只测全为 true；
+- writable false 展示真实 error_code/suggestion；
+- null、负数、`NaN`/非有限容量安全显示“未统计”；有效容量单位和可选比例正确；
+- cleanup_policy 只读展示，页面不存在保存、编辑、目录选择、立即清理、配额/保留配置控件；
+- 响应携带 path、directory、filename、task_id、command、token 时 DOM 中均不存在其值；
+- loading、成功但未统计、request error 是三个不同状态；retry 确实再次调用生产 API adapter；
+- unmount 及先后两次请求竞态不会由旧响应污染最新页面；
+- 测试触发生产组件与 API adapter，不复制格式化/状态映射算法，不用源码字符串断言代替行为。
+
+### 3K.4 固定门禁与提交
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+! rg -n "localStorage|sessionStorage|mock|fixture" web-v2/src/pages/StoragePage.tsx
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain-web): align runtime storage readonly status
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-storage-status-07-report.md
+```
+
+报告列出 implementation commit、真实 DTO 映射、三类存储状态、容量异常测试、敏感字段不渲染测试、请求生命周期、门禁原始摘要、API gap 和 clean status。报告提交：
+
+```text
+docs(mountain): report runtime storage status
+```
+
+先本地提交，不推送。执行者只报告门禁结果，不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
