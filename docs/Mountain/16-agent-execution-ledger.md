@@ -671,6 +671,56 @@ docs(mountain): report CCF contract checker slice
 
 报告只记录：implementation commit、五条门禁原始摘要、专项成功/失败场景、git clean 状态。执行者只能写“门禁已执行”，不得写“最终验收通过”；最终通过由审核者判定。先本地提交，不推送。
 
+## 3F. CCF 单点修复：复杂嵌套类型守卫
+
+### 3F.1 指令编号
+
+```text
+instruction: CCF-CONTRACT-CHECKER-02
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+base: cf8ff79
+scope: nested complex type guard only
+```
+
+`CCF-CONTRACT-CHECKER-01` 的五条门禁均已通过，但审核者用生产 `verifyResponse()` 复现：把合法 Service fixture 的 `config_status` 整体替换为字符串 `"wrong-string"` 后，violations 仍为空。原因是复杂 DTO 类型被 `tsTypeToJsonTypes()` 跳过，而 `verifyNested()` 遇到非对象也静默跳过。
+
+### 3F.2 唯一修改目标
+
+修复生产 checker，使 `NESTED_STRUCTURES` 声明的字段在非 null 时必须满足容器类型：
+
+- `Foo` 必须是 plain object，不能是 string/number/boolean/array；
+- `Foo[]` 必须是 array，不能是 plain object 或其他类型；
+- 数组每个元素必须是 plain object，再递归校验字段；
+- 只有 DTO 明确允许 null 时才接受 null。
+
+只新增针对生产核心的最小回归测试，至少覆盖：
+
+1. `ServiceDefinition.config_status = "wrong-string"` 失败；
+2. `ServiceListResponse.items = {}` 失败；
+3. `ServiceListResponse.items = ["wrong-string"]` 失败；
+4. 合法嵌套对象和数组仍通过。
+
+禁止修改页面、HTTP endpoint、DTO、fixture 内容和其他业务测试；禁止复制生产算法或源码字符串断言。
+
+### 3F.3 固定门禁
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+git diff --check
+```
+
+提交：
+
+```text
+fix(mountain-web): reject invalid nested contract containers
+```
+
+本轮无需新增长篇报告。在 `docs/Mountain/m07-ccf-contract-checker-02-report.md` 记录 implementation commit、四个回归测试、五条门禁摘要和 clean status，再形成独立文档提交。执行者只报告门禁结果，最终通过由审核者判定。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
