@@ -195,10 +195,13 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
-def _get_service_registry(data_dir: Path):
+def _get_service_registry(data_dir: Path, secret_store=None):
     from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
-    from csboard.adapters.secrets import create_secret_store
-    secret_store, _ = create_secret_store(data_dir)
+    if secret_store is None:
+        from csboard.adapters.secrets import create_secret_store
+        import os
+        allow_plaintext = os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS", "") == "1"
+        secret_store, _ = create_secret_store(data_dir, encrypted=not allow_plaintext)
     return FilesystemServiceRegistry(data_dir, secret_store)
 
 
@@ -208,12 +211,14 @@ def _get_asset_repository(data_dir: Path):
 
 
 def execute(args: argparse.Namespace) -> dict[str, Any]:
+    import os
     from csboard.adapters.secrets import create_secret_store
     from csboard.adapters.provider_factory import ProviderFactory
     from csboard.application.service_resolver import ServiceResolver
 
-    secret_store, _ = create_secret_store(args.data_dir)
-    registry = _get_service_registry(args.data_dir)
+    allow_plaintext = os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS", "") == "1"
+    secret_store, _ = create_secret_store(args.data_dir, encrypted=not allow_plaintext)
+    registry = _get_service_registry(args.data_dir, secret_store=secret_store)
     service_resolver = ServiceResolver(registry)
     provider_factory = ProviderFactory(args.data_dir, secret_store=secret_store)
 

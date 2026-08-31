@@ -186,3 +186,97 @@ def test_public_dict_no_secrets(client: TestClient):
     config = data.get("config", {})
     # api_key 不应在 config 中
     assert "api_key" not in config or config["api_key"] != "sk-secret"
+
+
+# ── Item 11: Service create/update validation behavioral tests ─────────
+
+def test_create_service_missing_required_fields(client: TestClient):
+    """缺少必填字段应返回400。"""
+    # 缺少 capability
+    resp = client.post("/api/v1/services", json={
+        "service_id": "test-svc",
+        "display_name": "Test",
+        "adapter_type": "openai_compatible",
+    })
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_service_empty_service_id(client: TestClient):
+    """空 service_id 应返回400。"""
+    resp = client.post("/api/v1/services", json={
+        "service_id": "",
+        "display_name": "Test",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+    })
+    assert resp.status_code == 400
+
+
+def test_update_service_not_found(client: TestClient):
+    """更新不存在的服务应返回404。"""
+    resp = client.patch("/api/v1/services/nonexistent", json={"display_name": "Test"})
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_delete_service_not_found(client: TestClient):
+    """删除不存在的服务应返回404。"""
+    resp = client.delete("/api/v1/services/nonexistent")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_create_service_duplicate_id(client: TestClient):
+    """重复 service_id 应返回400。"""
+    svc_data = {
+        "service_id": "test-svc",
+        "display_name": "Test",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+    }
+    resp1 = client.post("/api/v1/services", json=svc_data)
+    assert resp1.status_code == 200
+
+    resp2 = client.post("/api/v1/services", json=svc_data)
+    assert resp2.status_code == 400
+    assert "already exists" in resp2.json()["error"]["message"].lower() or \
+           "duplicate" in resp2.json()["error"]["message"].lower() or \
+           "已存在" in resp2.json()["error"]["message"]
+
+
+def test_create_service_with_config(client: TestClient):
+    """创建服务时应正确保存 config。"""
+    svc_data = {
+        "service_id": "test-svc",
+        "display_name": "Test",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+        "config": {"temperature": 0.7, "max_tokens": 1000},
+    }
+    resp = client.post("/api/v1/services", json=svc_data)
+    assert resp.status_code == 200
+
+    # 验证 config 被保存
+    resp = client.get("/api/v1/services/test-svc")
+    assert resp.status_code == 200
+    # config 应该存在但敏感字段被脱敏
+    assert "config" in resp.json()
+
+
+def test_probe_service(client: TestClient):
+    """探测服务应返回可用性信息。"""
+    svc_data = {
+        "service_id": "test-svc",
+        "display_name": "Test",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+        "endpoint": "https://api.openai.com/v1",
+    }
+    client.post("/api/v1/services", json=svc_data)
+
+    resp = client.post("/api/v1/services/test-svc/probe")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "available" in data
+    assert "checked_at" in data

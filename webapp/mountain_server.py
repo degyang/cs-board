@@ -62,18 +62,10 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     # 检查是否允许明文 secret
     allow_plaintext = os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS", "") == "1"
 
-    # 默认要求加密并 fail closed
-    try:
-        secret_store, is_encrypted = create_secret_store(
-            effective_data_dir, encrypted=not allow_plaintext
-        )
-    except Exception:
-        if allow_plaintext:
-            from csboard.adapters.secrets.secret_store import PlaintextSecretStore
-            secret_store = PlaintextSecretStore(effective_data_dir / ".secrets")
-            is_encrypted = False
-        else:
-            raise
+    # 默认要求加密并 fail closed：encrypted=True 时若 cryptography 不可用则启动失败
+    secret_store, is_encrypted = create_secret_store(
+        effective_data_dir, encrypted=not allow_plaintext
+    )
 
     # 共享组件：所有 Router 使用同一实例
     service_registry = FilesystemServiceRegistry(effective_data_dir, secret_store)
@@ -84,19 +76,31 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         is_encrypted=is_encrypted,
     )
 
-    # 挂载路由 — 注入共享组件
+    # 挂载路由 — 全部通过显式参数注入共享组件
+    from csboard.adapters.filesystem import FilesystemTaskRepository
+    from csboard.adapters.observability import JsonlTelemetry
+    from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
     from webapp.mountain_task_api import mountain_task_router
     from webapp.mountain_asset_api import mountain_asset_router
     from webapp.mountain_service_api import mountain_service_router
     from webapp.mountain_settings_api import mountain_settings_router
 
-    task_router = mountain_task_router(effective_data_dir)
-    # 注入 ServiceResolver 和 ProviderFactory 到 task router
-    if hasattr(task_router, 'state_set_dependencies'):
-        task_router.state_set_dependencies(service_resolver, provider_factory)
+    # 共享 Repository 和 Telemetry
+    task_repository = FilesystemTaskRepository(effective_data_dir)
+    telemetry = JsonlTelemetry(task_repository)
+    asset_repository = FilesystemAssetRepository(effective_data_dir)
 
-    app.include_router(task_router)
-    app.include_router(mountain_asset_router(effective_data_dir))
+    app.include_router(mountain_task_router(
+        effective_data_dir,
+        repository=task_repository,
+        telemetry=telemetry,
+        service_resolver=service_resolver,
+        provider_factory=provider_factory,
+    ))
+    app.include_router(mountain_asset_router(
+        effective_data_dir,
+        repository=asset_repository,
+    ))
     app.include_router(mountain_service_router(
         effective_data_dir, registry=service_registry, secret_store=secret_store,
     ))
@@ -164,7 +168,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     async def serve_spa(path: str):
         if path.startswith("api/"):
             return JSONResponse(
-                {"error": {"code": "NOT_FOUND", "message": f"API 路径不存在: /{path}", "retryable": False}},
+                {"error": {"code": "NOT_FOUND", "message": f"API 路径不存在: /{path}", "retryable": False, "unavailable": [], "details": None}},
                 status_code=404,
             )
 
@@ -177,11 +181,23 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
                 return FileResponse(index)
 
         return JSONResponse(
-            {"error": {"code": "NOT_FOUND", "message": "web-v2 未构建或路径不存在", "retryable": False}},
+            {"error": {"code": "NOT_FOUND", "message": "web-v2 未构建或路径不存在", "retryable": False, "unavailable": [], "details": None}},
             status_code=404,
         )
 
     return app
 
 
-app = create_app()
+# uvicorn 入口：uvicorn webapp.mountain_server:app
+# 模块级仅在 CSBOARD_ALLOW_PLAINTEXT_SECRETS=1 或 cryptography 可用时创建 app
+# 测试通过 create_app(tmp_path) 直接调用
+def _create_module_app():
+    allow = os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS", "") == "1"
+    if not allow:
+        try:
+            import cryptography  # noqa: F401
+        except ImportError:
+            return None
+    return create_app()
+
+app = _create_module_app()

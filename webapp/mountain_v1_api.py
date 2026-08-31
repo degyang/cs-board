@@ -27,14 +27,17 @@ from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.provider_types import PROVIDER_PROFILES
 
 
-def mountain_v1_router(data_dir: Path) -> APIRouter:
+def mountain_v1_router(
+    data_dir: Path,
+    secret_store=None,
+) -> APIRouter:
     """创建 /api/v1 路由器。
 
     所有端点直接调用 MountainCommands，不依赖 legacy 系统。
     """
     repository = FilesystemTaskRepository(data_dir)
     telemetry = JsonlTelemetry(repository)
-    provider_factory = ProviderFactory(data_dir)
+    provider_factory = ProviderFactory(data_dir, secret_store=secret_store)
     router = APIRouter(prefix="/api/v1", tags=["mountain-v1"])
 
     def _commands() -> MountainCommands:

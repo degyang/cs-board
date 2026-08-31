@@ -58,25 +58,25 @@ def mountain_service_router(
             "missing_secrets": missing_secrets,
         }
 
-        # availability（从 probe 获取）
-        try:
-            probe_result = _reg.probe_service(service.service_id)
+        # availability（使用缓存的 probe 结果，不做实时探测）
+        cached_probe = _reg.get_cached_probe(service.service_id)
+        if cached_probe:
             base["availability"] = {
-                "available": probe_result.get("available", False),
-                "checked_at": probe_result.get("checked_at", ""),
-                "latency_ms": probe_result.get("latency_ms", 0),
-                "component": probe_result.get("component", service.service_id),
-                "error_code": probe_result.get("error_code"),
-                "suggestion": probe_result.get("suggestion"),
+                "available": cached_probe.get("available", False),
+                "checked_at": cached_probe.get("checked_at", ""),
+                "latency_ms": cached_probe.get("latency_ms", 0),
+                "component": cached_probe.get("component", service.service_id),
+                "error_code": cached_probe.get("error_code"),
+                "suggestion": cached_probe.get("suggestion"),
             }
-        except Exception:
+        else:
             base["availability"] = {
                 "available": False,
                 "checked_at": "",
                 "latency_ms": 0,
                 "component": service.service_id,
-                "error_code": "PROBE_FAILED",
-                "suggestion": "探测失败",
+                "error_code": "NOT_PROBED",
+                "suggestion": "尚未探测，请调用 /probe 端点",
             }
 
         # secret_status
@@ -166,7 +166,7 @@ def mountain_service_router(
     @router.post("/api/v1/services/{service_id}/probe")
     def probe_service(service_id: str):
         try:
-            return _reg.probe_service(service_id)
+            return _reg.probe_service(service_id, force=True)
         except NotFoundError as exc:
             return domain_error_response(exc, status_code=404)
 

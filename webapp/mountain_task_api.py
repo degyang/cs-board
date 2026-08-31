@@ -25,31 +25,28 @@ from csboard.domain.script_preparation import prepare_script
 from webapp.error_contract import domain_error_response
 
 
-def mountain_task_router(data_dir: Path) -> APIRouter:
-    """创建 /api/v1 路由器 — Task/Run/Stage 相关端点。"""
-    repository = FilesystemTaskRepository(data_dir)
-    telemetry = JsonlTelemetry(repository)
-    router = APIRouter(prefix="/api/v1", tags=["mountain-tasks"])
+def mountain_task_router(
+    data_dir: Path,
+    repository: FilesystemTaskRepository | None = None,
+    telemetry: JsonlTelemetry | None = None,
+    service_resolver=None,
+    provider_factory=None,
+) -> APIRouter:
+    """创建 /api/v1 路由器 — Task/Run/Stage 相关端点。
 
-    # service_registry / service_resolver / provider_factory 由外部注入
-    # 通过 mountain_server.py 的 lifespan 或 app.state 传递
-    _service_resolver = None
-    _provider_factory = None
+    所有依赖由 create_app() 注入。
+    """
+    repository = repository or FilesystemTaskRepository(data_dir)
+    telemetry = telemetry or JsonlTelemetry(repository)
+    router = APIRouter(prefix="/api/v1", tags=["mountain-tasks"])
 
     def _get_commands() -> MountainCommands:
         """创建 MountainCommands 实例，注入 ServiceResolver 和 ProviderFactory。"""
-        return MountainCommands(data_dir, provider_factory=_provider_factory, service_resolver=_service_resolver)
+        return MountainCommands(data_dir, provider_factory=provider_factory, service_resolver=service_resolver)
 
     def _context() -> CommandContext:
         """创建 Web 入口的 CommandContext。"""
         return CommandContext(entrypoint=Entrypoint.WEB)
-
-    def _set_dependencies(service_resolver, provider_factory):
-        nonlocal _service_resolver, _provider_factory
-        _service_resolver = service_resolver
-        _provider_factory = provider_factory
-
-    router.state_set_dependencies = _set_dependencies
 
     # ── Task ──────────────────────────────────────────────────────
 
@@ -73,99 +70,8 @@ def mountain_task_router(data_dir: Path) -> APIRouter:
         status: str | None = None,
         q: str | None = None,
     ):
-        """列出任务。"""
-        items = []
-        tasks_dir = data_dir / "tasks"
-        if not tasks_dir.exists():
-            return {"items": [], "next_cursor": None}
-
-        all_paths = sorted(tasks_dir.glob("*/task.json"), reverse=True)
-
-        if cursor:
-            cursor_idx = -1
-            for idx, p in enumerate(all_paths):
-                if p.parent.name == cursor:
-                    cursor_idx = idx + 1
-                    break
-            if cursor_idx > 0:
-                all_paths = all_paths[cursor_idx:]
-
-        _PRIORITY = {"running": 0, "failed": 1}
-
-        def _sort_key(path: Path) -> tuple[int, str]:
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                status_val = data.get("status", "draft")
-                priority = _PRIORITY.get(status_val, 2)
-                updated = data.get("updated_at", "")
-                return (priority, updated)
-            except Exception:
-                return (99, "")
-
-        all_paths = sorted(all_paths, key=_sort_key, reverse=True)
-        effective_limit = max(1, min(limit, 100))
-
-        for path in all_paths:
-            if len(items) >= effective_limit:
-                break
-            try:
-                task = repository.get_task(path.parent.name)
-                task_dict = task.to_dict()
-
-                if status and task_dict.get("status") != status:
-                    continue
-                if q:
-                    q_lower = q.lower()
-                    title_match = q_lower in task_dict.get("title", "").lower()
-                    id_match = q_lower in task_dict.get("task_id", "").lower()
-                    if not title_match and not id_match:
-                        continue
-
-                active_run = None
-                if task.active_run_id:
-                    try:
-                        run = repository.get_run(task.task_id, task.active_run_id)
-                        current_stage = None
-                        for stage_name in reversed(STAGE_ORDER):
-                            stage_state = run.stages.get(stage_name)
-                            if stage_state and stage_state.status in (StageStatus.RUNNING, StageStatus.FAILED):
-                                current_stage = stage_name
-                                break
-                            if stage_state and stage_state.status == StageStatus.SUCCEEDED:
-                                break
-                        if current_stage is None and run.status == RunStatus.RUNNING:
-                            for stage_name in STAGE_ORDER:
-                                stage_state = run.stages.get(stage_name)
-                                if not stage_state or stage_state.status == StageStatus.PENDING:
-                                    current_stage = stage_name
-                                    break
-
-                        final_path = repository.run_dir(task.task_id, task.active_run_id) / "artifacts" / "final.mp4"
-                        final_available = final_path.is_file()
-                        error_code = getattr(run, 'error_code', None)
-
-                        active_run = {
-                            "run_id": run.run_id,
-                            "status": run.status.value,
-                            "current_stage": current_stage,
-                            "started_at": run.started_at,
-                            "retryable": run.status == RunStatus.FAILED,
-                            "error_code": error_code,
-                            "final_available": final_available,
-                            "fallback_unit_count": None,
-                        }
-                    except NotFoundError:
-                        pass
-
-                task_dict.pop("script_preparation", None)
-                task_dict.pop("visual_anchor_enabled", None)
-                task_dict["active_run"] = active_run
-                items.append(task_dict)
-            except NotFoundError:
-                continue
-
-        next_cursor = items[-1]["task_id"] if len(items) >= effective_limit else None
-        return {"items": items, "next_cursor": next_cursor}
+        """列出任务 — 委托 Application 层执行 filter→sort→cursor→limit。"""
+        return _get_commands().list_tasks(limit=limit, cursor=cursor, status=status, q=q)
 
     @router.get("/tasks/{task_id}")
     def get_task(task_id: str):
@@ -197,22 +103,14 @@ def mountain_task_router(data_dir: Path) -> APIRouter:
         max_chars: int = Form(140),
         visual_anchor_enabled: bool = Form(True),
     ):
-        """上传任务输入（文案和参考音频）。"""
-        try:
-            repository.get_task(task_id)
-        except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
-
-        if len(script.strip()) < 10:
-            raise HTTPException(400, "文案至少需要 10 个字")
-
-        input_dir = repository.task_dir(task_id) / "inputs"
-
+        """上传任务输入（文案和参考音频）— 委托 Application 层。"""
+        # 先处理文件上传（Router 职责：HTTP 层）
+        reference_audio_path = None
         if reference is not None:
             suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
             if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
                 raise HTTPException(400, "参考音频格式不支持")
-
+            input_dir = repository.task_dir(task_id) / "inputs"
             input_dir.mkdir(parents=True, exist_ok=True)
             target = input_dir / f"reference{suffix}"
             temporary = target.with_suffix(f"{suffix}.partial")
@@ -220,50 +118,25 @@ def mountain_task_router(data_dir: Path) -> APIRouter:
                 while chunk := await reference.read(1024 * 1024):
                     output.write(chunk)
             temporary.replace(target)
-        else:
-            has_audio = any(
-                (input_dir / f"reference{ext}").is_file()
-                for ext in (".wav", ".mp3", ".m4a", ".ogg", ".flac")
-            )
-            if not has_audio:
-                raise HTTPException(400, "首次保存必须提供参考音频")
-
-        request_data = {
-            "script": script.strip(),
-            "reference_audio": f"inputs/reference{suffix}" if reference else None,
-            "style": style,
-            "include_subtitles": include_subtitles,
-            "pen_text": pen_text[:12],
-            "stroke_detail": stroke_detail if stroke_detail in {"light", "standard", "detailed", "full"} else "detailed",
-            "target_chars": target_chars,
-            "min_chars": min_chars,
-            "max_chars": max_chars,
-            "visual_anchor_enabled": visual_anchor_enabled,
-        }
-        request_path = repository.task_dir(task_id) / "request.json"
-        request_path.write_text(
-            json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+            reference_audio_path = f"inputs/reference{suffix}"
 
         try:
-            preparation = prepare_script(
-                script.strip(),
+            return _get_commands().save_inputs(
+                task_id,
+                script=script,
+                reference_audio_path=reference_audio_path,
+                style=style,
+                include_subtitles=include_subtitles,
+                pen_text=pen_text,
+                stroke_detail=stroke_detail,
                 target_chars=target_chars,
                 min_chars=min_chars,
                 max_chars=max_chars,
+                visual_anchor_enabled=visual_anchor_enabled,
+                context=_context(),
             )
-        except ValueError as exc:
-            raise HTTPException(400, detail={"code": "VALIDATION_ERROR", "message": str(exc)}) from exc
-
-        task_json_path = repository.task_dir(task_id) / "task.json"
-        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
-        task_data["script_preparation"] = preparation
-        task_data["visual_anchor_enabled"] = visual_anchor_enabled
-        task_json_path.write_text(
-            json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-
-        return {"ok": True, "task_id": task_id, "input_saved": True}
+        except DomainError as error:
+            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
 
     @router.get("/tasks/{task_id}/inputs")
     def get_inputs(task_id: str):
@@ -361,13 +234,9 @@ def mountain_task_router(data_dir: Path) -> APIRouter:
 
     @router.post("/tasks/{task_id}/runs/{run_id}/cancel")
     def cancel_run(task_id: str, run_id: str):
-        """取消运行。"""
+        """取消运行 — 委托 Application 层。"""
         try:
-            run = repository.get_run(task_id, run_id)
-            run.status = RunStatus.CANCELLED
-            repository.save_run(run)
-            telemetry.append_event(task_id, run_id, {"event_type": "RunCancelled"})
-            return {"ok": True, "status": "cancelled"}
+            return _get_commands().cancel_run(task_id, run_id, _context())
         except NotFoundError as error:
             raise HTTPException(404, error.message) from error
 

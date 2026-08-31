@@ -67,6 +67,7 @@ def mountain_settings_router(
                 "component": name,
                 "available": bool(path),
                 "version": version,
+                "path": path,
                 "error_code": error_code,
                 "suggestion": suggestion,
             })
@@ -81,7 +82,7 @@ def mountain_settings_router(
             "suggestion": None if skills_dir.is_dir() else "创建 skills 目录",
         })
 
-        return {"items": components}
+        return {"tools": components}
 
     @router.get("/api/v1/settings/storage")
     def get_storage():
@@ -99,12 +100,6 @@ def mountain_settings_router(
 
         usage = shutil.disk_usage(str(data_dir))
 
-        # cleanup_policy
-        cleanup_policy = {
-            "temp_max_age_hours": 24,
-            "auto_cleanup_enabled": True,
-        }
-
         return {
             "writable": writable,
             "assets_available": assets_dir.exists(),
@@ -112,86 +107,102 @@ def mountain_settings_router(
             "temp_available": temp_dir.exists(),
             "free_bytes": usage.free,
             "used_bytes": usage.used,
-            "cleanup_policy": cleanup_policy,
+            "cleanup_policy": "temp_max_age_hours=24",
+            "error_code": None,
+            "suggestion": None,
+        }
+
+    def _service_to_alignment_summary(svc) -> dict[str, Any]:
+        """将 ServiceDefinition 转为 VoiceAlignmentServiceSummary DTO。"""
+        probe = _reg.get_cached_probe(svc.service_id)
+        if probe is None:
+            probe = _reg.probe_service(svc.service_id)
+        return {
+            "service_id": svc.service_id,
+            "display_name": svc.display_name or svc.service_id,
+            "capability": svc.capability,
+            "adapter_type": svc.adapter_type or "",
+            "endpoint": svc.endpoint,
+            "model": (svc.metadata or {}).get("model"),
+            "timeout": svc.timeout,
+            "availability": {
+                "available": probe.get("available", False),
+                "checked_at": probe.get("checked_at"),
+                "latency_ms": probe.get("latency_ms"),
+                "component": probe.get("component"),
+                "error_code": probe.get("error_code"),
+                "suggestion": probe.get("suggestion"),
+            },
+        }
+
+    def _service_to_probe_summary(svc) -> dict[str, Any]:
+        """将 ServiceDefinition 转为 ProbeSummary DTO。"""
+        probe = _reg.get_cached_probe(svc.service_id)
+        if probe is None:
+            probe = _reg.probe_service(svc.service_id)
+        return {
+            "available": probe.get("available", False),
+            "checked_at": probe.get("checked_at"),
+            "latency_ms": probe.get("latency_ms"),
+            "component": probe.get("component"),
+            "error_code": probe.get("error_code"),
+            "suggestion": probe.get("suggestion"),
         }
 
     @router.get("/api/v1/settings/voice-alignment")
     def get_voice_alignment():
-        result: dict[str, Any] = {}
-
-        # 默认 TTS 服务
+        # speech_synthesis
         tts_services = _reg.list_services(capability="speech_synthesis", enabled=True)
-        if tts_services:
-            tts = tts_services[0]
-            tts_probe = _reg.probe_service(tts.service_id) if tts else None
-            result["default_tts"] = {
-                "service_id": tts.service_id,
-                "endpoint": tts.endpoint,
-                "available": tts_probe.get("available", False) if tts_probe else False,
-                "error_code": tts_probe.get("error_code") if tts_probe else None,
-                "suggestion": tts_probe.get("suggestion") if tts_probe else None,
-            }
-        else:
-            result["default_tts"] = {
-                "service_id": None,
-                "endpoint": None,
-                "available": False,
-                "error_code": "NO_TTS_SERVICE",
-                "suggestion": "请注册 TTS 服务",
-            }
+        speech_synthesis = _service_to_alignment_summary(tts_services[0]) if tts_services else None
 
-        # Alignment 服务
+        # speech_alignment
         align_services = _reg.list_services(capability="speech_alignment", enabled=True)
-        if align_services:
-            align = align_services[0]
-            align_probe = _reg.probe_service(align.service_id) if align else None
-            result["alignment"] = {
-                "service_id": align.service_id,
-                "endpoint": align.endpoint,
-                "available": align_probe.get("available", False) if align_probe else False,
-                "error_code": align_probe.get("error_code") if align_probe else None,
-                "suggestion": align_probe.get("suggestion") if align_probe else None,
-            }
-        else:
-            result["alignment"] = {
-                "service_id": None,
-                "endpoint": None,
-                "available": False,
-                "error_code": "NO_ALIGNMENT_SERVICE",
-                "suggestion": "请注册 Alignment 服务",
-            }
+        speech_alignment = _service_to_alignment_summary(align_services[0]) if align_services else None
 
-        return result
+        # indextts
+        indextts_services = _reg.list_services(capability="indextts", enabled=True)
+        indextts = _service_to_probe_summary(indextts_services[0]) if indextts_services else None
+
+        # whisper
+        whisper_services = _reg.list_services(capability="whisper", enabled=True)
+        whisper = _service_to_probe_summary(whisper_services[0]) if whisper_services else None
+
+        return {
+            "speech_synthesis": speech_synthesis,
+            "speech_alignment": speech_alignment,
+            "indextts": indextts,
+            "whisper": whisper,
+        }
 
     @router.get("/api/v1/settings/diagnostics")
     def get_diagnostics():
-        # Services
+        # Services — aggregated summary (DiagnosticsServiceSummary)
         services = _reg.list_services()
-        service_infos = []
+        available_count = 0
         for svc in services:
-            probe = _reg.probe_service(svc.service_id)
-            service_infos.append({
-                "service_id": svc.service_id,
-                "capability": svc.capability,
-                "enabled": svc.enabled,
-                "is_default": svc.is_default,
-                "available": probe.get("available", False),
-                "error_code": probe.get("error_code"),
-            })
+            probe = _reg.get_cached_probe(svc.service_id)
+            if probe is None:
+                probe = _reg.probe_service(svc.service_id)
+            if probe.get("available", False):
+                available_count += 1
+        service_summary = {
+            "total": len(services),
+            "available": available_count,
+            "unavailable": len(services) - available_count,
+        }
 
-        # Toolchain
-        toolchain = []
-        for name, cmd in [
-            ("python", "python3"), ("node", "node"),
-            ("ffmpeg", "ffmpeg"), ("ffprobe", "ffprobe"),
-            ("codex-cli", "codex"),
-        ]:
-            toolchain.append({
-                "component": name,
-                "available": bool(shutil.which(cmd)),
-            })
+        # Toolchain — aggregated summary (DiagnosticsToolchainSummary)
+        tool_names = ["python", "node", "ffmpeg", "ffprobe", "codex-cli"]
+        tool_available = sum(1 for name in tool_names if shutil.which(
+            "python3" if name == "python" else name
+        ))
+        toolchain_summary = {
+            "total": len(tool_names),
+            "available": tool_available,
+            "missing": len(tool_names) - tool_available,
+        }
 
-        # Storage
+        # Storage (DiagnosticsStorageSummary)
         usage = shutil.disk_usage(str(data_dir))
         try:
             test_file = data_dir / ".write_test"
@@ -201,57 +212,51 @@ def mountain_settings_router(
         except OSError:
             writable = False
 
-        # Telemetry
+        # Telemetry (DiagnosticsTelemetry)
         from csboard.adapters.observability import JsonlTelemetry
         from csboard.adapters.filesystem import FilesystemTaskRepository
         repo = FilesystemTaskRepository(data_dir)
         telemetry = JsonlTelemetry(repo)
-        event_count = 0
-        for task_dir in (data_dir / "tasks").glob("*/runs/*/observability"):
-            events_file = task_dir / "events.jsonl"
-            if events_file.exists():
-                event_count += len(events_file.read_text(encoding="utf-8").splitlines())
 
-        # Logs（最近安全错误 — 不泄漏 secret）
-        recent_errors: list[dict[str, Any]] = []
+        # Logs — count recent errors (DiagnosticsLogs)
+        recent_error_count = 0
+        log_path = None
         for task_dir in sorted((data_dir / "tasks").glob("*/runs/*/observability"), reverse=True)[:5]:
             log_file = task_dir / "logs.jsonl"
             if log_file.exists():
+                if log_path is None:
+                    log_path = str(log_file)
                 import json
                 for line in log_file.read_text(encoding="utf-8").splitlines()[-20:]:
                     try:
                         entry = json.loads(line)
                         if entry.get("level") == "ERROR":
-                            # 脱敏：只保留 message 的前200字符，去除可能的 secret
-                            safe_entry = {
-                                "timestamp": entry.get("timestamp", ""),
-                                "component": entry.get("component", ""),
-                                "stage": entry.get("stage", ""),
-                                "message": str(entry.get("message", ""))[:200],
-                            }
-                            recent_errors.append(safe_entry)
+                            recent_error_count += 1
                     except (json.JSONDecodeError, ValueError):
                         continue
 
         return {
-            "api": {"status": "ok"},
-            "services": service_infos,
-            "toolchain": toolchain,
+            "api": {
+                "status": "healthy",
+                "endpoint": None,
+                "latency_ms": None,
+            },
+            "services": service_summary,
+            "toolchain": toolchain_summary,
             "storage": {
                 "writable": writable,
                 "free_bytes": usage.free,
                 "used_bytes": usage.used,
             },
             "telemetry": {
-                "available": True,
-                "event_count": event_count,
+                "enabled": True,
+                "endpoint": None,
             },
             "logs": {
-                "recent_errors": recent_errors[:10],
+                "recent_errors": recent_error_count,
+                "log_path": log_path,
             },
-            "security": {
-                "secret_store_encrypted": _enc,
-            },
+            "recent_errors": [],
         }
 
     return router

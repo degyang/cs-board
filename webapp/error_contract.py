@@ -20,8 +20,8 @@ def domain_error_response(
             "code": exc.code,
             "message": exc.message,
             "retryable": exc.retryable,
+            "unavailable": [],
+            "details": details,
         }
     }
-    if details:
-        body["error"]["details"] = details
     return JSONResponse(content=body, status_code=status_code)

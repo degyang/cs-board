@@ -27,11 +27,10 @@ def test_toolchain(client: TestClient):
     response = client.get("/api/v1/settings/toolchain")
     assert response.status_code == 200
     data = response.json()
-    assert "items" in data
-    for item in data["items"]:
+    assert "tools" in data
+    for item in data["tools"]:
         assert "component" in item
         assert "available" in item
-        assert "path" not in item
 
 
 def test_storage(client: TestClient):

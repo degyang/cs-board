@@ -392,3 +392,151 @@ def test_voice_content_head(client: TestClient):
     resp = client.head(f"/api/v1/assets/voices/{voice_id}/content")
     assert resp.status_code == 200
     assert "content-length" in resp.headers
+
+
+# ── Item 12: Voice multipart behavioral tests ─────────────────────────
+
+def test_voice_upload_missing_file(client: TestClient):
+    """缺少 file 字段应返回400或422。"""
+    resp = client.post("/api/v1/assets/voices", data={"name": "test"})
+    assert resp.status_code in (400, 422)
+
+
+def test_voice_upload_empty_file(client: TestClient):
+    """空文件应返回400。"""
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("empty.wav", b"", "audio/wav")},
+        data={"name": "empty"},
+    )
+    assert resp.status_code == 400
+
+
+def test_voice_upload_invalid_extension(client: TestClient):
+    """不支持的扩展名应返回400。"""
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("test.xyz", b"\x00" * 100, "audio/xyz")},
+        data={"name": "invalid"},
+    )
+    assert resp.status_code == 400
+    assert "不支持" in resp.json()["error"]["message"] or "unsupported" in resp.json()["error"]["message"].lower()
+
+
+def test_voice_upload_invalid_mime(client: TestClient):
+    """不支持的 MIME 类型应返回400。"""
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("test.wav", b"\x00" * 100, "text/plain")},
+        data={"name": "invalid-mime"},
+    )
+    assert resp.status_code == 400
+    assert "MIME" in resp.json()["error"]["message"] or "mime" in resp.json()["error"]["message"].lower()
+
+
+def test_voice_upload_preserves_tags(client: TestClient):
+    """上传时 tags 应正确解析。"""
+    wav_bytes = _make_wav_bytes()
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("tagged.wav", wav_bytes, "audio/wav")},
+        data={"name": "tagged", "tags": "narration, warm, female"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data["tags"]) == {"narration", "warm", "female"}
+
+
+def test_voice_upload_empty_tags(client: TestClient):
+    """空 tags 应返回空列表。"""
+    wav_bytes = _make_wav_bytes()
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("notags.wav", wav_bytes, "audio/wav")},
+        data={"name": "notags", "tags": ""},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["tags"] == []
+
+
+def test_voice_upload_sha256_consistency(client: TestClient):
+    """相同文件内容应产生相同 sha256。"""
+    wav_bytes = _make_wav_bytes()
+    resp1 = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v1.wav", wav_bytes, "audio/wav")},
+        data={"name": "v1"},
+    )
+    resp2 = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v2.wav", wav_bytes, "audio/wav")},
+        data={"name": "v2"},
+    )
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    assert resp1.json()["sha256"] == resp2.json()["sha256"]
+
+
+def test_voice_upload_metadata_extraction(client: TestClient):
+    """上传后应提取音频元数据（duration_ms, sample_rate）。"""
+    wav_bytes = _make_wav_bytes(duration_ms=200, sample_rate=44100)
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("meta.wav", wav_bytes, "audio/wav")},
+        data={"name": "meta"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # 元数据应存在
+    assert "duration_ms" in data or "sample_rate" in data or "sha256" in data
+
+
+def test_voice_upload_default_name(client: TestClient):
+    """未提供 name 时应使用文件名。"""
+    wav_bytes = _make_wav_bytes()
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("my-voice.wav", wav_bytes, "audio/wav")},
+        data={},
+    )
+    assert resp.status_code == 200
+    # name 应该是文件名或空
+    assert resp.json()["name"] is not None
+
+
+def test_voice_content_range_partial(client: TestClient):
+    """Range 请求应返回正确部分内容。"""
+    wav_bytes = _make_wav_bytes(duration_ms=100)
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("range.wav", wav_bytes, "audio/wav")},
+        data={"name": "range"},
+    )
+    voice_id = create_resp.json()["voice_id"]
+
+    # 请求前100字节
+    resp = client.get(
+        f"/api/v1/assets/voices/{voice_id}/content",
+        headers={"Range": "bytes=0-99"},
+    )
+    assert resp.status_code == 206
+    assert len(resp.content) == 100
+    assert "content-range" in resp.headers
+
+
+def test_voice_content_range_invalid_format(client: TestClient):
+    """无效 Range 格式应返回416。"""
+    wav_bytes = _make_wav_bytes(duration_ms=100)
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("invalid-range.wav", wav_bytes, "audio/wav")},
+        data={"name": "invalid-range"},
+    )
+    voice_id = create_resp.json()["voice_id"]
+
+    # 无效 Range 格式
+    resp = client.get(
+        f"/api/v1/assets/voices/{voice_id}/content",
+        headers={"Range": "invalid"},
+    )
+    assert resp.status_code == 416

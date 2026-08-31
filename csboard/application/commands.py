@@ -130,6 +130,186 @@ class MountainCommands:
         run = self.repository.get_run(task_id, task.active_run_id) if task.active_run_id else None
         return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None}
 
+    def list_tasks(
+        self,
+        limit: int = 50,
+        cursor: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+    ) -> dict[str, Any]:
+        """列出任务：filter → sort → cursor → limit。"""
+        tasks_dir = self.repository.root / "tasks"
+        if not tasks_dir.exists():
+            return {"items": [], "next_cursor": None}
+
+        # 1. 读取所有 task
+        all_tasks = []
+        for task_path in sorted(tasks_dir.glob("*/task.json"), reverse=True):
+            try:
+                task = self.repository.get_task(task_path.parent.name)
+                all_tasks.append(task)
+            except (NotFoundError, Exception):
+                continue
+
+        # 2. filter (status, q)
+        filtered = []
+        for task in all_tasks:
+            td = task.to_dict()
+            if status and td.get("status") != status:
+                continue
+            if q:
+                q_lower = q.lower()
+                title_match = q_lower in td.get("title", "").lower()
+                id_match = q_lower in td.get("task_id", "").lower()
+                if not title_match and not id_match:
+                    continue
+            filtered.append(task)
+
+        # 3. sort (running first, failed second, then updated_at DESC)
+        _PRIORITY = {"running": 0, "failed": 1}
+
+        def _sort_key(task):
+            td = task.to_dict()
+            priority = _PRIORITY.get(td.get("status", "draft"), 2)
+            return (priority, td.get("updated_at", ""))
+
+        filtered.sort(key=_sort_key, reverse=True)
+
+        # 4. cursor
+        if cursor:
+            cursor_idx = -1
+            for idx, task in enumerate(filtered):
+                if task.task_id == cursor:
+                    cursor_idx = idx + 1
+                    break
+            if cursor_idx > 0:
+                filtered = filtered[cursor_idx:]
+
+        # 5. limit
+        effective_limit = max(1, min(limit, 100))
+        page = filtered[:effective_limit]
+
+        # 6. build items
+        items = []
+        for task in page:
+            td = task.to_dict()
+            active_run = None
+            if task.active_run_id:
+                try:
+                    run = self.repository.get_run(task.task_id, task.active_run_id)
+                    current_stage = None
+                    for stage_name in reversed(["generate-visual-anchors", "clone-voice", "plan-storyboard", "generate-illustrations", "render-visuals", "compose-video"]):
+                        stage_state = run.stages.get(stage_name)
+                        if stage_state and stage_state.status in (StageStatus.RUNNING, StageStatus.FAILED):
+                            current_stage = stage_name
+                            break
+                        if stage_state and stage_state.status == StageStatus.SUCCEEDED:
+                            break
+                    if current_stage is None and run.status == RunStatus.RUNNING:
+                        for stage_name in ["generate-visual-anchors", "clone-voice", "plan-storyboard", "generate-illustrations", "render-visuals", "compose-video"]:
+                            stage_state = run.stages.get(stage_name)
+                            if not stage_state or stage_state.status == StageStatus.PENDING:
+                                current_stage = stage_name
+                                break
+                    active_run = {
+                        "run_id": run.run_id,
+                        "status": run.status.value,
+                        "current_stage": current_stage,
+                        "started_at": run.started_at,
+                        "retryable": run.status == RunStatus.FAILED,
+                        "error_code": getattr(run, 'error_code', None),
+                    }
+                except NotFoundError:
+                    pass
+            td.pop("script_preparation", None)
+            td.pop("visual_anchor_enabled", None)
+            td["active_run"] = active_run
+            items.append(td)
+
+        next_cursor = items[-1]["task_id"] if len(items) >= effective_limit else None
+        return {"items": items, "next_cursor": next_cursor}
+
+    def save_inputs(
+        self,
+        task_id: str,
+        script: str,
+        reference_audio_path: str | None = None,
+        style: str = "极简粗线简笔白板风",
+        include_subtitles: bool = True,
+        pen_text: str = "",
+        stroke_detail: str = "detailed",
+        target_chars: int = 80,
+        min_chars: int = 35,
+        max_chars: int = 140,
+        visual_anchor_enabled: bool = True,
+        context: CommandContext | None = None,
+    ) -> dict[str, Any]:
+        """保存任务输入：通过 Application command 和 Repository 接口。"""
+        self.repository.get_task(task_id)  # validate task exists
+
+        if len(script.strip()) < 10:
+            raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
+
+        # 读取已有 request 以保留 reference_audio
+        request_path = self.repository.task_dir(task_id) / "request.json"
+        existing = {}
+        if request_path.exists():
+            existing = json.loads(request_path.read_text(encoding="utf-8"))
+
+        request_data = {
+            "script": script.strip(),
+            "reference_audio": reference_audio_path if reference_audio_path else existing.get("reference_audio"),
+            "style": style,
+            "include_subtitles": include_subtitles,
+            "pen_text": pen_text[:12],
+            "stroke_detail": stroke_detail if stroke_detail in {"light", "standard", "detailed", "full"} else "detailed",
+            "target_chars": target_chars,
+            "min_chars": min_chars,
+            "max_chars": max_chars,
+            "visual_anchor_enabled": visual_anchor_enabled,
+        }
+
+        # 原子写入 request.json
+        request_path.write_text(
+            json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        # 文案整理
+        try:
+            preparation = prepare_script(
+                script.strip(),
+                target_chars=target_chars,
+                min_chars=min_chars,
+                max_chars=max_chars,
+            )
+        except ValueError as exc:
+            raise DomainError("VALIDATION_ERROR", str(exc))
+
+        # 更新 task.json 的 script_preparation
+        task_json_path = self.repository.task_dir(task_id) / "task.json"
+        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+        task_data["script_preparation"] = preparation
+        task_data["visual_anchor_enabled"] = visual_anchor_enabled
+        task_json_path.write_text(
+            json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        self.telemetry.append_event(task_id, task_data.get("active_run_id", ""), {
+            "event_type": "InputsSaved",
+            "command": "task.save_inputs",
+        })
+
+        return {"ok": True, "task_id": task_id, "input_saved": True}
+
+    def cancel_run(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
+        """取消运行。"""
+        run = self.repository.get_run(task_id, run_id)
+        run.status = RunStatus.CANCELLED
+        self.repository.save_run(run)
+        self.telemetry.append_event(task_id, run_id, {"event_type": "RunCancelled"})
+        return {"ok": True, "status": "cancelled"}
+
     def trace_run(self, task_id: str, run_id: str) -> dict[str, Any]:
         run = self.repository.get_run(task_id, run_id)
         return {"ok": True, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "command_ids": run.command_ids, "status": run.status.value}
@@ -273,11 +453,10 @@ class MountainCommands:
             return [self._default_visual_item(unit)]
 
         try:
-            if self.service_resolver is not None:
-                text_def = self.service_resolver.resolve("text_generation")
-                text_model = self.provider_factory.create_adapter(text_def)
-            else:
-                text_model = self.provider_factory.create_text()
+            if self.service_resolver is None:
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 TextModel")
+            text_def = self.service_resolver.resolve("text_generation")
+            text_model = self.provider_factory.create_adapter(text_def)
         except Exception:
             warnings.append(f"{unit['unit_id']}: TextModel 创建失败，使用默认锚定")
             self.telemetry.append_event(task_id, run_id, {
@@ -575,19 +754,15 @@ class MountainCommands:
         if not ref_path.exists():
             raise DomainError("VALIDATION_ERROR", f"参考音频文件不存在: {reference_audio}")
 
-        # 动态解析：speech_synthesis + speech_alignment
-        if self.service_resolver is not None:
-            tts_def = self.service_resolver.resolve("speech_synthesis")
-            tts = self.provider_factory.create_adapter(tts_def)
-            alignment_def = self.service_resolver.resolve("speech_alignment")
-            alignment = self.provider_factory.create_adapter(alignment_def)
-            media_def = self.service_resolver.resolve("media")
-            media = self.provider_factory.create_adapter(media_def)
-        else:
-            # 回退：旧固定路径（CLI 兼容）
-            tts = self.provider_factory.create_tts()
-            alignment = self.provider_factory.create_alignment()
-            media = self.provider_factory.create_media()
+        # 动态解析：speech_synthesis + speech_alignment（必须通过 ServiceResolver）
+        if self.service_resolver is None:
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 TTS/alignment/media adapter")
+        tts_def = self.service_resolver.resolve("speech_synthesis")
+        tts = self.provider_factory.create_adapter(tts_def)
+        alignment_def = self.service_resolver.resolve("speech_alignment")
+        alignment = self.provider_factory.create_adapter(alignment_def)
+        media_def = self.service_resolver.resolve("media")
+        media = self.provider_factory.create_adapter(media_def)
 
         return self.clone_voice(
             task_id, run_id, tts, alignment, media,
@@ -714,11 +889,10 @@ class MountainCommands:
         """Stage executor for generate-illustrations. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 image model")
-        if self.service_resolver is not None:
-            image_def = self.service_resolver.resolve("image_generation")
-            image_model = self.provider_factory.create_adapter(image_def)
-        else:
-            image_model = self.provider_factory.create_image_model()
+        if self.service_resolver is None:
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 image model")
+        image_def = self.service_resolver.resolve("image_generation")
+        image_model = self.provider_factory.create_adapter(image_def)
         return self.generate_illustrations(task_id, run_id, image_model, context=context)
 
     def render_visuals(
@@ -871,22 +1045,20 @@ class MountainCommands:
         """Stage executor for render-visuals. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 renderer")
-        if self.service_resolver is not None:
-            render_def = self.service_resolver.resolve("rendering")
-            renderer = self.provider_factory.create_adapter(render_def)
-        else:
-            renderer = self.provider_factory.create_renderer()
+        if self.service_resolver is None:
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 renderer adapter")
+        render_def = self.service_resolver.resolve("rendering")
+        renderer = self.provider_factory.create_adapter(render_def)
         return self.render_visuals(task_id, run_id, renderer, context)
 
     def _exec_compose_video(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for compose-video. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 media adapter")
-        if self.service_resolver is not None:
-            media_def = self.service_resolver.resolve("media")
-            media = self.provider_factory.create_adapter(media_def)
-        else:
-            media = self.provider_factory.create_media()
+        if self.service_resolver is None:
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 media adapter")
+        media_def = self.service_resolver.resolve("media")
+        media = self.provider_factory.create_adapter(media_def)
         return self.compose_video(task_id, run_id, media, context)
 
     @staticmethod

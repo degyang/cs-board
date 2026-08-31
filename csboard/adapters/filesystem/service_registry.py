@@ -35,6 +35,11 @@ _SENSITIVE_CONFIG_KEYS = {
 }
 
 
+# probe 结果缓存（service_id → (result, timestamp)）
+_probe_cache: dict[str, tuple[dict[str, Any], float]] = {}
+_PROBE_CACHE_TTL = 60.0  # 60秒缓存
+
+
 def _validate_service_id(service_id: str) -> None:
     """校验 service_id 格式。"""
     if not service_id:
@@ -267,7 +272,14 @@ class FilesystemServiceRegistry:
             return defaults[0]
         return candidates[0] if candidates else None
 
-    def probe_service(self, service_id: str) -> dict[str, Any]:
+    def probe_service(self, service_id: str, force: bool = False) -> dict[str, Any]:
+        """探测服务可用性。使用缓存（60秒TTL），force=True 强制重新探测。"""
+        now = time.monotonic()
+        if not force and service_id in _probe_cache:
+            result, cached_at = _probe_cache[service_id]
+            if now - cached_at < _PROBE_CACHE_TTL:
+                return result
+
         service = self._load_service(service_id)
         start = time.monotonic()
         try:
@@ -275,7 +287,7 @@ class FilesystemServiceRegistry:
         except Exception:
             available, error_code, suggestion = False, "PROBE_ERROR", "探测时发生内部错误"
         latency_ms = round((time.monotonic() - start) * 1000)
-        return {
+        result = {
             "available": available,
             "checked_at": utc_now(),
             "latency_ms": latency_ms,
@@ -283,6 +295,15 @@ class FilesystemServiceRegistry:
             "error_code": error_code,
             "suggestion": suggestion,
         }
+        _probe_cache[service_id] = (result, now)
+        return result
+
+    def get_cached_probe(self, service_id: str) -> dict[str, Any] | None:
+        """获取缓存的 probe 结果，无缓存返回 None。"""
+        if service_id in _probe_cache:
+            result, _ = _probe_cache[service_id]
+            return result
+        return None
 
     def _do_probe(self, service: ServiceDefinition) -> tuple[bool, str | None, str | None]:
         """根据 adapter_type 执行真实轻量检查。"""

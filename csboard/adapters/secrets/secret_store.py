@@ -144,21 +144,21 @@ def create_secret_store(data_dir: Path, encrypted: bool = True) -> tuple[SecretS
 
     Args:
         data_dir: 数据目录
-        encrypted: 是否尝试使用加密存储
+        encrypted: 是否使用加密存储。默认 True 要求加密，不可用时 raise。
 
     Returns:
         (store, is_encrypted) 元组
+
+    Raises:
+        ImportError: encrypted=True 但 cryptography 不可用（fail closed）。
     """
     secrets_dir = data_dir / ".secrets"
 
     if encrypted:
-        try:
-            store = FileSecretStore(secrets_dir / "secrets.enc")
-            return store, True
-        except ImportError:
-            pass
+        store = FileSecretStore(secrets_dir / "secrets.enc")
+        return store, True
 
-    # 降级到明文存储
+    # 显式明文模式
     store = PlaintextSecretStore(secrets_dir / "secrets.json")
     return store, False
 

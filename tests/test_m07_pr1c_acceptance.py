@@ -49,7 +49,9 @@ def tmp_data_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def provider_factory(tmp_data_dir: Path) -> ProviderFactory:
     """创建 ProviderFactory 实例。"""
-    secret_store, _ = create_secret_store(tmp_data_dir)
+    import os
+    allow_plaintext = os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS", "") == "1"
+    secret_store, _ = create_secret_store(tmp_data_dir, encrypted=not allow_plaintext)
     return ProviderFactory(tmp_data_dir, secret_store=secret_store)
 
 
@@ -223,9 +225,15 @@ class TestProviderFactorySoleEntry:
         )
 
         mock_factory = MagicMock()
-        mock_text_model = MagicMock()
-        mock_factory.create_text_model.return_value = mock_text_model
+        mock_factory.create_adapter.return_value = MagicMock()
         commands.provider_factory = mock_factory
+
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = MagicMock(
+            capability="text_generation", adapter_type="test",
+            config={}, required_secrets=[],
+        )
+        commands.service_resolver = mock_resolver
 
         try:
             commands._exec_plan_storyboard(
@@ -235,10 +243,11 @@ class TestProviderFactorySoleEntry:
         except Exception:
             pass
 
-        mock_factory.create_text_model.assert_called_once()
+        mock_resolver.resolve.assert_called_with("text_generation")
+        mock_factory.create_adapter.assert_called_once()
 
     def test_exec_generate_illustrations_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
-        """generate-illustrations 阶段从 ProviderFactory 获取 image_model adapter。"""
+        """generate-illustrations 阶段通过 ServiceResolver→create_adapter 获取 image_model adapter。"""
         result = commands.create_task("测试项目")
         task_id = result["task_id"]
         run_id = result["run_id"]
@@ -250,9 +259,15 @@ class TestProviderFactorySoleEntry:
         )
 
         mock_factory = MagicMock()
-        mock_image_model = MagicMock()
-        mock_factory.create_image_model.return_value = mock_image_model
+        mock_factory.create_adapter.return_value = MagicMock()
         commands.provider_factory = mock_factory
+
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = MagicMock(
+            capability="image_generation", adapter_type="test",
+            config={}, required_secrets=[],
+        )
+        commands.service_resolver = mock_resolver
 
         try:
             commands._exec_generate_illustrations(
@@ -262,18 +277,25 @@ class TestProviderFactorySoleEntry:
         except Exception:
             pass
 
-        mock_factory.create_image_model.assert_called_once()
+        mock_resolver.resolve.assert_called_with("image_generation")
+        mock_factory.create_adapter.assert_called_once()
 
     def test_exec_render_visuals_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
-        """render-visuals 阶段从 ProviderFactory 获取 renderer adapter。"""
+        """render-visuals 阶段通过 ServiceResolver→create_adapter 获取 renderer adapter。"""
         result = commands.create_task("测试项目")
         task_id = result["task_id"]
         run_id = result["run_id"]
 
         mock_factory = MagicMock()
-        mock_renderer = MagicMock()
-        mock_factory.create_renderer.return_value = mock_renderer
+        mock_factory.create_adapter.return_value = MagicMock()
         commands.provider_factory = mock_factory
+
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = MagicMock(
+            capability="rendering", adapter_type="test",
+            config={}, required_secrets=[],
+        )
+        commands.service_resolver = mock_resolver
 
         try:
             commands._exec_render_visuals(
@@ -283,18 +305,25 @@ class TestProviderFactorySoleEntry:
         except Exception:
             pass
 
-        mock_factory.create_renderer.assert_called_once()
+        mock_resolver.resolve.assert_called_with("rendering")
+        mock_factory.create_adapter.assert_called_once()
 
     def test_exec_compose_video_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
-        """compose-video 阶段从 ProviderFactory 获取 media adapter。"""
+        """compose-video 阶段通过 ServiceResolver→create_adapter 获取 media adapter。"""
         result = commands.create_task("测试项目")
         task_id = result["task_id"]
         run_id = result["run_id"]
 
         mock_factory = MagicMock()
-        mock_media = MagicMock()
-        mock_factory.create_media.return_value = mock_media
+        mock_factory.create_adapter.return_value = MagicMock()
         commands.provider_factory = mock_factory
+
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = MagicMock(
+            capability="media", adapter_type="test",
+            config={}, required_secrets=[],
+        )
+        commands.service_resolver = mock_resolver
 
         try:
             commands._exec_compose_video(
@@ -304,7 +333,8 @@ class TestProviderFactorySoleEntry:
         except Exception:
             pass
 
-        mock_factory.create_media.assert_called_once()
+        mock_resolver.resolve.assert_called_with("media")
+        mock_factory.create_adapter.assert_called_once()
 
     def test_no_direct_adapter_import_in_commands(self):
         """commands.py 中不应直接导入 adapter 类。"""

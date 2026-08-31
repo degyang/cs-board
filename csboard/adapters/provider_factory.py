@@ -36,8 +36,8 @@ class ProviderFactory:
             self._secret_store = secret_store
             self._is_encrypted = is_encrypted
         else:
-            # 兼容旧调用：自行创建（但生产路径应注入）
-            encrypted = kwargs.get("encrypted", True)
+            # 兼容旧调用：默认使用明文（生产路径必须注入 secret_store）
+            encrypted = kwargs.get("encrypted", False)
             self._secret_store, self._is_encrypted = create_secret_store(data_dir, encrypted)
         self._profiles: dict[str, ProviderProfile] = {}
         self._load_profiles()

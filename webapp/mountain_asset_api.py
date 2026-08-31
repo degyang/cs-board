@@ -104,9 +104,12 @@ def _is_preset(repository: FilesystemAssetRepository, style_id: str) -> bool:
         return False
 
 
-def mountain_asset_router(data_dir: Path) -> APIRouter:
+def mountain_asset_router(
+    data_dir: Path,
+    repository: FilesystemAssetRepository | None = None,
+) -> APIRouter:
     router = APIRouter()
-    repository = FilesystemAssetRepository(data_dir)
+    repository = repository or FilesystemAssetRepository(data_dir)
 
     # ── styles ────────────────────────────────────────────────────
 
@@ -329,7 +332,7 @@ def mountain_asset_router(data_dir: Path) -> APIRouter:
     @router.get("/api/v1/assets/voices")
     def list_voices():
         voices = repository.list_voice_assets()
-        return {"items": [_voice_to_public(v) for v in voices], "total": len(voices)}
+        return {"items": [_voice_to_public(v) for v in voices], "total": len(voices), "next_cursor": None}
 
     @router.post("/api/v1/assets/voices")
     async def create_voice(
