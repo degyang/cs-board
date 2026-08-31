@@ -304,6 +304,83 @@ CCF 完成后必须在自己的 worktree 创建或更新：
 
 未完成时不得写“完成”；应明确写“执行中”及剩余问题。
 
+## 3A. CCF 审核纠偏指令
+
+### 3A.1 指令编号与起点
+
+```text
+instruction: CCF-ASSET-SETTINGS-04
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed commit: 1f1c529 fix(mountain-web): finish service secrets and asset management
+result: rejected
+```
+
+本轮只能在上述 worktree 和分支形成 follow-up commit，不得改写、squash 或删除 `1f1c529`。
+
+### 3A.2 必须关闭的阻断项
+
+1. 新建 Service 必须输入并提交 `service_id`、`display_name`、`capability`、`adapter_type`；同时支持 `required_secrets`、`optional_secrets`、endpoint、model、priority、enabled 和非敏感 config。编辑页面必须正确回填并限制不可修改字段。
+2. capability 与 adapter_type 保持可扩展字符串语义。可以提供推荐值，但必须允许用户输入注册表尚未预置的新值，不得只允许封闭 `<select>`。
+3. `config_status` 改为结构化对象，至少包含 `configured`、`missing_fields`、`missing_secrets`；`secret_status` 改为结构化对象，至少包含 `configured`、`required`、`missing`。页面和测试同步使用真实结构。
+4. Secret 列表统一解析 `{items: ServiceSecret[], total: number}`；保存成功清空明文；加载、保存、删除失败均显示结构化安全错误，不得静默吞错。
+5. `probeService()` 返回并展示 `ServiceAvailability`，不得伪装成 `ServiceDefinition`；Probe 后按真实结果刷新详情。
+6. 修复 Service 删除流程：删除失败不得关闭成功流程或离开页面；删除成功才导航到 `/settings/models`，不得读取异步旧 state 判断结果。
+7. 删除旧的双轨 `SettingsPage` 生产功能及其旧测试，或将其收缩为无业务逻辑的兼容跳转；测试必须覆盖 Router 实际使用的 `SettingsLayout`、`ModelServicesPage`、`ServiceFormPage`、`ServiceDetailPage`。
+8. 删除生产代码中的 `window.alert`、`window.confirm` 以及向 console 输出错误详情的行为。错误详情只能按白名单显示：`capability`、`service_id`、`allowed`、`missing_fields`、`missing_secrets`、`suggestion`、`revision`、`request_id`。
+9. 修复 HTTP FormData header：合并调用方 headers 后，删除所有大小写形式的 `Content-Type`；增加传入 `content-type`、`Content-Type`、`CONTENT-TYPE` 的行为测试。
+10. 自定义风格预览必须选择文件并先调用 `POST /api/v1/assets/uploads`，取得 `asset_id` 后再保存 `preview_asset_id`；不允许把“手工填写素材 ID”作为唯一流程。
+11. 资产页面补全真实筛选和 cursor 分页：style 支持 kind/status/engine/q，voice 支持 status/q；提供加载下一页并保证不重复、不漏项。切换 tab/filter 时重置 cursor 和选中项。
+12. `check-api-contract.mjs` 必须使用 `MOUNTAIN_API_BASE` 请求真实后端，不得仅比较本地 fixture 与 TypeScript 文本。至少验证 Service list/detail/secrets/probe、Style list、Voice list、Voice Alignment、Toolchain、Storage、Diagnostics 和统一错误响应；网络错误或字段不符必须非零退出。fixture 只作为期望契约，不得冒充服务器响应。
+13. 清除全部 React `act(...)` warning、unhandled rejection 和 Router warning；不得通过屏蔽 `console.error` 掩盖 warning。完成报告必须逐字如实粘贴门禁摘要，不得把“tests passed”解释成“0 warning”。
+
+### 3A.3 强制行为测试
+
+至少新增或重写测试证明：
+
+- 生产 Router 实际渲染所有 Settings 子路由；
+- 创建 Service 请求包含全部必需字段和 Secret 声明；
+- 自定义 capability/adapter_type 可以提交；
+- Secret `{items,total}` 正常渲染，失败不被吞掉；
+- Probe 使用 `ServiceAvailability`；
+- 删除失败留在详情页，成功才导航；
+- FormData 三种大小写 Content-Type 均被移除；
+- 风格预览完成 upload -> asset_id -> style save 链路；
+- style/voice 筛选与 cursor 翻页请求正确；
+- production source 中不存在旧 Settings 双轨、`window.confirm`、`window.alert` 和错误详情 console 输出。
+
+不得使用 `expect(true)`、源码字符串存在性断言或只断言 HTTP 状态不是 400 替代行为测试。
+
+### 3A.4 门禁与提交
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+MOUNTAIN_API_BASE=http://127.0.0.1:8000/api/v1 node web-v2/scripts/check-api-contract.mjs
+git diff --check
+git status --short
+```
+
+真实契约检查需要 CCB 服务时，不得伪造成功；在报告中标记 `blocked: waiting for CCB runtime`，其余前端工作和门禁继续完成。
+
+形成新的提交：
+
+```text
+fix(mountain-web): close CCF asset settings review gaps
+```
+
+先本地提交，不推送远端。
+
+### 3A.5 完成报告
+
+只在 CCF worktree 创建或更新：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-asset-settings-04-report.md
+```
+
+报告逐项列出 3A.2 的 13 项处理结果、对应生产文件和行为测试，并包含：commit、git status、build、test 数量、warning 数量、真实 contract checker、已知 gap、未完成事项。未全部完成时只能写“执行中”。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
