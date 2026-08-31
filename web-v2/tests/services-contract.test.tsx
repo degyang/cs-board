@@ -9,6 +9,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { MountainApiError } from '../src/lib/api/http'
+import type { ToolchainComponent } from '../src/lib/api/types'
 import { SettingsLayout } from '../src/pages/SettingsLayout'
 import { ModelServicesPage } from '../src/pages/ModelServicesPage'
 import { ServiceDetailPage } from '../src/pages/ServiceDetailPage'
@@ -480,8 +481,94 @@ describe('ToolchainPage (production route)', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getAllByText('工具链').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('系统工具链')).toBeInTheDocument()
     })
+  })
+
+  it('renders available and unavailable components without environment details', async () => {
+    const unavailableTool = {
+      component: 'renderer', available: false, version: null, error_code: 'E-RENDER-NODE-OFFLINE',
+      suggestion: '请确认本地渲染服务已启动。', path: '/private/runtime/renderer', command: 'renderer --token secret-value', token: 'secret-value',
+    }
+    vi.mocked(fetchToolchainSettings).mockResolvedValue({
+      tools: [
+        { component: 'ffmpeg', available: true, version: '6.1.1', error_code: null, suggestion: null },
+        unavailableTool,
+      ],
+    })
+
+    await act(async () => {
+      renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
+
+    await waitFor(() => expect(screen.getByText('FFmpeg 音画合成')).toBeInTheDocument())
+    expect(screen.getByText('将配音、对齐字幕与画面合成为最终成片。')).toBeInTheDocument()
+    expect(screen.getByText('6.1.1')).toBeInTheDocument()
+    expect(screen.getByText('白板渲染器')).toBeInTheDocument()
+    expect(screen.getByText('E-RENDER-NODE-OFFLINE')).toBeInTheDocument()
+    expect(screen.getByText('请确认本地渲染服务已启动。')).toBeInTheDocument()
+    expect(screen.queryByText('/private/runtime/renderer')).not.toBeInTheDocument()
+    expect(screen.queryByText('renderer --token secret-value')).not.toBeInTheDocument()
+    expect(screen.queryByText('secret-value')).not.toBeInTheDocument()
+  })
+
+  it('keeps unknown components visible with their DTO status', async () => {
+    vi.mocked(fetchToolchainSettings).mockResolvedValue({
+      tools: [{ component: 'new-runtime-tool', available: false, version: null, error_code: 'NOT_READY', suggestion: '等待组件就绪。' }],
+    })
+    await act(async () => {
+      renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
+
+    await waitFor(() => expect(screen.getByText('new-runtime-tool')).toBeInTheDocument())
+    expect(screen.getByText('不可用')).toBeInTheDocument()
+    expect(screen.getByText('NOT_READY')).toBeInTheDocument()
+  })
+
+  it('renders skeleton and empty states separately', async () => {
+    let resolveRequest: ((value: { tools: [] }) => void) | undefined
+    vi.mocked(fetchToolchainSettings).mockImplementationOnce(() => new Promise(resolve => {
+      resolveRequest = resolve
+    }))
+    await act(async () => {
+      renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
+    expect(screen.getByLabelText('正在加载系统工具链')).toBeInTheDocument()
+
+    await act(async () => resolveRequest?.({ tools: [] }))
+    await waitFor(() => expect(screen.getByText('未探测到工具链组件')).toBeInTheDocument())
+  })
+
+  it('retries the API request after an error and clears the old error', async () => {
+    vi.mocked(fetchToolchainSettings)
+      .mockRejectedValueOnce(new Error('网络不可达'))
+      .mockResolvedValueOnce({ tools: [{ component: 'ffprobe', available: true, version: '6.1.1', error_code: null, suggestion: null }] })
+    const user = userEvent.setup()
+    await act(async () => {
+      renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('网络不可达'))
+    await user.click(screen.getByRole('button', { name: '重新加载' }))
+    await waitFor(() => expect(screen.getByText('FFprobe')).toBeInTheDocument())
+    expect(fetchToolchainSettings).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /保存|编辑|探测|刷新/i })).not.toBeInTheDocument()
+  })
+
+  it('ignores a delayed response after unmount', async () => {
+    let resolveRequest: ((value: { tools: ToolchainComponent[] }) => void) | undefined
+    vi.mocked(fetchToolchainSettings).mockImplementationOnce(() => new Promise(resolve => {
+      resolveRequest = resolve
+    }))
+    let rendered: ReturnType<typeof render> | undefined
+    await act(async () => {
+      rendered = renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
+
+    rendered?.unmount()
+    await act(async () => resolveRequest?.({ tools: [{ component: 'ffmpeg', available: true, version: null, error_code: null, suggestion: null }] }))
+    expect(screen.queryByText('FFmpeg 音画合成')).not.toBeInTheDocument()
   })
 })
 
