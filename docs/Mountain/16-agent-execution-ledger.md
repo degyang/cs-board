@@ -863,6 +863,94 @@ fix(mountain): close CCB runtime integration review gaps
 
 报告逐项列出 4A.3 的 13 项处理结果、生产文件和行为证据，并包含实际 commit、git status、pytest、compileall、真实 uvicorn/HTTP、CCF checker、Secret 明文扫描、已知 gap 和未完成事项。未全部完成时只能写“执行中”。
 
+## 4B. CCB 生产运行时最终收口指令
+
+### 4B.1 指令编号与起点
+
+```text
+instruction: CCB-BACKEND-INTEGRATION-06
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed commit: 5007a5b fix(mountain): close CCB runtime integration review gaps
+result: rejected; unit gates pass, real start path fails
+```
+
+保留 `5007a5b`，只形成增量 follow-up，不返工 4B.2 已通过内容。
+
+### 4B.2 已通过且不得返工
+
+- 421 个 Python 测试通过；
+- SecretStore 工厂不再静默从 encrypted=True 降级；
+- Service probe cache 基础实现；
+- Service 创建/更新基础校验；
+- Voice multipart、HEAD、Range 基础行为；
+- Settings DTO 的本轮基础调整。
+
+### 4B.3 本轮必须关闭
+
+1. 修复真实 start 500：`mountain_task_api.start_run()` 不得引用不存在的 `_service_resolver`。上传输入后调用 start，在服务缺失时必须返回结构化 `CAPABILITY_NOT_AVAILABLE`，绝不能抛 NameError/500。
+2. 唯一组合根必须注入同一个 `MountainCommands`/Application service 实例。Task Router 直接接收 commands/query service，不得每次请求 `_get_commands()` 新建实例；Router 参数不得使用 `repository or Filesystem...` 等生产回退创建基础设施。
+3. 完成 Task Router 收口：`get_task/get_inputs/start/artifacts/content/events/logs/trace/metrics/final/diagnostics` 均委托 Application Query/Command 与 Artifact/Telemetry port。Router 不得直接读取 `task.json`、`request.json`、`index.json`、JSONL、`final.mp4`，不得拼接运行目录或解释领域状态。
+4. 输入上传采用明确的 staging/application 边界：Router 只流式接收至受控临时文件并校验 HTTP 输入；Application command 负责校验任务、媒体、保留既有 reference、原子提交 input-manifest 和清理。任一步失败不得覆盖旧 reference，不得留下 partial。
+5. ProviderFactory 新生产构造必须强制注入 SecretStore；删除无注入时 `encrypted=False` 的危险默认。若 legacy 确需自建，迁入明确 legacy factory，新 Mountain Server/CLI/Pipeline 不可达。
+6. 加入可安装的运行时加密依赖。当前项目环境实测没有 `cryptography`，默认服务无法启动。将依赖写入项目实际安装清单并更新启动/安装文档；默认缺依赖时抛出明确可操作错误，不得让模块级 `app` 变成 `None`。
+7. 删除根级 `conftest.py` 对全部测试全局设置 `CSBOARD_ALLOW_PLAINTEXT_SECRETS=1` 的做法。明文模式只在明确需要的 scoped fixture 中设置并恢复；必须有未设置开关的真实默认加密启动测试。
+8. 所有 HTTP 错误统一 `body.error`。清除 Task Router 的字符串或 dict `HTTPException.detail` 输出；测试覆盖 validation/not-found/capability/internal boundary，确认没有 FastAPI `detail` 泄漏。
+9. Diagnostics/Logs/Events/Artifact content 返回前复用 `DefaultRedactor`，不仅返回计数。增加 API key、Bearer token、查询参数 secret、嵌套敏感键和真实 Service secret 的响应及磁盘扫描测试。
+10. 真实启动门禁必须覆盖：默认加密模式启动、health encrypted=true、创建 Task、保存输入、start 缺能力返回结构化 4xx、注册测试 Service 后动态解析到 adapter、旧 `/providers` 404，以及 Service/Asset/Settings/Task 查询端点。
+11. 对接 CCF `CCF-ASSET-SETTINGS-06` 完成后的 checker。后端自身先用共享 fixtures/契约测试保证 DTO；不得把 checker failure 描述为通过。
+12. 修正报告真实性：状态不得写“全部通过”同时附带 checker violation；报告必须记录实际 implementation commit、真实 HTTP 结果、clean status 和未完成项。
+
+### 4B.4 强制回归测试
+
+至少覆盖：
+
+- upload inputs 后 start 不产生 500；
+- 缺 Service 返回 `body.error.code=CAPABILITY_NOT_AVAILABLE`；
+- Router 多次请求使用同一 commands/repository/telemetry/resolver/factory 实例；
+- ProviderFactory 无 SecretStore 构造失败；
+- 默认加密启动与显式明文开发启动相互隔离；
+- input 更新失败保留旧 reference 且无 partial；
+- Task 查询全部通过 Application/Port 行为完成；
+- Task/日志/事件/产物/诊断响应中 secret 原文为零；
+- CLI 与 Web 切换默认 Service 后下一次 Stage 使用同一新 Adapter。
+
+禁止只用 `hasattr`、源码字符串或 mock 调用次数替代真实 HTTP/Application 行为。
+
+### 4B.5 门禁与提交顺序
+
+```bash
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+```
+
+使用临时 data dir 启动真实 uvicorn，保存安全裁剪后的请求/响应摘要。随后运行可用的最新 CCF checker；未通过只能标记执行中。
+
+先形成实现提交：
+
+```text
+fix(mountain): harden production runtime and task API boundaries
+```
+
+取得 implementation commit 后，再形成报告提交：
+
+```text
+docs(mountain): report CCB runtime closeout status
+```
+
+先本地提交，不推送。最终 `git status --short` 必须为空。
+
+### 4B.6 完成报告
+
+只在 CCB worktree 创建：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-backend-integration-06-report.md
+```
+
+报告逐项记录 4B.3 十二项结果及测试名称，包含 implementation_commit、pytest、compileall、默认加密启动、真实 HTTP、CCF checker、Secret 扫描、clean status、已知 gap 和未完成事项。任一真实门禁未完成时状态只能为“执行中”。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
