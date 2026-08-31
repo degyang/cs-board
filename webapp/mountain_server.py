@@ -28,7 +28,12 @@ from webapp.error_contract import domain_error_response
 _DEFAULT_DATA_DIR = Path(os.environ.get("CSBOARD_DATA_DIR", Path.home() / ".csboard"))
 
 
-def create_app(data_dir: Path | None = None) -> FastAPI:
+def create_app(
+    data_dir: Path | None = None,
+    repository=None,
+    max_upload_bytes: int = 50 * 1024 * 1024,
+    chunk_size: int = 1024 * 1024,
+) -> FastAPI:
     app = FastAPI(title="Mountain Server", version="0.2.0")
 
     effective_data_dir = data_dir or _DEFAULT_DATA_DIR
@@ -87,7 +92,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     from webapp.mountain_settings_api import mountain_settings_router
 
     # 共享 Repository 和 Telemetry
-    task_repository = FilesystemTaskRepository(effective_data_dir)
+    task_repository = repository or FilesystemTaskRepository(effective_data_dir)
     telemetry = JsonlTelemetry(task_repository)
     asset_repository = FilesystemAssetRepository(effective_data_dir)
 
@@ -107,6 +112,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         telemetry=telemetry,
         service_resolver=service_resolver,
         provider_factory=provider_factory,
+        max_upload_bytes=max_upload_bytes,
+        chunk_size=chunk_size,
     ))
     app.include_router(mountain_asset_router(
         effective_data_dir,

@@ -237,7 +237,7 @@ class MountainCommands:
         self,
         task_id: str,
         script: str,
-        txn_dir: Path | None = None,
+        txn_dir: Path,
         reference_audio_filename: str | None = None,
         style: str = "极简粗线简笔白板风",
         include_subtitles: bool = True,
@@ -252,6 +252,7 @@ class MountainCommands:
         """保存任务输入：通过 Application command 和 Repository 接口。
 
         接收事务目录（由 Repository 创建），在验证完成后原子提交。
+        所有保存（有无 reference）都走同一事务。
         """
         # 验证任务存在
         self.repository.get_task(task_id)
@@ -260,7 +261,7 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
         # 验证音频文件（如果有）
-        if txn_dir and reference_audio_filename:
+        if reference_audio_filename:
             suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
             staging_ref = txn_dir / f"reference{suffix}"
             if not staging_ref.exists():
@@ -286,7 +287,7 @@ class MountainCommands:
         existing = self.repository.get_request(task_id) or {}
 
         reference_audio_relative = None
-        if txn_dir and reference_audio_filename:
+        if reference_audio_filename:
             suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
             reference_audio_relative = f"inputs/reference{suffix}"
         else:

@@ -33,10 +33,13 @@ def mountain_task_router(
     telemetry: JsonlTelemetry | None = None,
     service_resolver=None,
     provider_factory=None,
+    max_upload_bytes: int = 50 * 1024 * 1024,
+    chunk_size: int = 1024 * 1024,
 ) -> APIRouter:
     """创建 /api/v1 路由器 — Task/Run/Stage 相关端点。
 
     所有依赖由 create_app() 注入。commands 是唯一 MountainCommands 实例。
+    max_upload_bytes 和 chunk_size 可由测试注入以验证边界。
     """
     repository = repository or FilesystemTaskRepository(data_dir)
     telemetry = telemetry or JsonlTelemetry(repository)
@@ -96,11 +99,6 @@ def mountain_task_router(
 
     # ── Input Upload ──────────────────────────────────────────────────
 
-    # 上传大小上限：50MB
-    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-    # 分块大小：1MB
-    CHUNK_SIZE = 1024 * 1024
-
     @router.post("/tasks/{task_id}/inputs")
     async def upload_inputs(
         task_id: str,
@@ -115,13 +113,27 @@ def mountain_task_router(
         max_chars: int = Form(140),
         visual_anchor_enabled: bool = Form(True),
     ):
-        """上传任务输入（文案和参考音频）— 委托 Application 层。"""
+        """上传任务输入（文案和参考音频）— 委托 Application 层。
+
+        所有保存（有无 reference）都创建唯一事务。
+        """
         txn_dir = None
-        staging_ref = None
         reference_audio_filename = None
 
         try:
-            # 分块写入 staging 文件（在任务目录内，同一文件系统）
+            # 验证 task 存在（在创建 staging 之前）
+            try:
+                repository.get_task(task_id)
+            except NotFoundError:
+                return domain_error_response(
+                    NotFoundError(f"Task {task_id} 不存在"),
+                    status_code=404,
+                )
+
+            # 始终创建唯一事务目录
+            txn_dir = repository.create_staging(task_id)
+
+            # 分块写入 reference（如果有）
             if reference is not None:
                 reference_audio_filename = reference.filename
                 suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
@@ -131,18 +143,16 @@ def mountain_task_router(
                         status_code=400,
                     )
 
-                # 在任务目录内创建 staging（同一文件系统）
-                txn_dir = repository.create_staging(task_id)
                 staging_ref = txn_dir / f"reference{suffix}"
 
                 # 分块写入，检查大小上限
                 total_bytes = 0
                 with staging_ref.open("wb") as f:
-                    while chunk := await reference.read(CHUNK_SIZE):
+                    while chunk := await reference.read(chunk_size):
                         total_bytes += len(chunk)
-                        if total_bytes > MAX_UPLOAD_BYTES:
+                        if total_bytes > max_upload_bytes:
                             return domain_error_response(
-                                DomainError("VALIDATION_ERROR", f"参考音频超过大小上限 ({MAX_UPLOAD_BYTES // (1024*1024)}MB)"),
+                                DomainError("VALIDATION_ERROR", f"参考音频超过大小上限 ({max_upload_bytes // (1024*1024)}MB)"),
                                 status_code=400,
                             )
                         f.write(chunk)
@@ -166,7 +176,9 @@ def mountain_task_router(
 
             return result
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            # INTERNAL_ERROR 返回 500，其他返回 400
+            status = 500 if error.code == "INTERNAL_ERROR" else 400
+            return domain_error_response(error, status_code=status)
         except Exception as error:
             # 内部错误不暴露绝对路径或异常原文
             return domain_error_response(
