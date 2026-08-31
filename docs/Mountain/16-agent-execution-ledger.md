@@ -782,6 +782,71 @@ docs(mountain): report nested contract guard status
 
 先本地提交，不推送。最终回复必须给出两个 commit hash；没有 commit hash 等同未交付。执行者不得自行宣布审核通过。
 
+## 3H. CCF 单一垂直切片：移除固定 Provider 前端遗留
+
+### 3H.1 指令编号与已验收基线
+
+```text
+instruction: CCF-DYNAMIC-SERVICES-CLEANUP-04
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: f4aeecb fix(mountain-web): reject invalid nested contract containers
+accepted report: fa7b254 docs(mountain): report nested contract guard status
+```
+
+审核者已复现：build 通过、contract checker `48/48`、前端全量 `255/255`、fixture checker 和 diff check 通过。复杂嵌套容器守卫本轮验收通过。
+
+### 3H.2 唯一目标
+
+前端模型服务域只允许使用动态 Service Registry。删除当前不可达但仍残留的固定 Provider 页面、路由辅助、DTO、API client 和对应旧测试，防止后续误接 `/providers`。不得修改后端，不得重做动态 Service 页面样式或添加新功能。
+
+必须完成：
+
+1. 删除不再由 Router 使用的 `ProvidersPage.tsx`、`ProviderDetailPage.tsx` 及其专属样式、测试和导入。
+2. 删除前端生产代码中的 `fetchProviders/fetchProvider/updateProviderConfig/fetchProviderSecrets/setProviderSecret/deleteProviderSecret` 等 `/providers` client，以及只服务于旧 Provider API 的 DTO。
+3. 保留并锁定唯一入口：`/settings/models`、`/settings/models/new`、`/settings/models/:serviceId`、`/settings/models/:serviceId/edit` 均使用动态 Service 页面与 `/services` API。
+4. `VoiceAlignmentPage` 跳转服务详情仍使用 `/settings/models/:serviceId`，不得引入 Provider 名称或固定 provider_type 分支。
+5. 如果通用 CSS 类仍被动态 Service 页面使用则保留；只有通过引用搜索证明专属旧 Provider 的样式才可删除。
+6. 更新测试，验证设置导航和四条模型服务路由只落到动态 Service 组件；生产代码和有效测试中不得残留 `/api/v1/providers` 或以 `/providers` 为 endpoint 的调用。
+
+### 3H.3 边界与机器门禁
+
+允许删除真正不可达的旧代码，不得顺带调整资产、任务、工作台、checker 算法或后端契约。删除前先使用引用搜索确认无生产消费者。
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+! rg -n "(/api/v1)?/providers|fetchProviders|fetchProviderSecrets|ProviderDetailPage|ProvidersPage" web-v2/src web-v2/tests web-v2/scripts
+git diff --check
+git status --short
+```
+
+若 fixture/checker 中存在为确认后端禁止旧路径而保留的明确负向断言，可以保留，但报告必须逐项解释；不得用宽泛排除掩盖生产残留。
+
+### 3H.4 提交与报告
+
+实现提交：
+
+```text
+refactor(mountain-web): remove fixed provider frontend legacy
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-dynamic-services-cleanup-04-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report dynamic services frontend cleanup
+```
+
+先本地提交，不推送。报告给出删除清单、引用搜索结果、实际 implementation commit、门禁摘要和保留的负向断言；执行者不得自行宣布最终审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
