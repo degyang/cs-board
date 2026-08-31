@@ -2054,6 +2054,63 @@ docs(mountain): report same-task concurrency proof
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4J. CCB 同一 Task 并发证据最终收口
+
+### 4J.1 指令编号与审核结论
+
+```text
+instruction: CCB-TASK-INPUT-CONCURRENCY-14
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed test commit: 66bf570 test(mountain): prove same-task input serialization
+reviewed report: 65744bd docs(mountain): report same-task concurrency proof
+result: rejected narrowly; real two-thread path exists, three required assertions remain
+```
+
+审核者已复现专项 `22 passed`、全量 `457 passed, 5 skipped`、compileall、禁止项和 clean status。生产事务实现不再修改；只补测试证据和如实报告。
+
+### 4J.2 唯一任务
+
+仅修改 `tests/test_input_transaction_11.py` 中两个同一 Task 并发测试：
+
+1. 增加 `b_started` Event。B 在线程内、紧邻调用真实 POST/save 之前设置；主线程必须先 `assert b_started.wait(timeout=...)`，再观察 A 未释放时 `b_entered` 为 false。避免把“B 尚未调度”误判为“B 被锁阻塞”。
+2. A 释放且两个线程结束后，必须断言 `b_entered.is_set()`，证明 B 后续确实经过同一个生产 checkpoint，而非逻辑线程标识失效或绕开 hook。
+3. 两个测试都捕获 A/B 的 HTTP 状态或异常。不得丢弃线程函数返回值；线程异常必须使主测试失败。明确断言两个响应均为 200。
+4. reference 并发测试读取最终 `task.json`，按 `source_range`/顺序拼接 `script_preparation.voice_units[].text`，断言与最终 `request.script`（B 文案）完全一致，并验证 unit 范围连续覆盖全文。
+5. 保留最终 reference 路径和 sha256、垃圾文件清零、线程有界结束及不同 Task 并行断言。
+6. 不修改生产代码、不新增睡眠、不复制事务算法、不扩大其他测试。
+
+### 4J.3 门禁、提交与报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_input_transaction_11.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+! rg -n "def _install_target|installed_request|old_request_bak|time\.sleep" tests/test_input_transaction_11.py
+git diff --check
+git status --short
+```
+
+测试提交：
+
+```text
+test(mountain): close same-task concurrency evidence
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-concurrency-14-report.md
+```
+
+报告只记录新增四类证据、实际 test commit、门禁原始摘要和 clean status。报告提交：
+
+```text
+docs(mountain): report final concurrency evidence
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
