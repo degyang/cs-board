@@ -16,6 +16,8 @@ export function ServiceFormPage() {
   const isEdit = !!serviceId
   const navigate = useNavigate()
 
+  // Fix #1: service_id field (required for create, disabled for edit)
+  const [serviceIdInput, setServiceIdInput] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [capability, setCapability] = useState('text_generation')
   const [adapterType, setAdapterType] = useState('openai_compatible')
@@ -23,6 +25,8 @@ export function ServiceFormPage() {
   const [model, setModel] = useState('')
   const [priority, setPriority] = useState('10')
   const [enabled, setEnabled] = useState(true)
+  const [requiredSecrets, setRequiredSecrets] = useState('')
+  const [optionalSecrets, setOptionalSecrets] = useState('')
   const [configJson, setConfigJson] = useState('{}')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -33,6 +37,7 @@ export function ServiceFormPage() {
     setIsLoading(true)
     fetchService(serviceId)
       .then(svc => {
+        setServiceIdInput(svc.service_id)
         setDisplayName(svc.display_name)
         setCapability(svc.capability)
         setAdapterType(svc.adapter_type)
@@ -40,6 +45,8 @@ export function ServiceFormPage() {
         setModel(svc.model ?? '')
         setPriority(String(svc.priority))
         setEnabled(svc.enabled)
+        setRequiredSecrets(svc.required_secrets.join(', '))
+        setOptionalSecrets(svc.optional_secrets.join(', '))
         setConfigJson(JSON.stringify(svc.config, null, 2))
       })
       .catch(err => {
@@ -60,6 +67,13 @@ export function ServiceFormPage() {
       return
     }
 
+    const parsedRequiredSecrets = requiredSecrets
+      ? requiredSecrets.split(',').map(s => s.trim()).filter(Boolean)
+      : []
+    const parsedOptionalSecrets = optionalSecrets
+      ? optionalSecrets.split(',').map(s => s.trim()).filter(Boolean)
+      : []
+
     setIsSaving(true)
     try {
       if (isEdit && serviceId) {
@@ -71,10 +85,13 @@ export function ServiceFormPage() {
           model: model || undefined,
           priority: Number(priority),
           enabled,
+          required_secrets: parsedRequiredSecrets.length > 0 ? parsedRequiredSecrets : undefined,
+          optional_secrets: parsedOptionalSecrets.length > 0 ? parsedOptionalSecrets : undefined,
           config,
         })
       } else {
         await createService({
+          service_id: serviceIdInput,
           display_name: displayName,
           capability,
           adapter_type: adapterType,
@@ -82,6 +99,8 @@ export function ServiceFormPage() {
           model: model || undefined,
           priority: Number(priority),
           enabled,
+          required_secrets: parsedRequiredSecrets.length > 0 ? parsedRequiredSecrets : undefined,
+          optional_secrets: parsedOptionalSecrets.length > 0 ? parsedOptionalSecrets : undefined,
           config,
         })
       }
@@ -94,6 +113,10 @@ export function ServiceFormPage() {
   }
 
   if (isLoading) return <div className="page"><div className="loading"><span className="spinner" />加载中...</div></div>
+
+  // Combine known and custom values for datalist
+  const capabilityOptions = Object.entries(KNOWN_CAPABILITIES)
+  const adapterOptions = Object.entries(KNOWN_ADAPTERS)
 
   return (
     <div className="page">
@@ -108,27 +131,66 @@ export function ServiceFormPage() {
       )}
 
       <form onSubmit={handleSubmit} className="service-form">
+        {/* Fix #1: service_id field - required for create, disabled for edit */}
+        <div className="form-field">
+          <label className="form-label" htmlFor="svc-id">服务 ID *</label>
+          <input
+            id="svc-id"
+            type="text"
+            className="input"
+            required
+            value={serviceIdInput}
+            onChange={e => setServiceIdInput(e.target.value)}
+            disabled={isEdit}
+            placeholder="my-service"
+            pattern="[a-z0-9][a-z0-9_-]*"
+            title="小写字母、数字、连字符、下划线"
+          />
+        </div>
+
         <div className="form-field">
           <label className="form-label" htmlFor="svc-name">显示名称 *</label>
           <input id="svc-name" type="text" className="input" required value={displayName} onChange={e => setDisplayName(e.target.value)} />
         </div>
 
+        {/* Fix #2: capability - extensible with datalist */}
         <div className="form-field">
           <label className="form-label" htmlFor="svc-capability">能力 *</label>
-          <select id="svc-capability" className="select" value={capability} onChange={e => setCapability(e.target.value)}>
-            {Object.entries(KNOWN_CAPABILITIES).map(([k, v]) => (
-              <option key={k} value={k}>{v} ({k})</option>
+          <input
+            id="svc-capability"
+            type="text"
+            className="input"
+            required
+            list="capability-list"
+            value={capability}
+            onChange={e => setCapability(e.target.value)}
+            placeholder="text_generation"
+          />
+          <datalist id="capability-list">
+            {capabilityOptions.map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
             ))}
-          </select>
+          </datalist>
         </div>
 
+        {/* Fix #2: adapter_type - extensible with datalist */}
         <div className="form-field">
           <label className="form-label" htmlFor="svc-adapter">适配器 *</label>
-          <select id="svc-adapter" className="select" value={adapterType} onChange={e => setAdapterType(e.target.value)}>
-            {Object.entries(KNOWN_ADAPTERS).map(([k, v]) => (
-              <option key={k} value={k}>{v} ({k})</option>
+          <input
+            id="svc-adapter"
+            type="text"
+            className="input"
+            required
+            list="adapter-list"
+            value={adapterType}
+            onChange={e => setAdapterType(e.target.value)}
+            placeholder="openai_compatible"
+          />
+          <datalist id="adapter-list">
+            {adapterOptions.map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
             ))}
-          </select>
+          </datalist>
         </div>
 
         <div className="form-field">
@@ -151,6 +213,31 @@ export function ServiceFormPage() {
             <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
             {' '}启用
           </label>
+        </div>
+
+        {/* Fix #1: required_secrets and optional_secrets */}
+        <div className="form-field">
+          <label className="form-label" htmlFor="svc-required-secrets">必填 Secret（逗号分隔）</label>
+          <input
+            id="svc-required-secrets"
+            type="text"
+            className="input"
+            value={requiredSecrets}
+            onChange={e => setRequiredSecrets(e.target.value)}
+            placeholder="API_KEY, SECRET_KEY"
+          />
+        </div>
+
+        <div className="form-field">
+          <label className="form-label" htmlFor="svc-optional-secrets">可选 Secret（逗号分隔）</label>
+          <input
+            id="svc-optional-secrets"
+            type="text"
+            className="input"
+            value={optionalSecrets}
+            onChange={e => setOptionalSecrets(e.target.value)}
+            placeholder="ORG_ID"
+          />
         </div>
 
         <div className="form-field">

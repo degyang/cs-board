@@ -437,6 +437,20 @@ export interface ServiceAvailability {
   suggestion: string | null
 }
 
+/** Structured config status */
+export interface ServiceConfigStatus {
+  configured: boolean
+  missing_fields: string[]
+  missing_secrets: string[]
+}
+
+/** Structured secret status */
+export interface ServiceSecretStatus {
+  configured: boolean
+  required: string[]
+  missing: string[]
+}
+
 export interface ServiceDefinition {
   schema_version: number
   revision: number
@@ -452,9 +466,9 @@ export interface ServiceDefinition {
   config: Record<string, unknown>
   required_secrets: string[]
   optional_secrets: string[]
-  config_status: string
+  config_status: ServiceConfigStatus
   availability: ServiceAvailability
-  secret_status: string
+  secret_status: ServiceSecretStatus
   created_at: string
   updated_at: string
 }
@@ -462,6 +476,11 @@ export interface ServiceDefinition {
 export interface ServiceListResponse {
   items: ServiceDefinition[]
   next_cursor: string | null
+  total: number
+}
+
+export interface ServiceSecretListResponse {
+  items: ServiceSecret[]
   total: number
 }
 

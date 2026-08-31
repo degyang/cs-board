@@ -4,7 +4,12 @@
    ========================================================================== */
 
 import { get, post, patch, del } from './http'
-import type { ServiceDefinition, ServiceListResponse, ServiceSecret } from './types'
+import type {
+  ServiceDefinition,
+  ServiceListResponse,
+  ServiceAvailability,
+  ServiceSecretListResponse,
+} from './types'
 
 // ---------------------------------------------------------------------------
 // Services CRUD
@@ -34,6 +39,7 @@ export function fetchService(serviceId: string): Promise<ServiceDefinition> {
 }
 
 export function createService(body: {
+  service_id: string
   display_name: string
   capability: string
   adapter_type: string
@@ -41,6 +47,8 @@ export function createService(body: {
   model?: string
   priority?: number
   enabled?: boolean
+  required_secrets?: string[]
+  optional_secrets?: string[]
   config?: Record<string, unknown>
 }): Promise<ServiceDefinition> {
   return post('/services', body)
@@ -56,6 +64,8 @@ export function updateService(
     model?: string
     priority?: number
     enabled?: boolean
+    required_secrets?: string[]
+    optional_secrets?: string[]
     config?: Record<string, unknown>
   },
 ): Promise<ServiceDefinition> {
@@ -78,7 +88,8 @@ export function deactivateService(serviceId: string): Promise<ServiceDefinition>
   return post(`/services/${encodeURIComponent(serviceId)}/deactivate`)
 }
 
-export function probeService(serviceId: string): Promise<ServiceDefinition> {
+/** Probe returns ServiceAvailability, not ServiceDefinition */
+export function probeService(serviceId: string): Promise<ServiceAvailability> {
   return post(`/services/${encodeURIComponent(serviceId)}/probe`)
 }
 
@@ -90,7 +101,8 @@ export function setDefaultService(serviceId: string): Promise<ServiceDefinition>
 // Service Secrets
 // ---------------------------------------------------------------------------
 
-export function fetchServiceSecrets(serviceId: string): Promise<ServiceSecret[]> {
+/** Returns {items: ServiceSecret[], total: number} */
+export function fetchServiceSecrets(serviceId: string): Promise<ServiceSecretListResponse> {
   return get(`/services/${encodeURIComponent(serviceId)}/secrets`)
 }
 

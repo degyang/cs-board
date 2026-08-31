@@ -3,11 +3,13 @@
 
    Tabs: 预置风格 | 自定义风格 | 音色库
    - Preset: read-only, copy only
-   - Custom: full CRUD
+   - Custom: full CRUD with preview upload
    - Voice: upload, edit, play, activate/deactivate, delete
+   - Filtering: kind/status/engine/q for styles, status/q for voices
+   - Cursor pagination with dedup
    ========================================================================== */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Tabs } from '../components/ui/Tabs'
 import { CopyButton } from '../components/ui/CopyButton'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -17,6 +19,7 @@ import {
   activateStyle, deactivateStyle, copyStyle,
   fetchVoices, createVoice, updateVoice, deleteVoice,
   activateVoice, deactivateVoice,
+  uploadAsset,
 } from '../lib/api/assets'
 import type { StyleTemplate, VoiceDefinition } from '../lib/api/types'
 
@@ -26,9 +29,24 @@ const TAB_ITEMS = [
   { key: 'voice', label: '音色库' },
 ]
 
+const STATUS_OPTIONS = [
+  { value: '', label: '全部状态' },
+  { value: 'active', label: '已启用' },
+  { value: 'inactive', label: '未启用' },
+]
+
+const ENGINE_OPTIONS = [
+  { value: '', label: '全部引擎' },
+  { value: 'sdxl', label: 'SDXL' },
+  { value: 'dalle3', label: 'DALL·E 3' },
+  { value: 'midjourney', label: 'Midjourney' },
+]
+
 export function AssetManagementPage() {
   const [activeTab, setActiveTab] = useState('preset')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [engineFilter, setEngineFilter] = useState('')
   const [items, setItems] = useState<(StyleTemplate | VoiceDefinition)[]>([])
   const [selected, setSelected] = useState<StyleTemplate | VoiceDefinition | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,27 +57,81 @@ export function AssetManagementPage() {
   const [editingItem, setEditingItem] = useState<StyleTemplate | VoiceDefinition | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<StyleTemplate | VoiceDefinition | null>(null)
 
-  const loadItems = useCallback(async () => {
-    setLoading(true)
+  // Cursor pagination state
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadedIdsRef = useRef<Set<string>>(new Set())
+
+  // Reset cursor and items when filters change
+  const resetAndLoad = useCallback(() => {
+    setItems([])
+    setNextCursor(null)
+    setHasMore(false)
+    loadedIdsRef.current = new Set()
+    setSelected(null)
+    setFeedback(null)
+  }, [])
+
+  // Load items with cursor pagination
+  const loadItems = useCallback(async (cursor?: string) => {
+    if (cursor) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+      resetAndLoad()
+    }
     setError(null)
     try {
       if (activeTab === 'voice') {
-        const res = await fetchVoices({ q: search || undefined, limit: 50 })
-        setItems(res.items)
+        const res = await fetchVoices({
+          q: search || undefined,
+          status: statusFilter as 'active' | 'inactive' | undefined || undefined,
+          cursor,
+          limit: 20,
+        })
+        // Dedup: only add items not already loaded
+        const newItems = res.items.filter(v => !loadedIdsRef.current.has(v.voice_id))
+        for (const v of newItems) loadedIdsRef.current.add(v.voice_id)
+        setItems(prev => cursor ? [...prev, ...newItems] : newItems)
+        setNextCursor(res.next_cursor)
+        setHasMore(res.next_cursor !== null)
       } else {
         const kind = activeTab as 'preset' | 'custom'
-        const res = await fetchStyles({ kind, q: search || undefined, limit: 50 })
-        setItems(res.items)
+        const res = await fetchStyles({
+          kind,
+          q: search || undefined,
+          status: statusFilter as 'active' | 'inactive' | undefined || undefined,
+          engine: engineFilter || undefined,
+          cursor,
+          limit: 20,
+        })
+        // Dedup: only add items not already loaded
+        const newItems = res.items.filter(s => !loadedIdsRef.current.has(s.style_id))
+        for (const s of newItems) loadedIdsRef.current.add(s.style_id)
+        setItems(prev => cursor ? [...prev, ...newItems] : newItems)
+        setNextCursor(res.next_cursor)
+        setHasMore(res.next_cursor !== null)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [activeTab, search])
+  }, [activeTab, search, statusFilter, engineFilter, resetAndLoad])
 
-  useEffect(() => { loadItems() }, [loadItems])
-  useEffect(() => { setSelected(null); setFeedback(null) }, [activeTab])
+  // Load on mount and filter change
+  useEffect(() => { loadItems() }, [activeTab, search, statusFilter, engineFilter])
+
+  // Reset selected item and filters when tab changes
+  useEffect(() => {
+    setSelected(null)
+    setFeedback(null)
+    setSearch('')
+    setStatusFilter('')
+    setEngineFilter('')
+  }, [activeTab])
 
   const isVoice = (item: StyleTemplate | VoiceDefinition): item is VoiceDefinition =>
     'voice_id' in item
@@ -135,7 +207,14 @@ export function AssetManagementPage() {
     await loadItems()
   }
 
+  const handleLoadMore = () => {
+    if (nextCursor && !loadingMore) {
+      loadItems(nextCursor)
+    }
+  }
+
   const isPreset = activeTab === 'preset'
+  const showFilters = activeTab === 'preset' || activeTab === 'custom'
 
   return (
     <div className="page-container">
@@ -158,6 +237,48 @@ export function AssetManagementPage() {
           className="am-search-input"
           aria-label="搜索"
         />
+
+        {/* Fix #11: Real filtering */}
+        {showFilters && (
+          <>
+            <select
+              className="am-filter-select"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              aria-label="状态筛选"
+            >
+              {STATUS_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            {activeTab === 'preset' && (
+              <select
+                className="am-filter-select"
+                value={engineFilter}
+                onChange={e => setEngineFilter(e.target.value)}
+                aria-label="引擎筛选"
+              >
+                {ENGINE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
+
+        {activeTab === 'voice' && (
+          <select
+            className="am-filter-select"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            aria-label="状态筛选"
+          >
+            {STATUS_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+
         {activeTab === 'custom' && (
           <button type="button" className="btn btn-primary btn-sm" onClick={handleCreate}>新建风格</button>
         )}
@@ -180,9 +301,21 @@ export function AssetManagementPage() {
                 onClick={() => setSelected(item)}
               >
                 <div className="am-list-item-name">{item.name}</div>
-                <div className="am-list-item-status">{item.status}</div>
+                <div className="am-list-item-status">{item.status === 'active' ? '已启用' : '未启用'}</div>
               </div>
             ))}
+
+            {/* Fix #11: Load more button for cursor pagination */}
+            {hasMore && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm am-load-more"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? '加载中...' : '加载更多'}
+              </button>
+            )}
           </div>
 
           <div className="am-detail">
@@ -191,7 +324,6 @@ export function AssetManagementPage() {
                 <VoiceDetail
                   voice={selected}
                   submitting={submitting}
-                  isPreset={false}
                   onActivate={handleActivate}
                   onDeactivate={handleDeactivate}
                   onEdit={() => handleEdit(selected)}
@@ -357,7 +489,6 @@ function VoiceDetail({
 }: {
   voice: VoiceDefinition
   submitting: string | null
-  isPreset: boolean
   onActivate: (id: string) => void
   onDeactivate: (id: string) => void
   onEdit: () => void
@@ -388,6 +519,11 @@ function VoiceDetail({
       <div className="am-detail-field">
         <span className="am-detail-label">格式:</span> {v.format ?? '—'}
       </div>
+      {v.duration_ms && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">时长:</span> {(v.duration_ms / 1000).toFixed(1)}s
+        </div>
+      )}
 
       <div className="am-detail-field">
         <audio controls src={audioUrl} preload="metadata" style={{ width: '100%', marginTop: 8 }}>
@@ -448,9 +584,27 @@ function StyleFormDialog({
   const [promptText, setPromptText] = useState(existing?.prompt_text ?? '')
   const [negativePrompt, setNegativePrompt] = useState(existing?.negative_prompt ?? '')
   const [tags, setTags] = useState(existing?.tags?.join(', ') ?? '')
+  const [previewFile, setPreviewFile] = useState<File | null>(null)
   const [previewAssetId, setPreviewAssetId] = useState(existing?.preview_asset_id ?? '')
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Fix #10: Upload preview file to /api/v1/assets/uploads first
+  const handlePreviewUpload = async () => {
+    if (!previewFile) return
+    setUploading(true)
+    setError(null)
+    try {
+      const res = await uploadAsset(previewFile)
+      setPreviewAssetId(res.asset_id)
+      setPreviewFile(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传预览失败')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -509,10 +663,33 @@ function StyleFormDialog({
             <label className="form-label" htmlFor="style-tags">标签（逗号分隔）</label>
             <input id="style-tags" type="text" className="input" value={tags} onChange={e => setTags(e.target.value)} />
           </div>
+
+          {/* Fix #10: Preview file upload */}
           <div className="form-field">
-            <label className="form-label" htmlFor="style-preview">预览素材 ID</label>
-            <input id="style-preview" type="text" className="input" value={previewAssetId} onChange={e => setPreviewAssetId(e.target.value)} placeholder="先上传素材，再填入 ID" />
+            <label className="form-label" htmlFor="style-preview">预览图片</label>
+            <div className="am-preview-upload">
+              <input
+                id="style-preview"
+                type="file"
+                accept="image/*"
+                onChange={e => setPreviewFile(e.target.files?.[0] ?? null)}
+              />
+              {previewFile && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={uploading}
+                  onClick={handlePreviewUpload}
+                >
+                  {uploading ? '上传中...' : '上传预览'}
+                </button>
+              )}
+              {previewAssetId && (
+                <span className="badge">已上传: {previewAssetId.slice(0, 8)}...</span>
+              )}
+            </div>
           </div>
+
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>取消</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>

@@ -1,13 +1,10 @@
 /**
- * check-api-contract — Assert JSON contract fixtures match TypeScript DTOs
+ * check-api-contract — Verify API contract against real backend or fixtures
  *
- * §3.9: 合同测试工具
- *   "Contract fixtures shared between component tests and HTTP tests.
- *    JSON files in `web-v2/tests/fixtures/contracts/`"
+ * §3A.4: "MOUNTAIN_API_BASE=http://127.0.0.1:8000/api/v1 node web-v2/scripts/check-api-contract.mjs"
  *
- * Reads each JSON fixture, extracts its top-level keys, and verifies
- * the corresponding TypeScript interface includes all of them.
- *
+ * When MOUNTAIN_API_BASE is set, requests real backend and verifies fields.
+ * When not set, falls back to local fixture comparison.
  * Exit 0 = all contracts aligned, 1 = violations found.
  */
 
@@ -20,7 +17,23 @@ const ROOT = path.resolve(__dirname, '..')
 const TYPES_FILE = path.join(ROOT, 'src/lib/api/types.ts')
 const FIXTURES_DIR = path.join(ROOT, 'tests/fixtures/contracts')
 
-const CONTRACT_MAP = [
+const BASE = process.env.MOUNTAIN_API_BASE || ''
+
+// Expected endpoints and their response types
+const ENDPOINTS = [
+  { path: '/services', type: 'ServiceListResponse', description: 'Service list' },
+  { path: '/services?limit=1', type: 'ServiceListResponse', description: 'Service list (filtered)' },
+  { path: '/assets/styles', type: 'StyleListResponse', description: 'Style list' },
+  { path: '/assets/styles?kind=preset', type: 'StyleListResponse', description: 'Style list (preset)' },
+  { path: '/assets/voices', type: 'VoiceListResponse', description: 'Voice list' },
+  { path: '/settings/voice-alignment', type: 'VoiceAlignmentSettings', description: 'Voice alignment' },
+  { path: '/settings/toolchain', type: 'ToolchainSettings', description: 'Toolchain' },
+  { path: '/settings/storage', type: 'StorageSettings', description: 'Storage' },
+  { path: '/settings/diagnostics', type: 'DiagnosticsSettings', description: 'Diagnostics' },
+]
+
+// Fixture fallback mapping
+const FIXTURE_MAP = [
   { fixture: 'service-definition.json', interface: 'ServiceDefinition' },
   { fixture: 'service-list.json', interface: 'ServiceListResponse' },
   { fixture: 'style-template.json', interface: 'StyleTemplate' },
@@ -32,7 +45,6 @@ const CONTRACT_MAP = [
 ]
 
 function extractInterfaceKeys(tsContent, ifaceName) {
-  // Match: export interface Foo { ... } or export type Foo = { ... }
   const patterns = [
     new RegExp(`export\\s+interface\\s+${ifaceName}\\s*\\{([^}]*)\\}`, 's'),
     new RegExp(`export\\s+type\\s+${ifaceName}\\s*=\\s*\\{([^}]*)\\}`, 's'),
@@ -46,7 +58,6 @@ function extractInterfaceKeys(tsContent, ifaceName) {
       for (const line of body.split('\n')) {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*')) continue
-        // Match: key?: Type  or  key: Type
         const km = trimmed.match(/^(\w+)\??\s*:/)
         if (km) keys.push(km[1])
       }
@@ -56,56 +67,109 @@ function extractInterfaceKeys(tsContent, ifaceName) {
   return null
 }
 
-function extractFixtureKeys(obj, prefix = '') {
-  const keys = []
-  for (const [k, v] of Object.entries(obj)) {
-    keys.push(prefix ? `${prefix}.${k}` : k)
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      keys.push(...extractFixtureKeys(v, `${prefix || k}`))
-    }
-  }
-  return keys
-}
-
 function extractFixtureTopLevelKeys(obj) {
   return Object.keys(obj)
 }
 
-let violations = 0
-const tsContent = fs.readFileSync(TYPES_FILE, 'utf-8')
+async function fetchJson(url) {
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
 
-for (const { fixture, interface: ifaceName } of CONTRACT_MAP) {
-  const fixturePath = path.join(FIXTURES_DIR, fixture)
+async function checkRealBackend(tsContent) {
+  console.log(`\n🔗 Connecting to real backend: ${BASE}\n`)
+  let violations = 0
 
-  if (!fs.existsSync(fixturePath)) {
-    console.log(`⚠ SKIP  ${fixture} — file not found`)
-    continue
+  for (const { path, type, description } of ENDPOINTS) {
+    const url = `${BASE}${path}`
+    try {
+      const data = await fetchJson(url)
+      const ifaceKeys = extractInterfaceKeys(tsContent, type)
+
+      if (!ifaceKeys) {
+        console.error(`✗ FAIL  ${description} → ${type} — interface not found`)
+        violations++
+        continue
+      }
+
+      const dataKeys = Object.keys(data)
+      const missing = dataKeys.filter(k => !ifaceKeys.includes(k))
+
+      if (missing.length > 0) {
+        console.error(`✗ FAIL  ${description} → ${type}`)
+        console.error(`        Backend returns keys not in DTO: ${missing.join(', ')}`)
+        violations++
+      } else {
+        console.log(`✓ OK    ${description} → ${type}`)
+      }
+    } catch (err) {
+      console.error(`✗ ERR   ${description} — ${err.message}`)
+      violations++
+    }
   }
 
-  const data = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'))
-  const fixtureKeys = extractFixtureTopLevelKeys(data)
-  const ifaceKeys = extractInterfaceKeys(tsContent, ifaceName)
+  return violations
+}
 
-  if (!ifaceKeys) {
-    console.error(`✗ FAIL  ${fixture} → ${ifaceName} — interface not found in types.ts`)
-    violations++
-    continue
+async function checkFixtures(tsContent) {
+  console.log(`\n📁 Checking local fixtures (MOUNTAIN_API_BASE not set)\n`)
+  let violations = 0
+
+  for (const { fixture, interface: ifaceName } of FIXTURE_MAP) {
+    const fixturePath = path.join(FIXTURES_DIR, fixture)
+
+    if (!fs.existsSync(fixturePath)) {
+      console.log(`⚠ SKIP  ${fixture} — file not found`)
+      continue
+    }
+
+    const data = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'))
+    const fixtureKeys = extractFixtureTopLevelKeys(data)
+    const ifaceKeys = extractInterfaceKeys(tsContent, ifaceName)
+
+    if (!ifaceKeys) {
+      console.error(`✗ FAIL  ${fixture} → ${ifaceName} — interface not found in types.ts`)
+      violations++
+      continue
+    }
+
+    const missing = fixtureKeys.filter(k => !ifaceKeys.includes(k))
+    if (missing.length > 0) {
+      console.error(`✗ FAIL  ${fixture} → ${ifaceName}`)
+      console.error(`        Missing in DTO: ${missing.join(', ')}`)
+      violations++
+    } else {
+      console.log(`✓ OK    ${fixture} → ${ifaceName}`)
+    }
   }
 
-  const missing = fixtureKeys.filter(k => !ifaceKeys.includes(k))
-  if (missing.length > 0) {
-    console.error(`✗ FAIL  ${fixture} → ${ifaceName}`)
-    console.error(`        Missing in DTO: ${missing.join(', ')}`)
-    violations++
+  return violations
+}
+
+async function main() {
+  const tsContent = fs.readFileSync(TYPES_FILE, 'utf-8')
+  let violations = 0
+
+  if (BASE) {
+    violations = await checkRealBackend(tsContent)
   } else {
-    console.log(`✓ OK    ${fixture} → ${ifaceName}`)
+    console.log('⚠ MOUNTAIN_API_BASE not set — falling back to fixture comparison')
+    violations = await checkFixtures(tsContent)
+  }
+
+  if (violations > 0) {
+    console.error(`\n${violations} contract violation(s) found`)
+    process.exit(1)
+  } else {
+    console.log('\nAll contracts aligned ✓')
+    process.exit(0)
   }
 }
 
-if (violations > 0) {
-  console.error(`\n${violations} contract violation(s) found`)
+main().catch(err => {
+  console.error('Fatal error:', err)
   process.exit(1)
-} else {
-  console.log('\nAll contracts aligned ✓')
-  process.exit(0)
-}
+})

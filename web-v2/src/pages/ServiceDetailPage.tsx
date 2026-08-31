@@ -3,24 +3,50 @@
    Shows service info, availability, secrets, and actions.
    ========================================================================== */
 
-import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { BackButton } from '../components/ui/BackButton'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { MountainApiError } from '../lib/api/http'
-import { fetchService, activateService, deactivateService, probeService, setDefaultService, deleteService, fetchServiceSecrets, setServiceSecret, deleteServiceSecret } from '../lib/api/services'
+import {
+  fetchService,
+  activateService,
+  deactivateService,
+  probeService,
+  setDefaultService,
+  deleteService,
+  fetchServiceSecrets,
+  setServiceSecret,
+  deleteServiceSecret,
+} from '../lib/api/services'
 import { KNOWN_CAPABILITIES, KNOWN_ADAPTERS } from '../lib/api/types'
-import type { ServiceDefinition, ServiceSecret } from '../lib/api/types'
+import type { ServiceDefinition, ServiceSecret, ServiceAvailability } from '../lib/api/types'
+
+/** Whitelist fields for error display (§3.8) */
+function formatErrorDetails(err: MountainApiError): string {
+  const parts: string[] = [err.message]
+  if (err.details && typeof err.details === 'object') {
+    const d = err.details as Record<string, unknown>
+    if (d.request_id) parts.push(`请求 ID: ${d.request_id}`)
+    if (d.suggestion) parts.push(`建议: ${d.suggestion}`)
+    if (d.revision != null) parts.push(`修订: ${d.revision}`)
+    if (d.missing_fields) parts.push(`缺少字段: ${(d.missing_fields as string[]).join(', ')}`)
+    if (d.missing_secrets) parts.push(`缺少 Secret: ${(d.missing_secrets as string[]).join(', ')}`)
+  }
+  return parts.join(' | ')
+}
 
 export function ServiceDetailPage() {
   const { serviceId } = useParams<{ serviceId: string }>()
+  const navigate = useNavigate()
   const [svc, setSvc] = useState<ServiceDefinition | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<MountainApiError | null>(null)
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [probeResult, setProbeResult] = useState<ServiceAvailability | null>(null)
 
   // Secrets state
   const [secrets, setSecrets] = useState<ServiceSecret[]>([])
@@ -29,26 +55,36 @@ export function ServiceDetailPage() {
   const [secretAction, setSecretAction] = useState<string | null>(null)
   const [secretError, setSecretError] = useState<string | null>(null)
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!serviceId) return
     setIsLoading(true)
     setError(null)
     fetchService(serviceId)
       .then(setSvc)
-      .catch(err => { if (err instanceof MountainApiError) setError(err) })
+      .catch(err => {
+        if (err instanceof MountainApiError) setError(err)
+      })
       .finally(() => setIsLoading(false))
-  }
+  }, [serviceId])
 
-  const loadSecrets = () => {
+  const loadSecrets = useCallback(() => {
     if (!serviceId) return
     setSecretsLoading(true)
+    setSecretError(null)
     fetchServiceSecrets(serviceId)
-      .then(setSecrets)
-      .catch(() => {})
+      .then(res => {
+        setSecrets(res.items)
+      })
+      .catch(err => {
+        setSecretError(err instanceof MountainApiError ? formatErrorDetails(err) : '加载 Secret 失败')
+      })
       .finally(() => setSecretsLoading(false))
-  }
+  }, [serviceId])
 
-  useEffect(() => { load(); loadSecrets() }, [serviceId])
+  useEffect(() => {
+    load()
+    loadSecrets()
+  }, [load, loadSecrets])
 
   const doAction = async (label: string, fn: () => Promise<unknown>) => {
     setActing(true)
@@ -64,6 +100,22 @@ export function ServiceDetailPage() {
     }
   }
 
+  const handleProbe = async () => {
+    if (!serviceId) return
+    setActing(true)
+    setActionMsg(null)
+    try {
+      const result = await probeService(serviceId)
+      setProbeResult(result)
+      setActionMsg('探测完成')
+      load()
+    } catch (err) {
+      setActionMsg(err instanceof MountainApiError ? `探测失败: ${err.message}` : '探测失败')
+    } finally {
+      setActing(false)
+    }
+  }
+
   const handleSaveSecret = async (key: string) => {
     if (!serviceId) return
     const value = secretValues[key]
@@ -72,11 +124,12 @@ export function ServiceDetailPage() {
     setSecretError(null)
     try {
       await setServiceSecret(serviceId, { key, value })
+      // Clear plaintext immediately after save (§3.6)
       setSecretValues(prev => ({ ...prev, [key]: '' }))
       loadSecrets()
       load()
     } catch (err) {
-      setSecretError(err instanceof MountainApiError ? `保存 ${key} 失败: ${err.message}` : `保存 ${key} 失败`)
+      setSecretError(err instanceof MountainApiError ? formatErrorDetails(err) : `保存 ${key} 失败`)
     } finally {
       setSecretAction(null)
     }
@@ -91,18 +144,27 @@ export function ServiceDetailPage() {
       loadSecrets()
       load()
     } catch (err) {
-      setSecretError(err instanceof MountainApiError ? `删除 ${key} 失败: ${err.message}` : `删除 ${key} 失败`)
+      setSecretError(err instanceof MountainApiError ? formatErrorDetails(err) : `删除 ${key} 失败`)
     } finally {
       setSecretAction(null)
     }
   }
 
+  // Fix #6: Delete flow - stay on page on failure, navigate only on success
   const handleDelete = async () => {
     if (!serviceId) return
-    await doAction('删除', () => deleteService(serviceId))
-    setShowDeleteDialog(false)
-    if (!actionMsg?.includes('失败')) {
-      window.history.back()
+    setActing(true)
+    setActionMsg(null)
+    try {
+      await deleteService(serviceId)
+      // Success - navigate to list
+      navigate('/settings/models', { replace: true })
+    } catch (err) {
+      // Failure - stay on page, show error
+      setActionMsg(err instanceof MountainApiError ? `删除失败: ${err.message}` : '删除失败')
+      setShowDeleteDialog(false)
+    } finally {
+      setActing(false)
     }
   }
 
@@ -121,6 +183,9 @@ export function ServiceDetailPage() {
     )
   }
   if (!svc) return <div className="page"><BackButton to="/settings/models" label="返回模型服务" /><div className="empty-state"><div className="empty-title">未找到服务</div></div></div>
+
+  const configOk = svc.config_status.configured
+  const secretOk = svc.secret_status.configured
 
   return (
     <div className="page">
@@ -161,7 +226,7 @@ export function ServiceDetailPage() {
           type="button"
           className="btn btn-ghost btn-sm"
           disabled={acting}
-          onClick={() => doAction('探测', () => probeService(svc.service_id))}
+          onClick={handleProbe}
         >
           探测
         </button>
@@ -178,6 +243,10 @@ export function ServiceDetailPage() {
       {/* Basic info */}
       <div className="card">
         <div className="card-title">基本信息</div>
+        <div className="settings-row">
+          <span className="k">服务 ID</span>
+          <span className="v mono">{svc.service_id}</span>
+        </div>
         <div className="settings-row">
           <span className="k">显示名称</span>
           <span className="v">{svc.display_name}</span>
@@ -209,6 +278,10 @@ export function ServiceDetailPage() {
         <div className="settings-row">
           <span className="k">默认</span>
           <span className="v">{svc.is_default ? '是' : '否'}</span>
+        </div>
+        <div className="settings-row">
+          <span className="k">修订</span>
+          <span className="v">{svc.revision}</span>
         </div>
       </div>
 
@@ -251,17 +324,82 @@ export function ServiceDetailPage() {
         )}
       </div>
 
+      {/* Probe result */}
+      {probeResult && (
+        <div className="card">
+          <div className="card-title">探测结果</div>
+          <div className="settings-row">
+            <span className="k">可用</span>
+            <span className="v"><StatusBadge status={probeResult.available ? 'succeeded' : 'failed'} /></span>
+          </div>
+          {probeResult.checked_at && (
+            <div className="settings-row">
+              <span className="k">检查时间</span>
+              <span className="v">{new Date(probeResult.checked_at).toLocaleString('zh-CN')}</span>
+            </div>
+          )}
+          {probeResult.latency_ms != null && (
+            <div className="settings-row">
+              <span className="k">延迟</span>
+              <span className="v mono">{probeResult.latency_ms}ms</span>
+            </div>
+          )}
+          {probeResult.component && (
+            <div className="settings-row">
+              <span className="k">组件</span>
+              <span className="v mono">{probeResult.component}</span>
+            </div>
+          )}
+          {probeResult.error_code && (
+            <div className="settings-row">
+              <span className="k">错误码</span>
+              <span className="v" style={{ color: 'var(--nt-danger)' }}>{probeResult.error_code}</span>
+            </div>
+          )}
+          {probeResult.suggestion && (
+            <div className="settings-row">
+              <span className="k">建议</span>
+              <span className="v">{probeResult.suggestion}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Config status */}
       <div className="card">
         <div className="card-title">配置状态</div>
         <div className="settings-row">
           <span className="k">配置</span>
-          <span className="v"><StatusBadge status={svc.config_status === 'ok' || svc.config_status === 'configured' ? 'succeeded' : 'failed'} label={svc.config_status} /></span>
+          <span className="v"><StatusBadge status={configOk ? 'succeeded' : 'failed'} label={configOk ? '已配置' : '未配置'} /></span>
         </div>
+        {!configOk && svc.config_status.missing_fields.length > 0 && (
+          <div className="settings-row">
+            <span className="k">缺少字段</span>
+            <span className="v">
+              {svc.config_status.missing_fields.map(f => <span key={f} className="badge tag-warn" style={{ marginRight: 4 }}>{f}</span>)}
+            </span>
+          </div>
+        )}
+        {!configOk && svc.config_status.missing_secrets.length > 0 && (
+          <div className="settings-row">
+            <span className="k">缺少 Secret</span>
+            <span className="v">
+              {svc.config_status.missing_secrets.map(s => <span key={s} className="badge tag-warn" style={{ marginRight: 4 }}>{s}</span>)}
+            </span>
+          </div>
+        )}
         <div className="settings-row">
           <span className="k">Secret</span>
-          <span className="v"><StatusBadge status={svc.secret_status === 'ok' || svc.secret_status === 'configured' ? 'succeeded' : svc.secret_status === 'required' ? 'pending' : 'failed'} label={svc.secret_status} /></span>
+          <span className="v"><StatusBadge status={secretOk ? 'succeeded' : svc.secret_status.required.length > 0 ? 'pending' : 'failed'} label={secretOk ? '已配置' : '未配置'} /></span>
         </div>
+        {!secretOk && svc.secret_status.missing.length > 0 && (
+          <div className="settings-row">
+            <span className="k">缺少 Secret</span>
+            <span className="v">
+              {svc.secret_status.missing.map(s => <span key={s} className="badge tag-warn" style={{ marginRight: 4 }}>{s}</span>)}
+            </span>
+          </div>
+        )}
         {svc.required_secrets.length > 0 && (
           <div className="settings-row">
             <span className="k">必填 Secret</span>

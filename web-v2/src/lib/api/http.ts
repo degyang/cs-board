@@ -131,12 +131,22 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers['Content-Type'] = 'application/json'
   }
 
-  // Merge user headers (but never override FormData Content-Type)
+  // Merge user headers
   if (init?.headers) {
     const userHeaders = init.headers instanceof Headers
       ? Object.fromEntries(init.headers.entries())
       : typeof init.headers === 'object' ? init.headers as Record<string, string> : {}
     Object.assign(headers, userHeaders)
+  }
+
+  // Fix #9: For FormData, remove ALL case variants of Content-Type
+  if (isFormData) {
+    const contentTypeKeys = Object.keys(headers).filter(
+      k => k.toLowerCase() === 'content-type'
+    )
+    for (const key of contentTypeKeys) {
+      delete headers[key]
+    }
   }
 
   let res: Response

@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "retryable": false,
+    "details": {
+      "capability": "text_generation",
+      "service_id": "test-service",
+      "missing_fields": ["endpoint"],
+      "suggestion": "Please provide an endpoint URL"
+    }
+  }
+}

@@ -15,6 +15,24 @@ import type {
 
 export { getVoiceContentUrl }
 
+/** Response from POST /api/v1/assets/uploads */
+export interface UploadResponse {
+  asset_id: string
+  filename: string
+  content_type: string
+  size_bytes: number
+}
+
+/**
+ * Upload a file to /api/v1/assets/uploads.
+ * Returns asset_id for use in style preview_asset_id.
+ */
+export function uploadAsset(file: File): Promise<UploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  return postForm('/assets/uploads', form)
+}
+
 // ---------------------------------------------------------------------------
 // Styles (preset + custom, unified endpoint)
 // ---------------------------------------------------------------------------
