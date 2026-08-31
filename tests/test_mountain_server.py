@@ -160,3 +160,19 @@ def test_no_legacy_import():
     for line in import_lines:
         assert "LegacyJobBridge" not in line, f"Forbidden import: {line}"
         assert "webapp.server" not in line, f"Forbidden import: {line}"
+
+
+def test_default_encrypted_startup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """默认加密模式启动：未设置 CSBOARD_ALLOW_PLAINTEXT_SECRETS 时 health 返回 encrypted=true。"""
+    # 确保环境变量不存在
+    monkeypatch.delenv("CSBOARD_ALLOW_PLAINTEXT_SECRETS", raising=False)
+
+    # 创建 app（使用临时目录）
+    app = create_app(tmp_path)
+    client = TestClient(app)
+
+    # 验证 health 端点返回 encrypted=true
+    resp = client.get("/api/v1/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["checks"]["secret_store"]["encrypted"] is True
