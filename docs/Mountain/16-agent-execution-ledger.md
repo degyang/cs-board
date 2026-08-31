@@ -721,6 +721,67 @@ fix(mountain-web): reject invalid nested contract containers
 
 本轮无需新增长篇报告。在 `docs/Mountain/m07-ccf-contract-checker-02-report.md` 记录 implementation commit、四个回归测试、五条门禁摘要和 clean status，再形成独立文档提交。执行者只报告门禁结果，最终通过由审核者判定。
 
+## 3G. CCF 未交付纠偏：完成复杂嵌套容器守卫
+
+### 3G.1 指令状态
+
+```text
+instruction: CCF-CONTRACT-CHECKER-03
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed HEAD: cf8ff79 docs(mountain): report CCF contract checker slice
+result: rejected; no implementation or report commit for §3F exists
+```
+
+审核者已确认工作树干净且仍停在 §3F 的起点 `cf8ff79`。旧门禁当前为 build 通过、checker tests `44/44`、全量前端 tests `251/251`、fixture checker 通过；这些结果不包含 §3F 要求的四个新行为，因此不得视为交付。
+
+### 3G.2 唯一任务
+
+完整执行 §3F.2 的复杂嵌套容器守卫修复，不得修改页面、DTO、HTTP client、fixtures 或其他业务功能。生产 `verifyResponse()` 必须实现：
+
+- 非 nullable 的嵌套对象字段收到 string/number/boolean/array/null 时产生 violation；
+- 嵌套对象数组字段收到 plain object 或其他非数组值时产生 violation；
+- 对象数组中的非 plain-object 元素产生 violation；
+- 合法嵌套对象和对象数组继续通过。
+
+测试必须直接调用生产导出的 checker 核心，不复制实现，并明确包含以下四例：
+
+1. `ServiceDefinition.config_status = "wrong-string"` 失败；
+2. `ServiceListResponse.items = {}` 失败；
+3. `ServiceListResponse.items = ["wrong-string"]` 失败；
+4. 对应合法 fixture 通过。
+
+### 3G.3 固定门禁与提交
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+git diff --check
+git status --short
+```
+
+先形成实现提交：
+
+```text
+fix(mountain-web): reject invalid nested contract containers
+```
+
+再将实际 implementation commit、四例名称、五条门禁原始摘要和未完成项写入：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-contract-checker-03-report.md
+```
+
+形成独立报告提交：
+
+```text
+docs(mountain): report nested contract guard status
+```
+
+先本地提交，不推送。最终回复必须给出两个 commit hash；没有 commit hash 等同未交付。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
