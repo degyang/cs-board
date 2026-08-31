@@ -237,7 +237,7 @@ class MountainCommands:
         self,
         task_id: str,
         script: str,
-        reference_audio_path: str | None = None,
+        txn_dir: Path | None = None,
         reference_audio_filename: str | None = None,
         style: str = "极简粗线简笔白板风",
         include_subtitles: bool = True,
@@ -251,7 +251,7 @@ class MountainCommands:
     ) -> dict[str, Any]:
         """保存任务输入：通过 Application command 和 Repository 接口。
 
-        接收 staging 文件路径（由 Router 创建），在验证完成后原子提交。
+        接收事务目录（由 Repository 创建），在验证完成后原子提交。
         """
         # 验证任务存在
         self.repository.get_task(task_id)
@@ -260,13 +260,13 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
         # 验证音频文件（如果有）
-        if reference_audio_path:
-            staging_path = Path(reference_audio_path)
-            if not staging_path.exists():
+        if txn_dir and reference_audio_filename:
+            suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
+            staging_ref = txn_dir / f"reference{suffix}"
+            if not staging_ref.exists():
                 raise DomainError("VALIDATION_ERROR", "staging 文件不存在")
-            if staging_path.stat().st_size == 0:
+            if staging_ref.stat().st_size == 0:
                 raise DomainError("VALIDATION_ERROR", "参考音频文件为空")
-            suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
             if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
                 raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
 
@@ -286,8 +286,8 @@ class MountainCommands:
         existing = self.repository.get_request(task_id) or {}
 
         reference_audio_relative = None
-        if reference_audio_path:
-            suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
+        if txn_dir and reference_audio_filename:
+            suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
             reference_audio_relative = f"inputs/reference{suffix}"
         else:
             # 保留旧 reference
@@ -310,14 +310,15 @@ class MountainCommands:
         try:
             self.repository.commit_inputs(
                 task_id=task_id,
+                txn_dir=txn_dir,
                 request_data=request_data,
                 preparation=preparation,
                 visual_anchor_enabled=visual_anchor_enabled,
-                staging_path=Path(reference_audio_path) if reference_audio_path else None,
                 reference_filename=reference_audio_filename,
             )
         except Exception as exc:
-            raise DomainError("INTERNAL_ERROR", f"输入提交失败: {exc}")
+            # 不暴露绝对路径或异常原文
+            raise DomainError("INTERNAL_ERROR", "输入提交失败")
 
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         task = self.repository.get_task(task_id)

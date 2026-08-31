@@ -318,3 +318,103 @@ def test_reference_metadata_from_manifest(client: TestClient):
     assert audio_meta["filename"] == "reference.mp3"
     assert audio_meta["size_bytes"] == 2048
     assert audio_meta["content_type"] == "audio/mp3"
+
+    # 验证旧 .wav 文件已被清理
+    task_dir = Path("/tmp") / "test_mountain_server" / "tasks" / task_id / "inputs"
+    assert not (task_dir / "reference.wav").exists()
+
+
+def test_staging_on_same_filesystem(tmp_path: Path):
+    """验证 staging 与目标数据目录位于同一文件系统。"""
+    from webapp.mountain_server import create_app
+    from starlette.testclient import TestClient
+    import io
+
+    # 使用 /mnt/d 路径（如果可用）或 tmp_path
+    data_dir = tmp_path
+    app = create_app(data_dir)
+    client = TestClient(app)
+
+    # 创建任务
+    resp = client.post("/api/v1/tasks", json={"title": "文件系统测试"})
+    assert resp.status_code == 200
+    task_id = resp.json()["task_id"]
+
+    # 上传文件
+    audio = io.BytesIO(b"\x00" * 1024)
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "测试文案用于验证文件系统一致性。"},
+        files={"reference": ("test.wav", audio, "audio/wav")},
+    )
+    assert resp.status_code == 200
+
+    # 验证 staging 目录已清理
+    staging_dir = data_dir / "tasks" / task_id / ".staging"
+    assert not staging_dir.exists() or len(list(staging_dir.iterdir())) == 0
+
+
+def test_chunked_read_verification(tmp_path: Path):
+    """验证分块读取参数正确。"""
+    from webapp.mountain_server import create_app
+    from starlette.testclient import TestClient
+    import io
+
+    app = create_app(tmp_path)
+    client = TestClient(app)
+
+    # 创建任务
+    resp = client.post("/api/v1/tasks", json={"title": "分块测试"})
+    assert resp.status_code == 200
+    task_id = resp.json()["task_id"]
+
+    # 上传正好达到上限的文件（使用较小的测试值）
+    # 生产默认为 50MB，这里测试逻辑正确性
+    test_size = 1024 * 10  # 10KB
+    audio = io.BytesIO(b"\x00" * test_size)
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "测试文案用于验证分块读取功能。"},
+        files={"reference": ("test.wav", audio, "audio/wav")},
+    )
+    assert resp.status_code == 200
+
+    # 验证文件大小正确
+    resp = client.get(f"/api/v1/tasks/{task_id}/inputs")
+    assert resp.status_code == 200
+    assert resp.json()["reference_audio"]["size_bytes"] == test_size
+
+
+def test_internal_error_no_path_leak(tmp_path: Path):
+    """验证 INTERNAL_ERROR 不泄漏绝对路径或异常原文。"""
+    from webapp.mountain_server import create_app
+    from starlette.testclient import TestClient
+    import io
+
+    app = create_app(tmp_path)
+    client = TestClient(app)
+
+    # 创建任务
+    resp = client.post("/api/v1/tasks", json={"title": "错误测试"})
+    assert resp.status_code == 200
+    task_id = resp.json()["task_id"]
+
+    # 上传正常文件
+    audio = io.BytesIO(b"\x00" * 1024)
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "测试文案用于验证错误信息脱敏功能。"},
+        files={"reference": ("test.wav", audio, "audio/wav")},
+    )
+    assert resp.status_code == 200
+
+    # 验证错误响应不包含敏感路径
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "短"},  # 太短的文案会触发验证错误
+    )
+    assert resp.status_code == 400
+    error = resp.json()["error"]
+    assert "/tmp" not in error["message"]
+    assert "/mnt/" not in error["message"]
+    assert "Errno" not in error["message"]

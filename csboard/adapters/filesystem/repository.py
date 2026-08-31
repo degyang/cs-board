@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import uuid
 from pathlib import Path
 
 from csboard.application.context import utc_now
@@ -95,104 +96,160 @@ class FilesystemTaskRepository:
         return Path(f"inputs/{filename}")
 
     def get_input_audio(self, task_id: str) -> dict | None:
-        """获取参考音频元信息"""
-        input_dir = self.task_dir(task_id) / "inputs"
-        for suffix in (".wav", ".mp3", ".m4a", ".ogg", ".flac"):
-            candidate = input_dir / f"reference{suffix}"
-            if candidate.is_file():
-                return {
-                    "uploaded": True,
-                    "filename": f"reference{suffix}",
-                    "content_type": f"audio/{suffix.lstrip('.')}",
-                    "size_bytes": candidate.stat().st_size,
-                }
-        return None
+        """获取参考音频元信息（从 manifest 读取）"""
+        request = self.get_request(task_id)
+        if not request or not request.get("reference_audio"):
+            return None
+        ref_path = self.task_dir(task_id) / request["reference_audio"]
+        if not ref_path.exists():
+            return None
+        return {
+            "uploaded": True,
+            "filename": ref_path.name,
+            "content_type": f"audio/{ref_path.suffix.lstrip('.')}",
+            "size_bytes": ref_path.stat().st_size,
+        }
+
+    def create_staging(self, task_id: str) -> Path:
+        """在任务目录内创建唯一 staging 目录，确保同一文件系统。"""
+        task_dir = self.task_dir(task_id)
+        staging_dir = task_dir / ".staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        txn_id = uuid.uuid4().hex[:12]
+        txn_dir = staging_dir / txn_id
+        txn_dir.mkdir()
+        return txn_dir
 
     def commit_inputs(
         self,
         task_id: str,
+        txn_dir: Path | None,
         request_data: dict,
         preparation: dict,
         visual_anchor_enabled: bool,
-        staging_path: Path | None = None,
         reference_filename: str | None = None,
     ) -> None:
         """原子提交：request + task preparation + reference。
 
-        使用备份和锁保证任一失败时恢复原状态。
+        使用唯一事务目录，保证任一失败时恢复原状态。
         """
         with self.task_lock(task_id):
             task_dir = self.task_dir(task_id)
             input_dir = task_dir / "inputs"
             input_dir.mkdir(parents=True, exist_ok=True)
 
-            # 备份旧文件
-            request_bak = task_dir / "request.json.bak"
-            task_bak = task_dir / "task.json.bak"
-            old_ref_backup = None
-
-            # 读取旧状态
+            # 读取旧状态快照
             request_path = task_dir / "request.json"
             task_path = task_dir / "task.json"
 
-            old_request = None
-            if request_path.exists():
-                old_request = self._read_json(request_path)
-                # 备份旧 request
-                request_path.rename(request_bak)
+            old_request = self._read_json(request_path) if request_path.exists() else None
+            old_task = self._read_json(task_path) if task_path.exists() else None
 
-            old_task = None
-            if task_path.exists():
-                old_task = self._read_json(task_path)
-                # 备份旧 task
-                task_path.rename(task_bak)
-
-            # 备份旧 reference（如果有新 reference 且旧 reference 存在）
-            old_reference_path = None
+            # 确定旧 reference 路径
+            old_ref_path = None
             if old_request and old_request.get("reference_audio"):
                 old_ref_path = task_dir / old_request["reference_audio"]
-                if old_ref_path.exists() and staging_path:
-                    old_ref_backup = task_dir / f"{old_ref_path.name}.bak"
-                    old_ref_path.rename(old_ref_backup)
-                    old_reference_path = old_ref_path
+
+            # 确定新 reference 路径
+            new_ref_path = None
+            staging_ref = None
+            if txn_dir and reference_filename:
+                suffix = Path(reference_filename).suffix.lower() or ".wav"
+                new_ref_path = input_dir / f"reference{suffix}"
+                staging_ref = txn_dir / f"reference{suffix}"
+
+            # 新 request 和 task 临时文件（在事务目录中准备，或直接写入）
+            if txn_dir:
+                staging_request = txn_dir / "request.json"
+                staging_task = txn_dir / "task.json"
+            else:
+                staging_request = None
+                staging_task = None
 
             try:
-                # 写入新 reference（如果有）
-                if staging_path and staging_path.exists():
-                    suffix = Path(reference_filename or "reference.wav").suffix.lower() or ".wav"
-                    target = input_dir / f"reference{suffix}"
-                    staging_path.rename(target)
+                # 1. 准备所有新文件
+                if staging_request:
+                    self._write_json(staging_request, request_data)
+                else:
+                    # 无事务目录时直接写入（仅 request 和 task 更新）
+                    pass
 
-                # 写入新 request
-                self._write_json(request_path, request_data)
-
-                # 更新 task preparation
                 if old_task:
                     task_data = old_task.copy()
                 else:
-                    task_data = self._read_json(task_path) if task_path.exists() else {}
+                    task_data = {}
                 task_data["script_preparation"] = preparation
                 task_data["visual_anchor_enabled"] = visual_anchor_enabled
-                self._write_json(task_path, task_data)
+                if staging_task:
+                    self._write_json(staging_task, task_data)
 
-                # 成功：清理备份文件
-                request_bak.unlink(missing_ok=True)
-                task_bak.unlink(missing_ok=True)
-                if old_ref_backup:
-                    old_ref_backup.unlink(missing_ok=True)
+                # 2. 原子提交：在 task lock 内执行所有 rename
+                txn_id = txn_dir.name if txn_dir else uuid.uuid4().hex[:12]
+                request_bak = task_dir / f"request.json.{txn_id}.bak"
+                task_bak = task_dir / f"task.json.{txn_id}.bak"
+                old_ref_bak = None
+
+                # 备份旧文件
+                if old_request and request_path.exists():
+                    request_path.rename(request_bak)
+                if old_task and task_path.exists():
+                    task_path.rename(task_bak)
+                if old_ref_path and old_ref_path.exists() and new_ref_path:
+                    old_ref_bak = old_ref_path.parent / f"{old_ref_path.name}.{txn_id}.bak"
+                    old_ref_path.rename(old_ref_bak)
+
+                try:
+                    # 移动新文件到目标位置
+                    if staging_request and staging_request.exists():
+                        staging_request.rename(request_path)
+                    else:
+                        self._write_json(request_path, request_data)
+                    if staging_task and staging_task.exists():
+                        staging_task.rename(task_path)
+                    else:
+                        self._write_json(task_path, task_data)
+                    if staging_ref and staging_ref.exists() and new_ref_path:
+                        staging_ref.rename(new_ref_path)
+
+                    # 成功：清理备份
+                    request_bak.unlink(missing_ok=True)
+                    task_bak.unlink(missing_ok=True)
+                    if old_ref_bak:
+                        old_ref_bak.unlink(missing_ok=True)
+
+                except Exception:
+                    # 提交失败：恢复备份
+                    if request_bak.exists() and not request_path.exists():
+                        request_bak.rename(request_path)
+                    elif request_bak.exists():
+                        request_bak.unlink()
+                    if task_bak.exists() and not task_path.exists():
+                        task_bak.rename(task_path)
+                    elif task_bak.exists():
+                        task_bak.unlink()
+                    if old_ref_bak and old_ref_bak.exists() and not (old_ref_path and old_ref_path.exists()):
+                        old_ref_bak.rename(old_ref_path)
+                    elif old_ref_bak and old_ref_bak.exists():
+                        old_ref_bak.unlink()
+                    raise
 
             except Exception:
-                # 失败：恢复旧状态
-                if request_bak.exists():
-                    request_bak.rename(request_path)
-                if task_bak.exists():
-                    task_bak.rename(task_path)
-                if old_ref_backup and old_ref_backup.exists() and old_reference_path:
-                    old_ref_backup.rename(old_reference_path)
-                # 清理 staging
-                if staging_path and staging_path.exists():
-                    staging_path.unlink(missing_ok=True)
+                # 清理事务目录
+                if txn_dir:
+                    self._cleanup_txn(txn_dir)
                 raise
+
+            # 成功：清理事务目录
+            if txn_dir:
+                self._cleanup_txn(txn_dir)
+
+    def _cleanup_txn(self, txn_dir: Path) -> None:
+        """清理事务目录及其内容。"""
+        if not txn_dir.exists():
+            return
+        for f in txn_dir.iterdir():
+            f.unlink(missing_ok=True)
+        txn_dir.rmdir()
 
     def read_json(self, path: Path) -> dict:
         return self._read_json(path)

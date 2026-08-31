@@ -116,14 +116,12 @@ def mountain_task_router(
         visual_anchor_enabled: bool = Form(True),
     ):
         """上传任务输入（文案和参考音频）— 委托 Application 层。"""
-        import tempfile
-
-        staging_path = None
-        reference_audio_path = None
+        txn_dir = None
+        staging_ref = None
         reference_audio_filename = None
 
         try:
-            # 分块写入 staging 文件
+            # 分块写入 staging 文件（在任务目录内，同一文件系统）
             if reference is not None:
                 reference_audio_filename = reference.filename
                 suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
@@ -133,33 +131,27 @@ def mountain_task_router(
                         status_code=400,
                     )
 
-                # 创建临时 staging 文件
-                staging_fd, staging_str = tempfile.mkstemp(suffix=suffix, prefix="upload-")
-                staging_path = Path(staging_str)
-                os.close(staging_fd)
+                # 在任务目录内创建 staging（同一文件系统）
+                txn_dir = repository.create_staging(task_id)
+                staging_ref = txn_dir / f"reference{suffix}"
 
                 # 分块写入，检查大小上限
                 total_bytes = 0
-                with staging_path.open("wb") as f:
+                with staging_ref.open("wb") as f:
                     while chunk := await reference.read(CHUNK_SIZE):
                         total_bytes += len(chunk)
                         if total_bytes > MAX_UPLOAD_BYTES:
-                            # 超限：清理 staging 并返回错误
-                            staging_path.unlink(missing_ok=True)
-                            staging_path = None
                             return domain_error_response(
                                 DomainError("VALIDATION_ERROR", f"参考音频超过大小上限 ({MAX_UPLOAD_BYTES // (1024*1024)}MB)"),
                                 status_code=400,
                             )
                         f.write(chunk)
 
-                reference_audio_path = str(staging_path)
-
             # 委托 Application 处理
             result = commands.save_inputs(
                 task_id,
                 script=script,
-                reference_audio_path=reference_audio_path,
+                txn_dir=txn_dir,
                 reference_audio_filename=reference_audio_filename,
                 style=style,
                 include_subtitles=include_subtitles,
@@ -172,18 +164,20 @@ def mountain_task_router(
                 context=_context(),
             )
 
-            # 成功后清理 staging（已由 Repository 持久化）
-            if staging_path and staging_path.exists():
-                staging_path.unlink(missing_ok=True)
-                staging_path = None
-
             return result
         except DomainError as error:
             return domain_error_response(error, status_code=400)
+        except Exception as error:
+            # 内部错误不暴露绝对路径或异常原文
+            return domain_error_response(
+                DomainError("INTERNAL_ERROR", "输入保存失败"),
+                status_code=500,
+            )
         finally:
-            # 确保 staging 文件被清理
-            if staging_path and staging_path.exists():
-                staging_path.unlink(missing_ok=True)
+            # 确保 staging 目录被清理（Repository 也会清理）
+            if txn_dir and txn_dir.exists():
+                import shutil
+                shutil.rmtree(txn_dir, ignore_errors=True)
 
     @router.get("/tasks/{task_id}/inputs")
     def get_inputs(task_id: str):
