@@ -447,6 +447,80 @@ fix(mountain-web): finish CCF contract and verification gates
 
 逐项报告 3B.2 的 10 项结果及测试名称，附最终 commit、clean status、build、tests、warning 数、fixture checker、真实 checker、已知 gap 和未完成事项。真实 checker 未通过时，报告状态只能是“执行中”。
 
+## 3C. CCF 最终契约与竞态收口指令
+
+### 3C.1 指令编号与起点
+
+```text
+instruction: CCF-ASSET-SETTINGS-06
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed commit: 1377675 fix(mountain-web): finish CCF contract and verification gates
+result: rejected; UI gates pass, checker and stale-request requirements remain
+```
+
+保留 `1377675`，只处理本节列出的剩余问题。
+
+### 3C.2 已通过且不得返工
+
+- build 通过；
+- 202 个前端测试通过；
+- 0 act warning、0 Router warning、0 unhandled rejection；
+- Service 页面、结构化 DTO、Secret UI、Probe UI、删除流程；
+- FormData Content-Type 清理实现；
+- 风格预览上传入口及基础筛选、分页界面。
+
+### 3C.3 本轮必须完成
+
+1. 修复 contract checker 的 HTTP method：Service detail/secrets 使用 GET，Service probe 必须使用 POST；endpoint 定义必须显式包含 method，不能全部经 GET helper。
+2. 动态 Service 校验不得在服务列表为空时 `SKIP` 后成功。支持 `MOUNTAIN_CONTRACT_SERVICE_ID`；未提供时使用列表第一项；两者都不存在时以非零退出并清楚提示先准备测试 Service，不得由 checker 擅自修改生产数据。
+3. 404 错误响应的 HTTP status 必须作为 checker 元数据处理，不能把 `_status` 注入响应 body 后参与 DTO 字段校验。
+4. 实现真实 JSON 类型校验，而不仅是字段名比较。至少校验 object/array/string/number/boolean/null 联合、`items[]` 元素类型，以及 Service/Settings/Error 的关键嵌套字段。期望类型应来自显式 contract schema 或可测试的结构定义，不得用脆弱正则假装完整解析 TypeScript。
+5. 正确区分 DTO 必填字段和 `?` 可选字段。后端缺少必填字段失败，缺少可选字段允许；后端未知字段仍失败。
+6. 为 checker 增加自动化行为测试，至少覆盖：GET detail、GET secrets、POST probe、空 Registry 失败、网络失败、缺必填字段、缺可选字段、未知字段、嵌套类型错误、数组元素错误和统一错误响应。
+7. 修复 AssetManagementPage stale-request 竞态。使用 AbortController、request generation token 或等效机制，确保旧 tab/filter/page 请求晚返回时不会覆盖或追加到新状态；组件卸载后不得 setState。
+8. 增加竞态行为测试：先发请求 A，改变 tab/filter 后发请求 B，B 先返回、A 后返回，最终页面只能显示 B；同时覆盖 load-more 旧页响应不能污染重置后的列表。
+9. 新报告不得声称真实 checker 已通过，除非实际连接 CCB 服务且命令为零退出；阻塞时明确写执行中。
+
+### 3C.4 门禁与提交顺序
+
+先完成代码和测试，形成实现提交：
+
+```text
+fix(mountain-web): harden contract checker and asset request lifecycle
+```
+
+取得实现 commit hash 后，再创建报告并形成独立文档提交：
+
+```text
+docs(mountain): report CCF contract closeout status
+```
+
+报告记录 `implementation_commit`，不要求记录包含报告自身的 commit hash，从而避免 Git 提交哈希的循环依赖。最终必须 `git status --short` 为空。
+
+门禁：
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+MOUNTAIN_API_BASE=http://127.0.0.1:<CCB_PORT>/api/v1 MOUNTAIN_CONTRACT_SERVICE_ID=<service_id> node web-v2/scripts/check-api-contract.mjs
+git diff --check
+git status --short
+```
+
+先本地提交，不推送远端。
+
+### 3C.5 完成报告
+
+只在 CCF worktree 创建：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-asset-settings-06-report.md
+```
+
+报告包含 3C.3 九项结果、checker 测试名称、竞态测试名称、implementation_commit、build、tests、warning 数、fixture checker、真实 checker、clean status、已知 gap 和未完成事项。真实 checker 未通过时状态只能为“执行中”。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
