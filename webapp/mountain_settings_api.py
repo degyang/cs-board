@@ -1,107 +1,146 @@
-"""Mountain Settings API — /api/v1/settings 端点。
-
-服务配置、运行环境状态、诊断入口。
-不依赖 legacy 模块。
-"""
+"""Mountain Settings API — /api/v1/settings 路由。"""
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter
 
-from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
-from csboard.adapters.provider_factory import ProviderFactory
-from csboard.adapters.secrets import mask_secret
-from csboard.domain.errors import DomainError, NotFoundError
+from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
+from csboard.adapters.secrets import create_secret_store
 
 
 def mountain_settings_router(data_dir: Path) -> APIRouter:
-    """创建 /api/v1/settings 路由器。"""
-    provider_factory = ProviderFactory(data_dir)
-    registry = DynamicServiceRegistry(provider_factory)
-    router = APIRouter(prefix="/api/v1/settings", tags=["mountain-settings"])
+    router = APIRouter()
+    secret_store, _ = create_secret_store(data_dir, encrypted=False)
+    registry = FilesystemServiceRegistry(data_dir, secret_store)
 
-    # ── Providers ──────────────────────────────────────────────────
-
-    @router.get("/providers")
-    def list_providers() -> dict[str, Any]:
-        """列出所有 Provider 配置状态。"""
-        services = registry.list_services()
+    @router.get("/api/v1/settings/runtime")
+    def get_runtime():
         return {
-            "items": services,
-            "total": len(services),
+            "log_level": "INFO",
+            "os": "linux",
+            "version": "0.1.0",
         }
 
-    @router.get("/providers/{provider_id}")
-    def get_provider(provider_id: str) -> dict[str, Any]:
-        """获取 Provider 详情。"""
+    @router.get("/api/v1/settings/toolchain")
+    def get_toolchain():
+        components = []
+        for name, cmd in [
+            ("python", "python3"),
+            ("node", "node"),
+            ("ffmpeg", "ffmpeg"),
+            ("ffprobe", "ffprobe"),
+        ]:
+            path = shutil.which(cmd)
+            version = None
+            error_code = None
+            suggestion = None
+            if path:
+                try:
+                    result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+                    version = result.stdout.strip().split("\n")[0]
+                except Exception as exc:
+                    error_code = "VERSION_CHECK_FAILED"
+                    suggestion = f"运行 {cmd} --version 检查是否正常"
+            else:
+                error_code = "NOT_FOUND"
+                suggestion = f"安装 {cmd} 并确保在 PATH 中"
+            components.append({
+                "component": name,
+                "available": bool(path),
+                "version": version,
+                "error_code": error_code,
+                "suggestion": suggestion,
+            })
+        return {"items": components}
+
+    @router.get("/api/v1/settings/storage")
+    def get_storage():
+        assets_dir = data_dir / "assets"
+        tasks_dir = data_dir / "tasks"
+        temp_dir = data_dir / "temp"
+
         try:
-            return registry.get_service(provider_id)
-        except NotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
+            test_file = data_dir / ".write_test"
+            test_file.write_text("test", encoding="utf-8")
+            test_file.unlink()
+            writable = True
+        except OSError:
+            writable = False
 
-    @router.patch("/providers/{provider_id}")
-    def update_provider(
-        provider_id: str,
-        config: dict[str, Any] = Body(...),
-    ) -> dict[str, Any]:
-        """更新 Provider 配置（白名单字段）。"""
-        try:
-            registry.update_service_config(provider_id, config)
-            return registry.get_service(provider_id)
-        except NotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
-        except DomainError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-    @router.post("/providers/{provider_id}/secrets")
-    def set_provider_secret(
-        provider_id: str,
-        body: dict[str, Any] = Body(...),
-    ) -> dict[str, Any]:
-        """设置 Provider Secret。不回显明文。"""
-        secret_key = body.get("key", "")
-        secret_value = body.get("value", "")
-        if not secret_key or not secret_value:
-            raise HTTPException(status_code=422, detail="key 和 value 不能为空")
-        try:
-            registry.set_service_secret(provider_id, secret_key, secret_value)
-            return {
-                "ok": True,
-                "service_id": provider_id,
-                "secret_key": secret_key,
-                "has_secret": True,
-                "masked_value": mask_secret(secret_value),
-            }
-        except NotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
-        except DomainError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-    # ── Runtime ────────────────────────────────────────────────────
-
-    @router.get("/runtime")
-    def get_runtime() -> dict[str, Any]:
-        """获取运行环境状态。"""
-        return registry.get_runtime_status()
-
-    @router.get("/runtime/voice-alignment")
-    def get_voice_alignment() -> dict[str, Any]:
-        """获取语音对齐状态。"""
-        return registry.get_voice_alignment_status()
-
-    # ── Diagnostics ────────────────────────────────────────────────
-
-    @router.get("/diagnostics")
-    def get_diagnostics() -> dict[str, Any]:
-        """诊断入口。"""
-        runtime = registry.get_runtime_status()
-        health = registry.check_all_health()
+        usage = shutil.disk_usage(str(data_dir))
         return {
-            "runtime": runtime,
-            "health": health,
+            "writable": writable,
+            "assets_available": assets_dir.exists(),
+            "tasks_available": tasks_dir.exists(),
+            "temp_available": temp_dir.exists(),
+            "free_bytes": usage.free,
+            "used_bytes": usage.used,
+        }
+
+    @router.get("/api/v1/settings/voice-alignment")
+    def get_voice_alignment():
+        services = registry.list_services(capability="speech_alignment")
+        if not services:
+            return {
+                "service_id": None,
+                "endpoint": None,
+                "available": False,
+            }
+        svc = services[0]
+        return {
+            "service_id": svc.service_id,
+            "endpoint": svc.endpoint,
+            "available": svc.enabled,
+        }
+
+    @router.get("/api/v1/settings/diagnostics")
+    def get_diagnostics():
+        from csboard.adapters.observability import JsonlTelemetry
+        from datetime import datetime, timezone
+
+        services = registry.list_services()
+        service_infos = []
+        for svc in services:
+            service_infos.append({
+                "service_id": svc.service_id,
+                "capability": svc.capability,
+                "enabled": svc.enabled,
+                "is_default": svc.is_default,
+            })
+
+        toolchain = []
+        for name, cmd in [("python", "python3"), ("node", "node"), ("ffmpeg", "ffmpeg"), ("ffprobe", "ffprobe")]:
+            toolchain.append({
+                "component": name,
+                "available": bool(shutil.which(cmd)),
+            })
+
+        usage = shutil.disk_usage(str(data_dir))
+        try:
+            test_file = data_dir / ".write_test"
+            test_file.write_text("test", encoding="utf-8")
+            test_file.unlink()
+            writable = True
+        except OSError:
+            writable = False
+
+        return {
+            "services": service_infos,
+            "toolchain": toolchain,
+            "storage": {
+                "writable": writable,
+                "free_bytes": usage.free,
+                "used_bytes": usage.used,
+            },
+            "telemetry": {
+                "available": True,
+                "event_count": 0,
+            },
         }
 
     return router

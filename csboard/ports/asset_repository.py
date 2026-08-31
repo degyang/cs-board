@@ -15,50 +15,59 @@ class AssetRepository(Protocol):
 
     # ── StyleTemplate ──────────────────────────────────────────────
 
-    def list_style_templates(self, kind: str | None = None) -> list[StyleTemplate]:
-        """列出风格模板。kind=None 表示全部。"""
+    def list_style_templates(self, kind: str | None = None, status: str | None = None) -> list[StyleTemplate]:
+        """列出风格模板。kind=None/status=None 表示全部。"""
         ...
 
-    def get_style_template(self, template_id: str) -> StyleTemplate:
+    def get_style_template(self, style_id: str) -> StyleTemplate:
         """获取单个风格模板。不存在时抛出 NotFoundError。"""
         ...
 
     def save_style_template(self, template: StyleTemplate) -> None:
-        """保存风格模板（创建或更新）。"""
+        """保存风格模板（创建或更新）。preset 禁止修改。"""
         ...
 
-    def deactivate_style_template(self, template_id: str) -> None:
-        """停用风格模板（软删除）。preset 禁止停用。"""
+    def deactivate_style_template(self, style_id: str) -> None:
+        """标记自定义风格为 inactive。"""
         ...
 
-    # ── AssetRef ───────────────────────────────────────────────────
-
-    def save_asset(self, file_bytes: bytes, original_name: str, mime_type: str) -> AssetRef:
-        """保存资产文件。hash 去重：相同内容返回已有 AssetRef。"""
-        ...
-
-    def get_asset(self, asset_id: str) -> AssetRef:
-        """获取资产引用。不存在时抛出 NotFoundError。"""
-        ...
-
-    def read_asset_bytes(self, asset_id: str) -> bytes:
-        """读取资产文件内容。路径逃逸时抛出 DomainError。"""
+    def activate_style_template(self, style_id: str) -> None:
+        """标记风格为 active。"""
         ...
 
     # ── VoiceAsset ─────────────────────────────────────────────────
 
-    def save_voice_asset(self, file_bytes: bytes, name: str, duration_ms: int, sample_rate: int, channels: int, audio_format: str) -> VoiceAsset:
-        """保存语音资产。"""
+    def list_voice_assets(self) -> list[VoiceAsset]:
+        """列出语音资产。"""
         ...
 
     def get_voice_asset(self, voice_id: str) -> VoiceAsset:
-        """获取语音资产。不存在时抛出 NotFoundError。"""
+        """获取单个语音资产。不存在时抛出 NotFoundError。"""
         ...
 
-    def list_voice_assets(self) -> list[VoiceAsset]:
-        """列出所有活跃语音资产。"""
+    def save_voice_asset(self, content: bytes, name: str, duration_ms: int, sample_rate: int, channels: int, format_ext: str) -> VoiceAsset:
+        """保存语音资产（内容 + 元数据）。"""
         ...
 
     def deactivate_voice_asset(self, voice_id: str) -> None:
-        """停用语音资产（软删除）。"""
+        """标记语音为 inactive。"""
+        ...
+
+    def activate_voice_asset(self, voice_id: str) -> None:
+        """标记语音为 active。"""
+        ...
+
+    def get_voice_content(self, voice_id: str) -> bytes:
+        """读取语音二进制内容。"""
+        ...
+
+    # ── AssetRef ───────────────────────────────────────────────────
+
+    def save_asset(self, content: bytes, filename: str, media_type: str | None = None, project_id: str | None = None) -> AssetRef:
+        ...
+
+    def get_asset(self, asset_id: str) -> AssetRef | None:
+        ...
+
+    def get_asset_content(self, asset_id: str) -> bytes:
         ...

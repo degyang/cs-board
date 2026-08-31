@@ -91,29 +91,86 @@ def parser() -> argparse.ArgumentParser:
     pipeline_resume.add_argument("--policy", default="auto", choices=["auto", "gated", "targeted"])
     pipeline_resume.add_argument("--events", choices=["jsonl"], help="流式输出事件")
 
-    # ── asset ──────────────────────────────────────────────────────
+    # ── asset style ──────────────────────────────────────────────────
     asset = resources.add_parser("asset")
-    asset_actions = asset.add_subparsers(dest="action", required=True)
-    asset_list = asset_actions.add_parser("list")
-    asset_list.add_argument("--kind", choices=["preset", "custom"], help="按类型筛选")
-    asset_show = asset_actions.add_parser("show")
-    asset_show.add_argument("--template", required=True, help="模板 ID")
-    asset_create = asset_actions.add_parser("create")
-    asset_create.add_argument("--name", required=True, help="风格名称")
-    asset_create.add_argument("--prompt", required=True, help="风格配方")
-    asset_create.add_argument("--copy-from", help="从 preset 复制")
+    asset_sub = asset.add_subparsers(dest="subresource", required=True)
 
-    # ── provider ───────────────────────────────────────────────────
-    provider = resources.add_parser("provider")
-    provider_actions = provider.add_subparsers(dest="action", required=True)
-    provider_list = provider_actions.add_parser("list")
-    provider_check = provider_actions.add_parser("check")
-    provider_check.add_argument("--name", required=True, help="Provider 名称")
+    style = asset_sub.add_parser("style")
+    style_actions = style.add_subparsers(dest="action", required=True)
+    style_list = style_actions.add_parser("list")
+    style_list.add_argument("--kind", choices=["preset", "custom"])
+    style_list.add_argument("--status", choices=["active", "inactive"])
+    style_show = style_actions.add_parser("show")
+    style_show.add_argument("--id", required=True, help="style_id")
+    style_create = style_actions.add_parser("create")
+    style_create.add_argument("--name", required=True)
+    style_create.add_argument("--prompt", required=True)
+    style_create.add_argument("--engine", default="whiteboard")
+    style_create.add_argument("--tags", default="[]")
+    style_copy = style_actions.add_parser("copy")
+    style_copy.add_argument("--id", required=True, help="源 style_id")
+    style_copy.add_argument("--name", help="新名称")
+    style_update = style_actions.add_parser("update")
+    style_update.add_argument("--id", required=True)
+    style_update.add_argument("--name")
+    style_update.add_argument("--prompt")
+    style_activate = style_actions.add_parser("activate")
+    style_activate.add_argument("--id", required=True)
+    style_deactivate = style_actions.add_parser("deactivate")
+    style_deactivate.add_argument("--id", required=True)
 
-    # ── settings ───────────────────────────────────────────────────
+    # ── asset voice ──────────────────────────────────────────────────
+    voice = asset_sub.add_parser("voice")
+    voice_actions = voice.add_subparsers(dest="action", required=True)
+    voice_list = voice_actions.add_parser("list")
+    voice_show = voice_actions.add_parser("show")
+    voice_show.add_argument("--id", required=True)
+    voice_import = voice_actions.add_parser("import")
+    voice_import.add_argument("--file", type=Path, required=True)
+    voice_import.add_argument("--name", default="")
+    voice_update = voice_actions.add_parser("update")
+    voice_update.add_argument("--id", required=True)
+    voice_update.add_argument("--name", required=True)
+    voice_activate = voice_actions.add_parser("activate")
+    voice_activate.add_argument("--id", required=True)
+    voice_deactivate = voice_actions.add_parser("deactivate")
+    voice_deactivate.add_argument("--id", required=True)
+
+    # ── service ──────────────────────────────────────────────────────
+    service = resources.add_parser("service")
+    service_actions = service.add_subparsers(dest="action", required=True)
+    service_list = service_actions.add_parser("list")
+    service_list.add_argument("--capability")
+    service_list.add_argument("--enabled", type=lambda x: x.lower() == "true")
+    service_show = service_actions.add_parser("show")
+    service_show.add_argument("--id", required=True)
+    service_create = service_actions.add_parser("create")
+    service_create.add_argument("--file", type=Path, required=True, help="ServiceDefinition JSON 文件")
+    service_update = service_actions.add_parser("update")
+    service_update.add_argument("--id", required=True)
+    service_update.add_argument("--file", type=Path, required=True)
+    service_activate = service_actions.add_parser("activate")
+    service_activate.add_argument("--id", required=True)
+    service_deactivate = service_actions.add_parser("deactivate")
+    service_deactivate.add_argument("--id", required=True)
+    service_set_default = service_actions.add_parser("set-default")
+    service_set_default.add_argument("--id", required=True)
+    service_probe = service_actions.add_parser("probe")
+    service_probe.add_argument("--id", required=True)
+    service_secret_set = service_actions.add_parser("secret-set")
+    service_secret_set.add_argument("--id", required=True)
+    service_secret_set.add_argument("--key", required=True)
+    service_secret_set.add_argument("--value", required=True)
+    service_secret_delete = service_actions.add_parser("secret-delete")
+    service_secret_delete.add_argument("--id", required=True)
+    service_secret_delete.add_argument("--key", required=True)
+
+    # ── settings ─────────────────────────────────────────────────────
     settings = resources.add_parser("settings")
     settings_actions = settings.add_subparsers(dest="action", required=True)
-    settings_runtime = settings_actions.add_parser("runtime")
+    settings_actions.add_parser("toolchain")
+    settings_actions.add_parser("storage")
+    settings_actions.add_parser("diagnostics")
 
     # ── stage ────────────────────────────────────────────────────────
     stage = resources.add_parser("stage")
@@ -138,15 +195,16 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
-def _stream_events_jsonl(commands: MountainCommands, task_id: str, run_id: str, after: int = 0) -> None:
-    """Stream events as JSONL to stdout."""
-    cursor = after
-    while True:
-        result = commands.list_events(task_id, run_id, cursor)
-        for event in result.get("items", []):
-            print(json.dumps(event, ensure_ascii=False, sort_keys=True), flush=True)
-            cursor = event.get("sequence", cursor)
-        time.sleep(0.5)
+def _get_service_registry(data_dir: Path):
+    from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
+    from csboard.adapters.secrets import create_secret_store
+    secret_store, _ = create_secret_store(data_dir, encrypted=False)
+    return FilesystemServiceRegistry(data_dir, secret_store)
+
+
+def _get_asset_repository(data_dir: Path):
+    from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
+    return FilesystemAssetRepository(data_dir)
 
 
 def execute(args: argparse.Namespace) -> dict[str, Any]:
@@ -172,10 +230,8 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     if (args.resource, args.action) == ("logs", "tail"):
         result = commands.list_logs(args.task, args.run)
         if hasattr(args, "follow") and args.follow:
-            # Print existing logs first
             for item in result.get("items", []):
                 print(json.dumps(item, ensure_ascii=False, sort_keys=True), flush=True)
-            # Then follow for new logs
             log_path = commands.repository.run_dir(args.task, args.run) / "observability" / "logs.jsonl"
             last_size = log_path.stat().st_size if log_path.exists() else 0
             while True:
@@ -203,20 +259,12 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
 
     # ── pipeline ─────────────────────────────────────────────────────
     if (args.resource, args.action) == ("pipeline", "run"):
-        result = commands.pipeline_run(args.task, getattr(args, "run", None), args.policy, args.stage)
-        if hasattr(args, "events") and args.events == "jsonl":
-            # Stream events in background (simplified: just return result)
-            pass
-        return result
+        return commands.pipeline_run(args.task, getattr(args, "run", None), args.policy, args.stage)
     if (args.resource, args.action) == ("pipeline", "resume"):
-        result = commands.pipeline_resume(args.task, getattr(args, "run", None), args.policy)
-        if hasattr(args, "events") and args.events == "jsonl":
-            pass
-        return result
+        return commands.pipeline_resume(args.task, getattr(args, "run", None), args.policy)
 
     # ── stage ────────────────────────────────────────────────────────
     if (args.resource, args.action) == ("stage", "run"):
-        # Route to specific stage handler or pipeline
         if args.stage == "generate-visual-anchors":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
@@ -232,14 +280,9 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             from csboard.adapters.whisper.alignment_adapter import WhisperAlignmentAdapter
             from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
             tts = IndexTTSAdapter(base_url=args.tts_url, mode=args.tts_mode)
-            alignment = WhisperAlignmentAdapter(
-                renderer_root=ROOT / "video_renderer",
-            )
+            alignment = WhisperAlignmentAdapter(renderer_root=ROOT / "video_renderer")
             media = FFmpegMediaAdapter()
-            return commands.clone_voice(
-                args.task, run_id, tts, alignment, media,
-                reference_audio=args.reference,
-            )
+            return commands.clone_voice(args.task, run_id, tts, alignment, media, reference_audio=args.reference)
         elif args.stage == "plan-storyboard":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
@@ -271,13 +314,8 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             media = FFmpegMediaAdapter()
             return commands.compose_video(args.task, run_id, media)
         else:
-            # For unregistered stages, raise CAPABILITY_NOT_AVAILABLE
             if args.stage not in commands.pipeline._executors:
-                raise DomainError(
-                    "CAPABILITY_NOT_AVAILABLE",
-                    f"stage.run.{args.stage} 将在后续 Mountain PR 提供",
-                )
-            # For registered stages, use pipeline targeted mode
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", f"stage.run.{args.stage} 将在后续 Mountain PR 提供")
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
             if not run_id:
@@ -291,72 +329,171 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError("需要 --run 或任务有活跃运行")
         return commands.stage_retry(args.task, run_id, args.stage, args.unit, args.visual)
 
-    # ── asset ──────────────────────────────────────────────────────
-    if (args.resource, args.action) == ("asset", "list"):
-        from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
-        repo = FilesystemAssetRepository(args.data_dir)
-        templates = repo.list_style_templates(kind=args.kind)
-        return {"items": [t.to_dict() for t in templates], "total": len(templates)}
-    if (args.resource, args.action) == ("asset", "show"):
-        from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
-        repo = FilesystemAssetRepository(args.data_dir)
-        template = repo.get_style_template(args.template)
-        return template.to_dict()
-    if (args.resource, args.action) == ("asset", "create"):
-        from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
-        from csboard.domain.style_template import StyleTemplate
-        import uuid
-        repo = FilesystemAssetRepository(args.data_dir)
-        now = "2026-08-31T00:00:00Z"
-        template_id = uuid.uuid4().hex[:16]
-        if args.copy_from:
-            source = repo.get_style_template(args.copy_from)
-            template = source.copy_to_custom(template_id, now)
-            template.name = args.name or template.name
-            template.prompt_text = args.prompt or template.prompt_text
-        else:
+    # ── asset style ──────────────────────────────────────────────────
+    if args.resource == "asset" and args.subresource == "style":
+        from csboard.application.context import utc_now
+        repo = _get_asset_repository(args.data_dir)
+        if args.action == "list":
+            templates = repo.list_style_templates(kind=args.kind, status=args.status)
+            return {"items": [t.to_dict() for t in templates], "total": len(templates)}
+        if args.action == "show":
+            return repo.get_style_template(args.id).to_dict()
+        if args.action == "create":
+            import uuid
+            tags = json.loads(args.tags) if args.tags else []
+            now = utc_now()
+            from csboard.domain.style_template import StyleTemplate
             template = StyleTemplate(
-                template_id=template_id,
+                style_id=uuid.uuid4().hex[:16],
                 revision=1,
                 name=args.name,
                 kind="custom",
                 prompt_text=args.prompt,
-                is_active=True,
+                engine=args.engine,
+                tags=tags,
+                status="active",
                 created_at=now,
                 updated_at=now,
             )
-        repo.save_style_template(template)
-        return template.to_dict()
+            repo.save_style_template(template)
+            return template.to_dict()
+        if args.action == "copy":
+            source = repo.get_style_template(args.id)
+            import uuid
+            now = utc_now()
+            custom = source.copy_to_custom(uuid.uuid4().hex[:16], now)
+            if args.name:
+                custom.name = args.name
+            repo.save_style_template(custom)
+            return custom.to_dict()
+        if args.action == "update":
+            template = repo.get_style_template(args.id)
+            if template.kind == "preset":
+                raise DomainError("VALIDATION_ERROR", "preset 风格禁止修改")
+            if args.name:
+                template.name = args.name
+            if args.prompt:
+                template.prompt_text = args.prompt
+            repo.save_style_template(template)
+            return template.to_dict()
+        if args.action == "activate":
+            repo.activate_style_template(args.id)
+            return repo.get_style_template(args.id).to_dict()
+        if args.action == "deactivate":
+            repo.deactivate_style_template(args.id)
+            return repo.get_style_template(args.id).to_dict()
 
-    # ── provider ───────────────────────────────────────────────────
-    if (args.resource, args.action) == ("provider", "list"):
-        from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
-        from csboard.adapters.provider_factory import ProviderFactory
-        factory = ProviderFactory(args.data_dir)
-        registry = DynamicServiceRegistry(factory)
-        return {"items": registry.list_services(), "total": len(registry.list_services())}
-    if (args.resource, args.action) == ("provider", "check"):
-        from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
-        from csboard.adapters.provider_factory import ProviderFactory
-        factory = ProviderFactory(args.data_dir)
-        registry = DynamicServiceRegistry(factory)
-        return registry.check_health(args.name)
+    # ── asset voice ──────────────────────────────────────────────────
+    if args.resource == "asset" and args.subresource == "voice":
+        repo = _get_asset_repository(args.data_dir)
+        if args.action == "list":
+            voices = repo.list_voice_assets()
+            return {"items": [v.to_dict() for v in voices], "total": len(voices)}
+        if args.action == "show":
+            return repo.get_voice_asset(args.id).to_dict()
+        if args.action == "import":
+            from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+            import tempfile
+            media = FFmpegMediaAdapter()
+            content = args.file.read_bytes()
+            ext = args.file.suffix.lower()
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+                probe = media.probe(tmp_path)
+            finally:
+                if tmp_path:
+                    os.unlink(tmp_path)
+            name = args.name or args.file.name
+            asset = repo.save_voice_asset(content, name, probe.duration_ms, probe.sample_rate, probe.channels, ext.lstrip("."))
+            return asset.to_dict()
+        if args.action == "update":
+            voice = repo.get_voice_asset(args.id)
+            meta_path = repo._voice_meta_path(args.id)
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+            data["name"] = args.name
+            meta_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            return repo.get_voice_asset(args.id).to_dict()
+        if args.action == "activate":
+            repo.activate_voice_asset(args.id)
+            return repo.get_voice_asset(args.id).to_dict()
+        if args.action == "deactivate":
+            repo.deactivate_voice_asset(args.id)
+            return repo.get_voice_asset(args.id).to_dict()
 
-    # ── settings ───────────────────────────────────────────────────
-    if (args.resource, args.action) == ("settings", "runtime"):
-        from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
-        from csboard.adapters.provider_factory import ProviderFactory
-        factory = ProviderFactory(args.data_dir)
-        registry = DynamicServiceRegistry(factory)
-        return registry.get_runtime_status()
+    # ── service ──────────────────────────────────────────────────────
+    if args.resource == "service":
+        from csboard.domain.service_definition import ServiceDefinition
+        registry = _get_service_registry(args.data_dir)
+        if args.action == "list":
+            services = registry.list_services(capability=args.capability, enabled=args.enabled)
+            return {"items": [s.to_dict() for s in services], "total": len(services)}
+        if args.action == "show":
+            return registry.get_service(args.id).to_dict()
+        if args.action == "create":
+            data = json.loads(args.file.read_text(encoding="utf-8"))
+            service = ServiceDefinition.from_dict(data)
+            return registry.create_service(service).to_dict()
+        if args.action == "update":
+            data = json.loads(args.file.read_text(encoding="utf-8"))
+            return registry.update_service(args.id, data).to_dict()
+        if args.action == "activate":
+            return registry.activate_service(args.id).to_dict()
+        if args.action == "deactivate":
+            return registry.deactivate_service(args.id).to_dict()
+        if args.action == "set-default":
+            return registry.set_default(args.id).to_dict()
+        if args.action == "probe":
+            return registry.probe_service(args.id)
+        if args.action == "secret-set":
+            registry.set_secret(args.id, args.key, args.value)
+            return {"ok": True}
+        if args.action == "secret-delete":
+            registry.delete_secret(args.id, args.key)
+            return {"ok": True}
+
+    # ── settings ─────────────────────────────────────────────────────
+    if args.resource == "settings":
+        import shutil
+        import subprocess
+        if args.action == "toolchain":
+            components = []
+            for name, cmd in [("python", "python3"), ("node", "node"), ("ffmpeg", "ffmpeg"), ("ffprobe", "ffprobe")]:
+                path = shutil.which(cmd)
+                version = None
+                if path:
+                    try:
+                        r = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+                        version = r.stdout.strip().split("\n")[0]
+                    except Exception:
+                        pass
+                components.append({"component": name, "available": bool(path), "version": version})
+            return {"items": components}
+        if args.action == "storage":
+            data_dir = args.data_dir
+            try:
+                test_file = data_dir / ".write_test"
+                test_file.write_text("test", encoding="utf-8")
+                test_file.unlink()
+                writable = True
+            except OSError:
+                writable = False
+            return {"writable": writable, "assets_available": (data_dir / "assets").exists()}
+        if args.action == "diagnostics":
+            registry = _get_service_registry(args.data_dir)
+            services = registry.list_services()
+            return {
+                "services": [{"service_id": s.service_id, "enabled": s.enabled} for s in services],
+                "toolchain": [{"component": c, "available": bool(shutil.which(c))} for c in ["python", "node", "ffmpeg", "ffprobe"]],
+            }
 
     raise ValueError("未知命令")
 
 
 def main(argv: list[str] | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
-    # The documented form puts --json after a command; argparse global options
-    # normally require it first, so normalize it without changing the public CLI.
     if "--json" in raw_args:
         raw_args.remove("--json")
         raw_args.insert(0, "--json")
