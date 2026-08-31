@@ -37,8 +37,8 @@ def mountain_task_router(data_dir: Path) -> APIRouter:
     _provider_factory = None
 
     def _get_commands() -> MountainCommands:
-        """创建 MountainCommands 实例，注入 ProviderFactory。"""
-        return MountainCommands(data_dir, provider_factory=_provider_factory)
+        """创建 MountainCommands 实例，注入 ServiceResolver 和 ProviderFactory。"""
+        return MountainCommands(data_dir, provider_factory=_provider_factory, service_resolver=_service_resolver)
 
     def _context() -> CommandContext:
         """创建 Web 入口的 CommandContext。"""
@@ -230,7 +230,7 @@ def mountain_task_router(data_dir: Path) -> APIRouter:
 
         request_data = {
             "script": script.strip(),
-            "reference_audio": str(target) if reference else None,
+            "reference_audio": f"inputs/reference{suffix}" if reference else None,
             "style": style,
             "include_subtitles": include_subtitles,
             "pen_text": pen_text[:12],

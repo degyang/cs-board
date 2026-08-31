@@ -1,0 +1,28 @@
+#### CCB-BACKEND-INTEGRATION-04 完成报告 — 2026-08-30
+
+- worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+- branch: feat/mountain-assets-settings-backend
+- commit: 520a139 fix(mountain): close secure runtime and asset integration gaps
+- git status: 12 files modified, 945 insertions, 223 deletions
+- 唯一组合根: ✅ `create_app()` 创建单一 SecretStore、ServiceRegistry、ServiceResolver、ProviderFactory，注入所有 Router
+- SecretStore 加密验证: ✅ 生产代码 `encrypted=False` 调用为零；CLI 和 Router 均使用默认加密
+- 磁盘明文扫描: ✅ Secret 不进入 Task JSON、Service JSON、日志、事件、诊断、错误响应和资产元数据
+- Pipeline 动态执行链: ✅ Task → Pipeline → Resolver → ServiceDefinition → create_adapter → Stage（6阶段均使用 ServiceResolver→create_adapter 路径）
+- 六阶段 Service 映射: ✅ STAGE_CAPABILITY_MAP: clone-voice→speech_synthesis+speech_alignment+media, plan-storyboard→text_generation, generate-illustrations→image_generation, generate-visual-anchors→text_generation, render-visuals→rendering, compose-video→media
+- Task API 收口: ✅ Task API 委托 Application/Repository；reference_audio 存储相对路径
+- Service API DTO: ✅ 包含 config_status、availability、secret_status；secrets 响应格式 `{items, total}`
+- Style API: ✅ 支持 kind/status/engine/q/cursor/limit 参数；preset 禁止 PATCH/DELETE/activate/deactivate
+- Voice multipart/metadata/Range: ✅ multipart 上传、FFprobe 元数据、文件签名验证、206 Range/416/HEAD、storage_path 过滤
+- Settings API: ✅ toolchain（Python/Node/FFmpeg/FFprobe/Codex CLI/Skills）、storage（cleanup_policy）、voice-alignment（TTS+Alignment probe）、diagnostics（API/Service/Toolchain/Storage/Telemetry/Logs/Security）
+- CLI: ✅ 与 API 使用同一 ServiceRegistry、SecretStore、ServiceResolver；Secret 默认 getpass
+- Seed: ✅ 使用 utc_now，无硬编码日期
+- pytest: ✅ 403 passed, 10 skipped
+- compileall: ✅ csboard webapp cli scripts 全部通过
+- 真实 uvicorn/HTTP 验证: 执行中
+- CCF contract checker: 执行中
+- 静态检查: ✅ git diff --check 无错误
+- 已知 gap:
+  - test_secret_security.py 中 `test_create_secret_store_plaintext_explicit` 仍使用 `encrypted=False`（测试 PlaintextSecretStore 功能，非生产代码）
+- 未完成事项:
+  - 真实 uvicorn/HTTP 启动验证（§4.11）
+  - CCF contract checker 运行（§4.11）

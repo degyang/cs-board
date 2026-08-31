@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import struct
 
 import pytest
 from starlette.testclient import TestClient
@@ -14,6 +16,31 @@ from webapp.mountain_server import create_app
 def client(tmp_path):
     app = create_app(tmp_path)
     return TestClient(app)
+
+
+def _make_wav_bytes(duration_ms: int = 100, sample_rate: int = 44100, channels: int = 1) -> bytes:
+    """生成最小合法 WAV 文件。"""
+    num_samples = int(sample_rate * duration_ms / 1000)
+    bits_per_sample = 16
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+    data_size = num_samples * block_align
+
+    buf = io.BytesIO()
+    # RIFF header
+    buf.write(b"RIFF")
+    buf.write(struct.pack("<I", 36 + data_size))
+    buf.write(b"WAVE")
+    # fmt subchunk
+    buf.write(b"fmt ")
+    buf.write(struct.pack("<I", 16))  # subchunk1 size
+    buf.write(struct.pack("<HHIIHH", 1, channels, sample_rate, byte_rate, block_align, bits_per_sample))
+    # data subchunk
+    buf.write(b"data")
+    buf.write(struct.pack("<I", data_size))
+    # 静音数据
+    buf.write(b"\x00" * data_size)
+    return buf.getvalue()
 
 
 def test_list_styles(client: TestClient):
@@ -174,46 +201,69 @@ def test_upload_path_traversal(client: TestClient):
 
 
 def test_create_voice(client: TestClient):
-    payload = {
-        "name": "旁白",
-        "duration_ms": 10000,
-        "sample_rate": 44100,
-        "channels": 1,
-        "format": "wav",
-    }
-    response = client.post("/api/v1/assets/voices", json=payload)
+    """multipart 上传音色。"""
+    wav_bytes = _make_wav_bytes(duration_ms=100)
+    response = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("narration.wav", wav_bytes, "audio/wav")},
+        data={"name": "旁白", "tags": "narration,test"},
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "旁白"
     assert data["is_active"] is True
+    assert data["sha256"]
+    assert data["tags"] == ["narration", "test"]
+    assert data["revision"] == 1
 
 
 def test_list_voices(client: TestClient):
+    wav_bytes = _make_wav_bytes()
+    client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "v1"},
+    )
     response = client.get("/api/v1/assets/voices")
     assert response.status_code == 200
-    assert "items" in response.json()
+    data = response.json()
+    assert "items" in data
+    assert data["total"] >= 1
 
 
 def test_patch_voice(client: TestClient):
-    payload = {"name": "old", "duration_ms": 1000, "sample_rate": 44100, "channels": 1, "format": "wav"}
-    create_resp = client.post("/api/v1/assets/voices", json=payload)
+    wav_bytes = _make_wav_bytes()
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "old"},
+    )
     voice_id = create_resp.json()["voice_id"]
     response = client.patch(f"/api/v1/assets/voices/{voice_id}", json={"name": "new"})
     assert response.status_code == 200
     assert response.json()["name"] == "new"
+    assert response.json()["revision"] == 2
 
 
 def test_delete_voice(client: TestClient):
-    payload = {"name": "x", "duration_ms": 1000, "sample_rate": 44100, "channels": 1, "format": "wav"}
-    create_resp = client.post("/api/v1/assets/voices", json=payload)
+    wav_bytes = _make_wav_bytes()
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "x"},
+    )
     voice_id = create_resp.json()["voice_id"]
     response = client.delete(f"/api/v1/assets/voices/{voice_id}")
     assert response.status_code == 200
 
 
 def test_deactivate_voice(client: TestClient):
-    payload = {"name": "x", "duration_ms": 1000, "sample_rate": 44100, "channels": 1, "format": "wav"}
-    create_resp = client.post("/api/v1/assets/voices", json=payload)
+    wav_bytes = _make_wav_bytes()
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "x"},
+    )
     voice_id = create_resp.json()["voice_id"]
     response = client.post(f"/api/v1/assets/voices/{voice_id}/deactivate")
     assert response.status_code == 200
@@ -221,13 +271,49 @@ def test_deactivate_voice(client: TestClient):
 
 
 def test_activate_voice(client: TestClient):
-    payload = {"name": "x", "duration_ms": 1000, "sample_rate": 44100, "channels": 1, "format": "wav"}
-    create_resp = client.post("/api/v1/assets/voices", json=payload)
+    wav_bytes = _make_wav_bytes()
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "x"},
+    )
     voice_id = create_resp.json()["voice_id"]
     client.post(f"/api/v1/assets/voices/{voice_id}/deactivate")
     response = client.post(f"/api/v1/assets/voices/{voice_id}/activate")
     assert response.status_code == 200
     assert response.json()["is_active"] is True
+
+
+def test_voice_content_range(client: TestClient):
+    """音色 content 支持 Range 请求和416。"""
+    wav_bytes = _make_wav_bytes(duration_ms=50)
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "range-test"},
+    )
+    voice_id = create_resp.json()["voice_id"]
+
+    # 普通请求
+    resp = client.get(f"/api/v1/assets/voices/{voice_id}/content")
+    assert resp.status_code == 200
+    assert "accept-ranges" in resp.headers
+
+    # Range 请求
+    resp = client.get(
+        f"/api/v1/assets/voices/{voice_id}/content",
+        headers={"Range": "bytes=0-9"},
+    )
+    assert resp.status_code == 206
+    assert "content-range" in resp.headers
+    assert len(resp.content) == 10
+
+    # 无效 Range → 416
+    resp = client.get(
+        f"/api/v1/assets/voices/{voice_id}/content",
+        headers={"Range": "bytes=999999-999999"},
+    )
+    assert resp.status_code == 416
 
 
 def test_style_not_found(client: TestClient):
@@ -238,7 +324,7 @@ def test_style_not_found(client: TestClient):
 
 
 def test_style_presets_readonly(client: TestClient):
-    """Preset 风格的 PATCH/DELETE 应返回 400。"""
+    """Preset 风格的 PATCH/DELETE/activate/deactivate 应返回 400。"""
     from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 
     repo = FilesystemAssetRepository(client.app.state.data_dir)
@@ -255,6 +341,12 @@ def test_style_presets_readonly(client: TestClient):
     assert resp.status_code == 400
 
     resp = client.delete("/api/v1/assets/styles/seed-001")
+    assert resp.status_code == 400
+
+    resp = client.post("/api/v1/assets/styles/seed-001/activate")
+    assert resp.status_code == 400
+
+    resp = client.post("/api/v1/assets/styles/seed-001/deactivate")
     assert resp.status_code == 400
 
 
@@ -274,3 +366,29 @@ def test_no_paths_in_response(client: TestClient):
     data = resp.json()
     for key in data:
         assert "path" not in key.lower() or key == "prompt_text"
+
+
+def test_voice_no_storage_path_in_response(client: TestClient):
+    """音色 API 响应不得包含 storage_path 或绝对路径。"""
+    wav_bytes = _make_wav_bytes()
+    resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "test"},
+    )
+    data = resp.json()
+    assert "storage_path" not in data
+
+
+def test_voice_content_head(client: TestClient):
+    """HEAD 请求返回正确 Content-Length。"""
+    wav_bytes = _make_wav_bytes()
+    create_resp = client.post(
+        "/api/v1/assets/voices",
+        files={"file": ("v.wav", wav_bytes, "audio/wav")},
+        data={"name": "head-test"},
+    )
+    voice_id = create_resp.json()["voice_id"]
+    resp = client.head(f"/api/v1/assets/voices/{voice_id}/content")
+    assert resp.status_code == 200
+    assert "content-length" in resp.headers

@@ -341,3 +341,86 @@ class FilesystemAssetRepository:
             meta_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         except (json.JSONDecodeError, OSError):
             raise NotFoundError("语音资产元数据损坏")
+
+    def update_voice_meta(
+        self,
+        voice_id: str,
+        name: str | None = None,
+        tags: list[str] | None = None,
+    ) -> VoiceAsset:
+        """更新音色资产的 name / tags / revision / updated_at。Router 不调用私有方法。"""
+        meta_path = self._voice_meta_path(voice_id)
+        if not meta_path.exists():
+            raise NotFoundError("语音资产不存在")
+        try:
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            raise NotFoundError("语音资产元数据损坏")
+
+        if name is not None:
+            data["name"] = name
+        if tags is not None:
+            data["tags"] = tags
+        data["revision"] = data.get("revision", 1) + 1
+        data["updated_at"] = utc_now()
+
+        tmp = meta_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(meta_path)
+
+        return VoiceAsset.from_dict(data)
+
+    def save_voice_from_temp(
+        self,
+        temp_path: Path,
+        name: str,
+        tags: list[str],
+        duration_ms: int,
+        sample_rate: int,
+        channels: int,
+        audio_format: str,
+    ) -> VoiceAsset:
+        """从临时文件保存音色：计算 sha256，原子写入，清理临时文件。"""
+        import shutil
+
+        voice_id = uuid.uuid4().hex[:16]
+        now = utc_now()
+
+        voice_dir = self._voice_dir(voice_id)
+        voice_dir.mkdir(parents=True, exist_ok=True)
+
+        data_path = self._voice_data_path(voice_id, audio_format)
+
+        # 计算 sha256
+        sha256_hash = hashlib.sha256()
+        with temp_path.open("rb") as f:
+            while chunk := f.read(8192):
+                sha256_hash.update(chunk)
+
+        # 原子写入
+        try:
+            shutil.move(str(temp_path), str(data_path))
+        except Exception:
+            # fallback: copy then delete
+            shutil.copy2(str(temp_path), str(data_path))
+            temp_path.unlink(missing_ok=True)
+
+        asset = VoiceAsset(
+            voice_id=voice_id,
+            name=name,
+            storage_path=f"assets/voices/{voice_id[:2]}/{voice_id}.{audio_format}",
+            duration_ms=duration_ms,
+            sample_rate=sample_rate,
+            channels=channels,
+            format=audio_format,
+            sha256=sha256_hash.hexdigest(),
+            created_at=now,
+            updated_at=now,
+            tags=tags,
+            revision=1,
+        )
+
+        meta_path = self._voice_meta_path(voice_id)
+        meta_path.write_text(json.dumps(asset.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+        return asset

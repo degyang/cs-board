@@ -16,13 +16,29 @@ from csboard.domain.provider_types import ProviderProfile, ProviderType
 
 
 class ProviderFactory:
-    """根据 ProviderProfile 和 SecretStore 构造 Adapter 实例。"""
+    """根据 ServiceDefinition 和 SecretStore 构造 Adapter 实例。
 
-    def __init__(self, data_dir: Path, encrypted: bool = True) -> None:
+    新的生产路径通过 create_adapter(service_definition) 构造 Adapter。
+    SecretStore 必须由外部注入（单一组合根），不得自行创建。
+    """
+
+    def __init__(
+        self,
+        data_dir: Path,
+        secret_store: SecretStoreProtocol | None = None,
+        is_encrypted: bool = True,
+        **kwargs: Any,
+    ) -> None:
         self._data_dir = data_dir
         self._profiles_dir = data_dir / ".profiles"
         self._profiles_dir.mkdir(parents=True, exist_ok=True)
-        self._secret_store, self._is_encrypted = create_secret_store(data_dir, encrypted)
+        if secret_store is not None:
+            self._secret_store = secret_store
+            self._is_encrypted = is_encrypted
+        else:
+            # 兼容旧调用：自行创建（但生产路径应注入）
+            encrypted = kwargs.get("encrypted", True)
+            self._secret_store, self._is_encrypted = create_secret_store(data_dir, encrypted)
         self._profiles: dict[str, ProviderProfile] = {}
         self._load_profiles()
 

@@ -27,10 +27,15 @@ from csboard.ports.providers import AlignmentPort, ImageModelPort, MediaPort, Re
 
 @dataclass(slots=True)
 class MountainCommands:
-    """Entry-point-neutral commands used by CLI now and Web/Skills later."""
+    """Entry-point-neutral commands used by CLI now and Web/Skills later.
+
+    service_resolver: 动态服务解析器（用于获取 ServiceDefinition）
+    provider_factory: 适配器工厂（用于 create_adapter(service_definition)）
+    """
 
     root: Path
     provider_factory: Any | None = None  # ProviderFactory for real adapters
+    service_resolver: Any | None = None  # ServiceResolver for dynamic resolution
     repository: FilesystemTaskRepository = field(init=False)
     telemetry: JsonlTelemetry = field(init=False)
     pipeline: PipelineOrchestrator = field(init=False)
@@ -268,7 +273,11 @@ class MountainCommands:
             return [self._default_visual_item(unit)]
 
         try:
-            text_model = self.provider_factory.create_text()
+            if self.service_resolver is not None:
+                text_def = self.service_resolver.resolve("text_generation")
+                text_model = self.provider_factory.create_adapter(text_def)
+            else:
+                text_model = self.provider_factory.create_text()
         except Exception:
             warnings.append(f"{unit['unit_id']}: TextModel 创建失败，使用默认锚定")
             self.telemetry.append_event(task_id, run_id, {
@@ -550,7 +559,7 @@ class MountainCommands:
         return self.generate_visual_anchors(task_id, run_id, context)
 
     def _exec_clone_voice(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for clone-voice. Uses ProviderFactory for adapters."""
+        """Stage executor for clone-voice. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 TTS/alignment/media adapter")
 
@@ -559,14 +568,30 @@ class MountainCommands:
         if not reference_audio:
             raise DomainError("VALIDATION_ERROR", "任务请求中缺少 reference_audio 字段")
 
-        # 从 ProviderFactory 获取 adapters（不从 request.json 读取 provider 配置）
-        tts = self.provider_factory.create_tts()
-        alignment = self.provider_factory.create_alignment()
-        media = self.provider_factory.create_media()
+        # 解析相对路径：inputs/reference.wav → task_dir/inputs/reference.wav
+        ref_path = Path(reference_audio)
+        if not ref_path.is_absolute():
+            ref_path = self.repository.task_dir(task_id) / ref_path
+        if not ref_path.exists():
+            raise DomainError("VALIDATION_ERROR", f"参考音频文件不存在: {reference_audio}")
+
+        # 动态解析：speech_synthesis + speech_alignment
+        if self.service_resolver is not None:
+            tts_def = self.service_resolver.resolve("speech_synthesis")
+            tts = self.provider_factory.create_adapter(tts_def)
+            alignment_def = self.service_resolver.resolve("speech_alignment")
+            alignment = self.provider_factory.create_adapter(alignment_def)
+            media_def = self.service_resolver.resolve("media")
+            media = self.provider_factory.create_adapter(media_def)
+        else:
+            # 回退：旧固定路径（CLI 兼容）
+            tts = self.provider_factory.create_tts()
+            alignment = self.provider_factory.create_alignment()
+            media = self.provider_factory.create_media()
 
         return self.clone_voice(
             task_id, run_id, tts, alignment, media,
-            reference_audio=Path(reference_audio),
+            reference_audio=ref_path,
             context=context,
         )
 
@@ -675,17 +700,25 @@ class MountainCommands:
         }
 
     def _exec_plan_storyboard(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for plan-storyboard. Uses ProviderFactory for text model."""
+        """Stage executor for plan-storyboard. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 text model")
-        text_model = self.provider_factory.create_text_model()
+        if self.service_resolver is not None:
+            text_def = self.service_resolver.resolve("text_generation")
+            text_model = self.provider_factory.create_adapter(text_def)
+        else:
+            text_model = self.provider_factory.create_text_model()
         return self.plan_storyboard(task_id, run_id, text_model, context)
 
     def _exec_generate_illustrations(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for generate-illustrations. Uses ProviderFactory for image model."""
+        """Stage executor for generate-illustrations. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 image model")
-        image_model = self.provider_factory.create_image_model()
+        if self.service_resolver is not None:
+            image_def = self.service_resolver.resolve("image_generation")
+            image_model = self.provider_factory.create_adapter(image_def)
+        else:
+            image_model = self.provider_factory.create_image_model()
         return self.generate_illustrations(task_id, run_id, image_model, context=context)
 
     def render_visuals(
@@ -835,17 +868,25 @@ class MountainCommands:
         }
 
     def _exec_render_visuals(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for render-visuals. Uses ProviderFactory for renderer."""
+        """Stage executor for render-visuals. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 renderer")
-        renderer = self.provider_factory.create_renderer()
+        if self.service_resolver is not None:
+            render_def = self.service_resolver.resolve("rendering")
+            renderer = self.provider_factory.create_adapter(render_def)
+        else:
+            renderer = self.provider_factory.create_renderer()
         return self.render_visuals(task_id, run_id, renderer, context)
 
     def _exec_compose_video(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for compose-video. Uses ProviderFactory for media."""
+        """Stage executor for compose-video. Uses ServiceResolver + ProviderFactory.create_adapter."""
         if self.provider_factory is None:
             raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 media adapter")
-        media = self.provider_factory.create_media()
+        if self.service_resolver is not None:
+            media_def = self.service_resolver.resolve("media")
+            media = self.provider_factory.create_adapter(media_def)
+        else:
+            media = self.provider_factory.create_media()
         return self.compose_video(task_id, run_id, media, context)
 
     @staticmethod

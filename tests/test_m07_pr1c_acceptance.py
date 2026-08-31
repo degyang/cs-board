@@ -49,7 +49,8 @@ def tmp_data_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def provider_factory(tmp_data_dir: Path) -> ProviderFactory:
     """创建 ProviderFactory 实例。"""
-    return ProviderFactory(tmp_data_dir, encrypted=False)
+    secret_store, _ = create_secret_store(tmp_data_dir)
+    return ProviderFactory(tmp_data_dir, secret_store=secret_store)
 
 
 @pytest.fixture
@@ -145,16 +146,23 @@ class TestProviderFactorySoleEntry:
     """验证所有 6 个阶段都从 ProviderFactory 获取 adapter。"""
 
     def test_exec_clone_voice_uses_factory(self, commands: MountainCommands, tmp_data_dir: Path):
-        """clone-voice 阶段从 ProviderFactory 获取 tts、alignment、media adapter。"""
+        """clone-voice 阶段通过 ServiceResolver→create_adapter 获取 tts、alignment、media adapter。"""
+        from csboard.application.service_resolver import ServiceResolver
+
         # 创建项目
         result = commands.create_task("测试项目")
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        # 写入 request.json（只包含制作输入，不包含 provider 配置）
+        # 创建实际的参考音频文件（在 task 目录下）
+        ref_audio = tmp_data_dir / "tasks" / task_id / "inputs" / "reference.wav"
+        ref_audio.parent.mkdir(parents=True, exist_ok=True)
+        ref_audio.write_bytes(b"RIFF" + b"\x00" * 1000)
+
+        # 写入 request.json（相对路径）
         request_path = tmp_data_dir / "tasks" / task_id / "request.json"
         request_path.write_text(
-            json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
+            json.dumps({"script": "测试文案", "reference_audio": "inputs/reference.wav"}),
             encoding="utf-8",
         )
 
@@ -163,10 +171,16 @@ class TestProviderFactorySoleEntry:
         mock_tts = MagicMock()
         mock_alignment = MagicMock()
         mock_media = MagicMock()
-        mock_factory.create_tts.return_value = mock_tts
-        mock_factory.create_alignment.return_value = mock_alignment
-        mock_factory.create_media.return_value = mock_media
+        mock_factory.create_adapter.return_value = mock_tts  # create_adapter is the unified path
         commands.provider_factory = mock_factory
+
+        # Mock ServiceResolver to return mock ServiceDefinitions
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.side_effect = lambda cap: MagicMock(
+            capability=cap, adapter_type="test",
+            config={}, required_secrets=[],
+        )
+        commands.service_resolver = mock_resolver
 
         # 直接调用 _exec_clone_voice（不 patch clone_voice 方法）
         # 因为 clone_voice 会尝试读取 av-plan 等 artifacts，会失败
@@ -179,10 +193,15 @@ class TestProviderFactorySoleEntry:
         except Exception:
             pass
 
-        # 验证 ProviderFactory 的 create 方法被调用
-        mock_factory.create_tts.assert_called_once()
-        mock_factory.create_alignment.assert_called_once()
-        mock_factory.create_media.assert_called_once()
+        # 验证 ServiceResolver resolve 被调用（speech_synthesis, speech_alignment, media）
+        assert mock_resolver.resolve.call_count >= 2, (
+            f"ServiceResolver.resolve 应至少调用 2 次，实际 {mock_resolver.resolve.call_count} 次"
+        )
+
+        # 验证 create_adapter 被调用（ServiceResolver→create_adapter 是生产路径）
+        assert mock_factory.create_adapter.call_count >= 2, (
+            f"create_adapter 应至少调用 2 次，实际 {mock_factory.create_adapter.call_count} 次"
+        )
 
         # 验证 request.json 不包含 provider URL/mode/API Key
         saved_request = json.loads(request_path.read_text(encoding="utf-8"))

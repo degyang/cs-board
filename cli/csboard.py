@@ -160,7 +160,7 @@ def parser() -> argparse.ArgumentParser:
     service_secret_set = service_actions.add_parser("secret-set")
     service_secret_set.add_argument("--id", required=True)
     service_secret_set.add_argument("--key", required=True)
-    service_secret_set.add_argument("--value", required=True)
+    service_secret_set.add_argument("--value", help="Secret value; if omitted, reads from stdin (getpass)")
     service_secret_delete = service_actions.add_parser("secret-delete")
     service_secret_delete.add_argument("--id", required=True)
     service_secret_delete.add_argument("--key", required=True)
@@ -198,7 +198,7 @@ def parser() -> argparse.ArgumentParser:
 def _get_service_registry(data_dir: Path):
     from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
     from csboard.adapters.secrets import create_secret_store
-    secret_store, _ = create_secret_store(data_dir, encrypted=False)
+    secret_store, _ = create_secret_store(data_dir)
     return FilesystemServiceRegistry(data_dir, secret_store)
 
 
@@ -208,7 +208,20 @@ def _get_asset_repository(data_dir: Path):
 
 
 def execute(args: argparse.Namespace) -> dict[str, Any]:
-    commands = MountainCommands(args.data_dir)
+    from csboard.adapters.secrets import create_secret_store
+    from csboard.adapters.provider_factory import ProviderFactory
+    from csboard.application.service_resolver import ServiceResolver
+
+    secret_store, _ = create_secret_store(args.data_dir)
+    registry = _get_service_registry(args.data_dir)
+    service_resolver = ServiceResolver(registry)
+    provider_factory = ProviderFactory(args.data_dir, secret_store=secret_store)
+
+    commands = MountainCommands(
+        args.data_dir,
+        provider_factory=provider_factory,
+        service_resolver=service_resolver,
+    )
 
     # ── task ──────────────────────────────────────────────────────
     if (args.resource, args.action) == ("task", "create"):
@@ -426,7 +439,6 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     # ── service ──────────────────────────────────────────────────────
     if args.resource == "service":
         from csboard.domain.service_definition import ServiceDefinition
-        registry = _get_service_registry(args.data_dir)
         if args.action == "list":
             services = registry.list_services(capability=args.capability, enabled=args.enabled)
             return {"items": [s.to_dict() for s in services], "total": len(services)}
@@ -448,7 +460,9 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "probe":
             return registry.probe_service(args.id)
         if args.action == "secret-set":
-            registry.set_secret(args.id, args.key, args.value)
+            import getpass
+            value = args.value or getpass.getpass(f"Enter secret value for {args.key}: ")
+            registry.set_secret(args.id, args.key, value)
             return {"ok": True}
         if args.action == "secret-delete":
             registry.delete_secret(args.id, args.key)
@@ -482,7 +496,6 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 writable = False
             return {"writable": writable, "assets_available": (data_dir / "assets").exists()}
         if args.action == "diagnostics":
-            registry = _get_service_registry(args.data_dir)
             services = registry.list_services()
             return {
                 "services": [{"service_id": s.service_id, "enabled": s.enabled} for s in services],

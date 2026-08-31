@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -23,6 +23,9 @@ class VoiceAsset:
     sha256: str
     created_at: str
     is_active: bool = True
+    tags: list[str] = field(default_factory=list)
+    revision: int = 1
+    updated_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -38,6 +41,9 @@ class VoiceAsset:
             channels=int(value["channels"]),
             format=str(value["format"]),
             sha256=str(value["sha256"]),
-            created_at=str(value["created_at"]),
+            created_at=str(value.get("created_at", "")),
             is_active=bool(value.get("is_active", True)),
+            tags=list(value.get("tags", [])),
+            revision=int(value.get("revision", 1)),
+            updated_at=str(value.get("updated_at", "")),
         )
