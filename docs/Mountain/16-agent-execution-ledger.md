@@ -1428,6 +1428,81 @@ docs(mountain): report task input and start boundary status
 
 先本地提交，不推送。报告必须给出 implementation commit、具体测试名、门禁原始摘要、三个 endpoint 的生产调用关系和仍未收口的 Router 债务；执行者不得自行宣布最终审核通过。
 
+## 4E. CCB Task 输入边界单点纠偏
+
+### 4E.1 指令编号与审核结论
+
+```text
+instruction: CCB-TASK-INPUT-ATOMIC-09
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 98f4061 refactor(mountain): move task input and start semantics into application
+reviewed report: c383467 docs(mountain): report task input and start boundary status
+result: rejected; 430 tests pass but upload safety and atomicity requirements are not implemented
+```
+
+保留两个提交，只形成增量 follow-up。不得开始 artifacts/events/logs/final 等后续收口。
+
+### 4E.2 审核实证
+
+1. Router 使用 `await reference.read()` 将完整上传一次性读入内存，没有分块 staging、没有大小上限；报告将其描述为完成，与 §4D.2.1 不符。
+2. `MountainCommands.save_inputs()` 先 `save_input_file()`、再 `save_request()`，最后才运行 `prepare_script()`。如果规则或文案整理失败，新音频及 request 已覆盖，违反“失败保留旧 manifest/reference 且无 partial”。
+3. Repository 的 `save_input_file()` 与 `save_request()` 分别原子替换单文件，但二者和 Task preparation 不是一个原子提交单元；单文件原子不等于业务事务原子。
+4. 新测试只验证成功更新不带 reference；没有验证上传新 reference 后发生校验/提交失败时旧音频 sha256、旧 request 和旧 Task preparation 均保持不变。
+
+### 4E.3 唯一修复目标
+
+只修复 Task 输入上传的有界 staging 和业务原子提交：
+
+1. Router 使用固定 chunk 循环将 `UploadFile` 写入由安全临时目录创建的唯一 staging 文件；设置明确的最大字节数。超过上限立即返回 `400 body.error.code=VALIDATION_ERROR`，关闭上传并清理 staging。禁止 `await reference.read()` 无参数，禁止把完整音频 bytes 传入 Application。
+2. Application 接收只读 staging descriptor/path 加原始文件名/媒体信息。先完成 Task 存在性、脚本、规则、扩展名、非空、大小等全部校验，并完成 `prepare_script()`，然后才允许进入持久化提交。
+3. 在 Repository/专用输入存储 port 增加一个业务级原子提交接口，一次提交 request、Task preparation 和可选 reference。可使用同目录临时文件、备份与锁，但必须保证任一 replace/write/save 失败时恢复原 request、Task 和 reference，并清理所有临时/备份文件。
+4. 不上传新 reference 时保留旧 reference；上传不同扩展的新 reference 成功后，旧 reference 文件不得被元数据误选。不要通过扫描目录猜当前 reference，必须以 manifest/request 指向的相对路径读取元数据。
+5. Router `finally` 清理 staging；Application/Repository 成功或失败均不得留下 `.partial`、`.tmp`、`.bak` 或 staging 文件。
+6. 保持已经通过的 GET inputs 与 start 错误契约，不改公开 DTO 和 CLI 参数。
+
+### 4E.4 强制行为测试
+
+必须新增真实行为测试：
+
+- 使用会记录 `read(size)` 参数的 UploadFile/HTTP 上传证明分块读取，且不存在无参全量 read；
+- 恰好上限成功、超过上限失败，失败后 staging 与任务正式目录无新文件；
+- 初次输入成功后，记录 request 内容、Task preparation、reference sha256；随后上传新 reference 并给出非法规则导致 `prepare_script` 失败，三者完全不变；
+- 注入 Repository 在第二/第三个 replace 时失败，验证全部旧状态恢复且临时文件为零；
+- 成功用 `.mp3` 替换旧 `.wav` 后，GET inputs 只报告当前 `.mp3` 的 filename/size，不能扫描命中旧 `.wav`；
+- 缺输入 start 和缺 Service start 的既有测试继续通过。
+
+不得用源码字符串、只检查文件存在、mock 调用次数或“状态码不是 500”替代上述最终状态断言。
+
+### 4E.5 门禁与提交
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+fix(mountain): make task input upload bounded and atomic
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-atomic-09-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report bounded atomic input status
+```
+
+先本地提交，不推送。报告必须明确 staging 上限、事务策略、故障注入测试和两个 commit hash；执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
