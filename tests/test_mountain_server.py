@@ -176,3 +176,84 @@ def test_default_encrypted_startup(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert resp.status_code == 200
     data = resp.json()
     assert data["checks"]["secret_store"]["encrypted"] is True
+
+
+def test_inputs_and_start_boundary(client: TestClient):
+    """验证 inputs 和 start 端点不直接访问文件系统。"""
+    import io
+
+    # 创建任务
+    resp = client.post("/api/v1/tasks", json={"title": "边界测试"})
+    assert resp.status_code == 200
+    task_id = resp.json()["task_id"]
+    run_id = resp.json()["run_id"]
+
+    # 上传输入
+    audio = io.BytesIO(b"\x00" * 4096)
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "这是一段测试文案，用于验证输入保存功能是否正常工作。"},
+        files={"reference": ("test.wav", audio, "audio/wav")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["input_saved"] is True
+
+    # 读取输入
+    resp = client.get(f"/api/v1/tasks/{task_id}/inputs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["saved"] is True
+    assert "测试" in data["inputs"]["script"]
+    assert data["reference_audio"]["uploaded"] is True
+
+    # 启动（缺服务应返回 CAPABILITY_NOT_AVAILABLE）
+    resp = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
+    assert resp.status_code == 400
+    error = resp.json()["error"]
+    assert error["code"] == "CAPABILITY_NOT_AVAILABLE"
+
+
+def test_start_without_inputs_returns_validation_error(client: TestClient):
+    """未上传输入时 start 返回 VALIDATION_ERROR。"""
+    # 创建任务
+    resp = client.post("/api/v1/tasks", json={"title": "无输入测试"})
+    assert resp.status_code == 200
+    task_id = resp.json()["task_id"]
+    run_id = resp.json()["run_id"]
+
+    # 尝试启动（无输入）
+    resp = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
+    assert resp.status_code == 400
+    error = resp.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert "文案" in error["message"]
+
+
+def test_update_inputs_preserves_old_reference(client: TestClient):
+    """更新输入不带新 reference 时保留旧文件。"""
+    import io
+
+    # 创建任务并上传初始输入
+    resp = client.post("/api/v1/tasks", json={"title": "保留测试"})
+    assert resp.status_code == 200
+    task_id = resp.json()["task_id"]
+
+    audio = io.BytesIO(b"\x00" * 4096)
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "初始文案用于测试保留功能是否正常。"},
+        files={"reference": ("test.wav", audio, "audio/wav")},
+    )
+    assert resp.status_code == 200
+
+    # 更新输入（不带新 reference）
+    resp = client.post(
+        f"/api/v1/tasks/{task_id}/inputs",
+        data={"script": "更新后的文案用于测试保留功能是否正常。"},
+    )
+    assert resp.status_code == 200
+
+    # 验证 reference 保留
+    resp = client.get(f"/api/v1/tasks/{task_id}/inputs")
+    assert resp.status_code == 200
+    assert resp.json()["reference_audio"]["uploaded"] is True

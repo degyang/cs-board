@@ -237,7 +237,8 @@ class MountainCommands:
         self,
         task_id: str,
         script: str,
-        reference_audio_path: str | None = None,
+        reference_audio_data: bytes | None = None,
+        reference_audio_filename: str | None = None,
         style: str = "极简粗线简笔白板风",
         include_subtitles: bool = True,
         pen_text: str = "",
@@ -254,12 +255,18 @@ class MountainCommands:
         if len(script.strip()) < 10:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
-        # 读取已有 request 以保留 reference_audio
-        request_path = self.repository.task_dir(task_id) / "request.json"
-        existing = {}
-        if request_path.exists():
-            existing = json.loads(request_path.read_text(encoding="utf-8"))
+        # 保存音频文件（如果有）
+        reference_audio_path = None
+        if reference_audio_data and reference_audio_filename:
+            suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
+            if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
+                raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
+            reference_audio_path = str(self.repository.save_input_file(
+                task_id, f"reference{suffix}", reference_audio_data
+            ))
 
+        # 读取已有 request 以保留 reference_audio
+        existing = self.repository.get_request(task_id) or {}
         request_data = {
             "script": script.strip(),
             "reference_audio": reference_audio_path if reference_audio_path else existing.get("reference_audio"),
@@ -274,9 +281,7 @@ class MountainCommands:
         }
 
         # 原子写入 request.json
-        request_path.write_text(
-            json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        self.repository.save_request(task_id, request_data)
 
         # 文案整理
         try:
@@ -290,21 +295,95 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", str(exc))
 
         # 更新 task.json 的 script_preparation
-        task_json_path = self.repository.task_dir(task_id) / "task.json"
-        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+        task = self.repository.get_task(task_id)
+        task_data = task.to_dict()
         task_data["script_preparation"] = preparation
         task_data["visual_anchor_enabled"] = visual_anchor_enabled
-        task_json_path.write_text(
-            json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        self.repository.save_task(Task.from_dict(task_data))
 
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_event(task_id, task_data.get("active_run_id", ""), {
-            "event_type": "InputsSaved",
-            "command": "task.save_inputs",
-        })
+        run_id = task_data.get("active_run_id", "")
+        if run_id:
+            self.telemetry.append_event(task_id, run_id, {
+                "event_type": "InputsSaved",
+                "command": "task.save_inputs",
+            })
 
         return {"ok": True, "task_id": task_id, "input_saved": True}
+
+    def get_inputs(self, task_id: str) -> dict[str, Any]:
+        """读取已保存的任务输入。"""
+        self.repository.get_task(task_id)  # validate task exists
+
+        request_data = self.repository.get_request(task_id)
+        if not request_data:
+            return {
+                "task_id": task_id,
+                "saved": False,
+                "inputs": None,
+                "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
+            }
+
+        audio_meta = self.repository.get_input_audio(task_id) or {
+            "uploaded": False, "filename": None, "content_type": None, "size_bytes": None
+        }
+
+        task = self.repository.get_task(task_id)
+        task_data = task.to_dict()
+        preparation = task_data.get("script_preparation")
+        visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
+
+        return {
+            "task_id": task_id,
+            "saved": True,
+            "inputs": {
+                "script": request_data.get("script", ""),
+                "style": request_data.get("style", "极简粗线简笔白板风"),
+                "include_subtitles": request_data.get("include_subtitles", True),
+                "pen_text": request_data.get("pen_text", ""),
+                "stroke_detail": request_data.get("stroke_detail", "detailed"),
+            },
+            "reference_audio": audio_meta,
+            "rules": {
+                "target_chars": request_data.get("target_chars", 80),
+                "min_chars": request_data.get("min_chars", 35),
+                "max_chars": request_data.get("max_chars", 140),
+            },
+            "script_preparation": preparation,
+            "visual_anchor_enabled": visual_anchor_enabled,
+        }
+
+    def start_run(
+        self,
+        task_id: str,
+        run_id: str,
+        policy: str = "auto",
+        context: CommandContext | None = None,
+    ) -> dict[str, Any]:
+        """启动运行：检查输入和服务可用性。"""
+        # 检查输入是否已保存
+        request_data = self.repository.get_request(task_id)
+        if not request_data:
+            raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
+
+        # 检查 capability 可用性
+        if self.service_resolver is not None:
+            from csboard.application.service_resolver import STAGE_CAPABILITY_MAP
+            unavailable = []
+            for stage_name, capability in STAGE_CAPABILITY_MAP.items():
+                try:
+                    self.service_resolver.resolve(capability)
+                except DomainError:
+                    unavailable.append({"stage": stage_name, "capability": capability})
+            if unavailable:
+                raise DomainError(
+                    "CAPABILITY_NOT_AVAILABLE",
+                    "缺少必要的服务配置",
+                    details={"unavailable": unavailable},
+                )
+
+        # 启动 pipeline
+        return self.pipeline_run(task_id, run_id, policy, context=context)
 
     def cancel_run(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
         """取消运行。"""

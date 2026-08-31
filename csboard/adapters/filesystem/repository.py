@@ -71,6 +71,43 @@ class FilesystemTaskRepository:
         with self.task_lock(run.task_id):
             self._write_json(self.run_dir(run.task_id, run.run_id) / "run.json", run.to_dict())
 
+    def save_request(self, task_id: str, data: dict) -> None:
+        """原子写入 request.json"""
+        with self.task_lock(task_id):
+            self._write_json(self.task_dir(task_id) / "request.json", data)
+
+    def get_request(self, task_id: str) -> dict | None:
+        """读取 request.json，不存在返回 None"""
+        path = self.task_dir(task_id) / "request.json"
+        if not path.exists():
+            return None
+        return self._read_json(path)
+
+    def save_input_file(self, task_id: str, filename: str, data: bytes) -> Path:
+        """保存输入文件到 inputs/ 目录，返回相对路径"""
+        input_dir = self.task_dir(task_id) / "inputs"
+        with self.task_lock(task_id):
+            input_dir.mkdir(parents=True, exist_ok=True)
+            target = input_dir / filename
+            temporary = target.with_suffix(f"{target.suffix}.partial")
+            temporary.write_bytes(data)
+            temporary.replace(target)
+        return Path(f"inputs/{filename}")
+
+    def get_input_audio(self, task_id: str) -> dict | None:
+        """获取参考音频元信息"""
+        input_dir = self.task_dir(task_id) / "inputs"
+        for suffix in (".wav", ".mp3", ".m4a", ".ogg", ".flac"):
+            candidate = input_dir / f"reference{suffix}"
+            if candidate.is_file():
+                return {
+                    "uploaded": True,
+                    "filename": f"reference{suffix}",
+                    "content_type": f"audio/{suffix.lstrip('.')}",
+                    "size_bytes": candidate.stat().st_size,
+                }
+        return None
+
     def read_json(self, path: Path) -> dict:
         return self._read_json(path)
 

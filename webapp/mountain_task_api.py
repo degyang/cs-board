@@ -110,27 +110,18 @@ def mountain_task_router(
         visual_anchor_enabled: bool = Form(True),
     ):
         """上传任务输入（文案和参考音频）— 委托 Application 层。"""
-        # 先处理文件上传（Router 职责：HTTP 层）
-        reference_audio_path = None
+        reference_audio_data = None
+        reference_audio_filename = None
         if reference is not None:
-            suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
-            if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
-                return domain_error_response(DomainError("VALIDATION_ERROR", "参考音频格式不支持"), status_code=400)
-            input_dir = repository.task_dir(task_id) / "inputs"
-            input_dir.mkdir(parents=True, exist_ok=True)
-            target = input_dir / f"reference{suffix}"
-            temporary = target.with_suffix(f"{suffix}.partial")
-            with temporary.open("wb") as output:
-                while chunk := await reference.read(1024 * 1024):
-                    output.write(chunk)
-            temporary.replace(target)
-            reference_audio_path = f"inputs/reference{suffix}"
+            reference_audio_data = await reference.read()
+            reference_audio_filename = reference.filename
 
         try:
             return commands.save_inputs(
                 task_id,
                 script=script,
-                reference_audio_path=reference_audio_path,
+                reference_audio_data=reference_audio_data,
+                reference_audio_filename=reference_audio_filename,
                 style=style,
                 include_subtitles=include_subtitles,
                 pen_text=pen_text,
@@ -146,93 +137,19 @@ def mountain_task_router(
 
     @router.get("/tasks/{task_id}/inputs")
     def get_inputs(task_id: str):
-        """读取已保存的任务输入。"""
+        """读取已保存的任务输入 — 委托 Application 层。"""
         try:
-            repository.get_task(task_id)
+            return commands.get_inputs(task_id)
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
-
-        request_path = repository.task_dir(task_id) / "request.json"
-        if not request_path.exists():
-            return {
-                "task_id": task_id,
-                "saved": False,
-                "inputs": None,
-                "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
-            }
-
-        request_data = json.loads(request_path.read_text(encoding="utf-8"))
-
-        input_dir = repository.task_dir(task_id) / "inputs"
-        audio_meta: dict[str, Any] = {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None}
-        for suffix in (".wav", ".mp3", ".m4a", ".ogg", ".flac"):
-            candidate = input_dir / f"reference{suffix}"
-            if candidate.is_file():
-                audio_meta = {
-                    "uploaded": True,
-                    "filename": f"reference{suffix}",
-                    "content_type": f"audio/{suffix.lstrip('.')}",
-                    "size_bytes": candidate.stat().st_size,
-                }
-                break
-
-        task_json_path = repository.task_dir(task_id) / "task.json"
-        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
-        preparation = task_data.get("script_preparation")
-        visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
-
-        return {
-            "task_id": task_id,
-            "saved": True,
-            "inputs": {
-                "script": request_data.get("script", ""),
-                "style": request_data.get("style", "极简粗线简笔白板风"),
-                "include_subtitles": request_data.get("include_subtitles", True),
-                "pen_text": request_data.get("pen_text", ""),
-                "stroke_detail": request_data.get("stroke_detail", "detailed"),
-            },
-            "reference_audio": audio_meta,
-            "rules": {
-                "target_chars": request_data.get("target_chars", 80),
-                "min_chars": request_data.get("min_chars", 35),
-                "max_chars": request_data.get("max_chars", 140),
-            },
-            "script_preparation": preparation,
-            "visual_anchor_enabled": visual_anchor_enabled,
-        }
 
     # ── Run Operations ──────────────────────────────────────────────────
 
     @router.post("/tasks/{task_id}/runs/{run_id}/start")
     def start_run(task_id: str, run_id: str, policy: str = "auto"):
-        """启动标准流程。"""
+        """启动标准流程 — 委托 Application 层。"""
         try:
-            request_path = repository.task_dir(task_id) / "request.json"
-            if not request_path.exists():
-                return domain_error_response(
-                    DomainError("VALIDATION_ERROR", "请先上传文案与参考音频"),
-                    status_code=400,
-                )
-
-            # 使用 ServiceResolver 检查 capability 可用性
-            if service_resolver is not None:
-                from csboard.application.service_resolver import STAGE_CAPABILITY_MAP
-                unavailable = []
-                for stage_name, capability in STAGE_CAPABILITY_MAP.items():
-                    try:
-                        service_resolver.resolve(capability)
-                    except DomainError:
-                        unavailable.append({"stage": stage_name, "capability": capability})
-                if unavailable:
-                    return domain_error_response(
-                        DomainError("CAPABILITY_NOT_AVAILABLE", "缺少必要的服务配置"),
-                        status_code=400,
-                        details={"unavailable": unavailable},
-                    )
-
-            return commands.pipeline_run(
-                task_id, run_id, policy, context=_context()
-            )
+            return commands.start_run(task_id, run_id, policy, context=_context())
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
