@@ -1833,6 +1833,82 @@ docs(mountain): report verified task input transactions
 
 先本地提交，不推送。报告逐行列出故障矩阵结果、真实 `/mnt/d` 路径类别（隐藏随机目录名）、两个 commit hash和 clean status；任何矩阵未完成只能标“执行中”。
 
+## 4H. CCB 输入事务并发与真实故障注入纠偏
+
+### 4H.1 指令编号与审核结论
+
+```text
+instruction: CCB-TASK-INPUT-TRANSACTION-12
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 45d7b97 fix(mountain): prove and restore task input transactions
+reviewed report: c201d4e docs(mountain): report verified task input transactions
+result: rejected; tests pass but production serialization and fault-injection evidence are invalid
+```
+
+保留上述提交，只形成增量 follow-up commit；不得 amend、squash、reset 或扩大到其他 Router、资产、设置功能。审核者已复现专项 `20 passed`、全量 `455 passed, 5 skipped`；拒绝原因不是门禁失败，而是门禁没有证明生产实现。
+
+### 4H.2 已确认阻断问题
+
+1. `FilesystemTaskRepository.commit_inputs()` 在 `45d7b97` 中移除了原有 `with self.task_lock(task_id)`。同一 Task 的两个并发保存可交错 rename、backup 和 rollback，破坏 request/task/reference 一致性。
+2. `FaultInjectRepository._install_target()` 完整复制生产算法。故障测试运行的是测试副本，不是生产算法；生产代码回归时测试仍可能全绿。
+3. 当前故障只在步骤开始前抛出，没有覆盖旧文件已备份、新文件已安装后的半提交状态。
+4. `MountainCommands.save_inputs()` 在 Repository 锁外读取旧 request 来保留 reference；并发时，无新音频的后写事务可能用过期快照覆盖刚提交的新 reference。
+
+### 4H.3 唯一修复目标
+
+1. 对同一 `task_id` 的完整输入提交恢复 Repository 级串行化。锁覆盖读取当前 request/task/reference、形成最终提交数据、备份、安装、回滚和清理；不同 Task 不得共用全局事务锁。
+2. “未上传新 reference”必须在锁内从当前已提交状态保留 reference。可通过显式 `preserve_reference`、Repository 内合并或等价清晰接口实现；不得依赖 Application 锁外旧快照，也不得用空字符串猜三态。
+3. 在生产 Repository 中增加最窄、默认 no-op 的故障注入 seam，例如 `_input_txn_checkpoint(name, context)`。测试子类只能覆盖该 hook 抛错，不得覆盖或复制 `commit_inputs()`、`_install_target()`、回滚或清理算法。
+4. checkpoint 至少覆盖 request/task/reference 各自的 `after_backup` 和 `after_install`；首次保存无 backup 时仍覆盖对应 `after_install`。
+5. 任一 checkpoint 抛错后，提交前 request、task、reference 内容和文件集合完全恢复；本事务 `.bak`、`.tmp`、`.partial`、staging 和跨扩展新文件为零。
+6. 成功并发保存产生自洽状态：`request.script`、`task.script_preparation` 和 reference 指向属于一个已完成事务。明确并测试以取得 Task 事务锁后的提交顺序为准。
+
+### 4H.4 强制生产行为测试
+
+- 测试子类只覆盖生产 checkpoint hook；测试中不得存在第二份 `_install_target` 或 rollback 实现。
+- 首次无 reference：request/task 的 `after_install` 故障后恢复空状态。
+- 首次有 reference：request/task/reference 的 `after_install` 故障后恢复空状态。
+- 已有同扩展 reference：request/task/reference 的 `after_backup`、`after_install` 故障后，三个旧对象 sha256/JSON 均不变。
+- 已有跨扩展 reference：相同矩阵后只存在旧扩展 reference，内容与 manifest 指向一致。
+- 并发测试用 Barrier/Event 或等价同步原语让事务 A 停在生产 checkpoint，再启动事务 B；断言 B 在 A 释放前不能进入同一 Task 提交区。不得用 `sleep` 猜竞态。
+- 覆盖“事务 A 上传新 reference、事务 B 不上传 reference”的确定顺序，证明 B 保留 A 最新 reference，而非锁外旧快照。
+- 增加不同 Task 可并行测试，证明没有退化为全局锁。
+- HTTP 404、大小上限、`/mnt/d` 上传和 INTERNAL_ERROR 脱敏继续通过。
+
+禁止源码字符串断言替代行为测试。`rg` 只能作为额外禁止项门禁。
+
+### 4H.5 固定门禁、提交和报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_input_transaction_11.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+! rg -n "def _install_target|installed_request|old_request_bak" tests/test_input_transaction_11.py
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+fix(mountain): serialize and prove input transactions
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-transaction-12-report.md
+```
+
+报告列出 implementation commit、生产 checkpoint 名称、故障矩阵测试、并发同步方式、最终一致性断言、所有门禁原始摘要、clean status 和未完成项。报告提交：
+
+```text
+docs(mountain): report serialized input transaction status
+```
+
+先本地提交，不推送。执行者只报告门禁结果，不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
