@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import io
 import os
@@ -520,70 +521,196 @@ def test_cross_ext_ref_after_install_fault(tmp_path: Path):
 
 
 def test_same_task_lock_serializes(tmp_path: Path):
-    """同一 Task 的并发保存被锁串行化。
+    """同一 Task 并发保存被锁串行化：A 持有锁时 B 无法进入 checkpoint。
 
-    通过在 checkpoint 中持有锁并检查另一个线程能否进入来验证。
+    使用 Event + contextvars 同步，证明 A 在 checkpoint 内（锁持有）时 B 被阻塞。
+    注意：upload_inputs 是 async def，Starlette TestClient 在 asyncio portal 线程中执行，
+    因此用 contextvars.ContextVar 而非 threading.current_thread().name 来区分逻辑线程。
     """
     from webapp.mountain_server import create_app
 
-    app = create_app(tmp_path)
-    client = TestClient(app)
-    task_id = _create_task(client)
+    # Context variable for logical thread identification
+    logical_thread = contextvars.ContextVar("logical_thread", default="unknown")
 
-    # 先保存一次
-    _save_inputs_without_ref(client, task_id, "初始文案用于测试并发保存功能。")
+    # 同步原语
+    a_entered = threading.Event()  # A 进入 checkpoint 后设置
+    a_release = threading.Event()  # 主线程通知 A 释放
+    b_entered = threading.Event()  # B 进入 checkpoint 后设置（不应在 A 释放前发生）
 
-    # 验证 task_lock 返回同一 RLock 实例
-    repo = FilesystemTaskRepository(tmp_path)
-    lock_a = repo.task_lock(task_id)
-    lock_b = repo.task_lock(task_id)
-    assert lock_a is lock_b  # 同一任务返回同一锁
+    class SyncRepo(FilesystemTaskRepository):
+        """只在 request.after_install 处注入同步点。"""
 
-    # 验证不同任务返回不同锁
-    task_id_b = _create_task(client, "另一个任务")
-    lock_c = repo.task_lock(task_id_b)
-    assert lock_a is not lock_c  # 不同任务返回不同锁
+        def _input_txn_checkpoint(self, name: str, context: dict) -> None:
+            if name == "request.after_install":
+                current = logical_thread.get()
+                if current == "thread-a":
+                    a_entered.set()
+                    a_release.wait(timeout=10)
+                elif current == "thread-b":
+                    b_entered.set()
+
+    repo = SyncRepo(tmp_path)
+    app = create_app(tmp_path, repository=repo)
+
+    # 先用 TestClient 创建任务
+    setup_client = TestClient(app)
+    task_id = _create_task(setup_client, "并发串行化测试")
+
+    def thread_a():
+        """A：上传 reference，保存输入。"""
+        logical_thread.set("thread-a")
+        client = TestClient(app)
+        audio = io.BytesIO(b"\xAA" * 256)
+        resp = client.post(
+            f"/api/v1/tasks/{task_id}/inputs",
+            data={"script": "A 的文案：带参考音频的首次保存，需要足够长的文案内容。"},
+            files={"reference": ("ref_a.wav", audio, "audio/wav")},
+        )
+        return resp.status_code
+
+    def thread_b():
+        """B：不上传 reference，保存不同 script。"""
+        logical_thread.set("thread-b")
+        client = TestClient(app)
+        resp = client.post(
+            f"/api/v1/tasks/{task_id}/inputs",
+            data={"script": "B 的文案：不带参考音频的更新保存，需要足够长的文案内容。"},
+        )
+        return resp.status_code
+
+    # 启动 A
+    t_a = threading.Thread(target=thread_a, name="thread-a")
+    t_a.start()
+
+    # 等待 A 进入 checkpoint（在锁内）
+    assert a_entered.wait(timeout=15), "A 未在超时内进入 checkpoint"
+
+    # 启动 B（A 仍持有锁）
+    t_b = threading.Thread(target=thread_b, name="thread-b")
+    t_b.start()
+
+    # B 不应在 A 释放前进入 checkpoint（等待 1 秒确认 B 被阻塞）
+    b_blocked = not b_entered.wait(timeout=1.0)
+    assert b_blocked, "B 在 A 持有锁期间进入了 checkpoint，串行化失败"
+
+    # 释放 A
+    a_release.set()
+
+    # 等待两个线程完成
+    t_a.join(timeout=15)
+    t_b.join(timeout=15)
+
+    # 验证两者都成功
+    assert not t_a.is_alive(), "A 线程超时未完成"
+    assert not t_b.is_alive(), "B 线程超时未完成"
 
 
 def test_concurrent_ref_preservation(tmp_path: Path):
-    """A 上传新 reference、B 不上传：B 保留 A 最新 reference。
+    """A 上传新 reference 并停止在 checkpoint（锁内），B 不上传 reference 并提交不同 script。
 
-    由于 TestClient 是同步的，我们通过验证 preserve_reference 逻辑来测试。
+    释放后两者都成功：最终 script 是 B 的，reference 是 A 上传的文件。
     """
     from webapp.mountain_server import create_app
 
-    app = create_app(tmp_path)
-    client = TestClient(app)
-    task_id = _create_task(client)
+    # Context variable for logical thread identification
+    logical_thread = contextvars.ContextVar("logical_thread", default="unknown")
 
-    # A 上传 reference
-    audio = io.BytesIO(b"\x00" * 1024)
-    resp = client.post(
-        f"/api/v1/tasks/{task_id}/inputs",
-        data={"script": "第一个保存，带参考音频上传。"},
-        files={"reference": ("reference.wav", audio, "audio/wav")},
-    )
-    assert resp.status_code == 200
+    # 同步原语
+    a_entered = threading.Event()
+    a_release = threading.Event()
+    b_entered = threading.Event()
 
+    # 用于记录线程结果
+    results: dict[str, int] = {}
+
+    class SyncRepo(FilesystemTaskRepository):
+        """只在 request.after_install 处注入同步点。"""
+
+        def _input_txn_checkpoint(self, name: str, context: dict) -> None:
+            if name == "request.after_install":
+                current = logical_thread.get()
+                if current == "thread-a":
+                    a_entered.set()
+                    a_release.wait(timeout=10)
+                elif current == "thread-b":
+                    b_entered.set()
+
+    repo = SyncRepo(tmp_path)
+    app = create_app(tmp_path, repository=repo)
+
+    # 先用 TestClient 创建任务
+    setup_client = TestClient(app)
+    task_id = _create_task(setup_client, "并发 reference 保留测试")
+
+    audio_a_content = b"\xAA" * 512  # A 上传的 reference 内容
+
+    def thread_a():
+        """A：上传 reference，带 script。"""
+        logical_thread.set("thread-a")
+        client = TestClient(app)
+        audio = io.BytesIO(audio_a_content)
+        resp = client.post(
+            f"/api/v1/tasks/{task_id}/inputs",
+            data={"script": "A 的文案：首次带参考音频保存，需要足够长的文案内容。"},
+            files={"reference": ("reference.wav", audio, "audio/wav")},
+        )
+        results["a"] = resp.status_code
+
+    def thread_b():
+        """B：不上传 reference，不同 script。"""
+        logical_thread.set("thread-b")
+        client = TestClient(app)
+        resp = client.post(
+            f"/api/v1/tasks/{task_id}/inputs",
+            data={"script": "B 的文案：更新文案不带参考音频，需要足够长的文案内容。"},
+        )
+        results["b"] = resp.status_code
+
+    # 启动 A
+    t_a = threading.Thread(target=thread_a, name="thread-a")
+    t_a.start()
+
+    # 等待 A 进入 checkpoint（在锁内）
+    assert a_entered.wait(timeout=15), "A 未在超时内进入 checkpoint"
+
+    # 启动 B（A 仍持有锁）
+    t_b = threading.Thread(target=thread_b, name="thread-b")
+    t_b.start()
+
+    # B 不应在 A 释放前进入 checkpoint
+    b_blocked = not b_entered.wait(timeout=1.0)
+    assert b_blocked, "B 在 A 持有锁期间进入了 checkpoint"
+
+    # 释放 A
+    a_release.set()
+
+    # 等待两个线程完成
+    t_a.join(timeout=15)
+    t_b.join(timeout=15)
+
+    # 两者都应成功
+    assert results.get("a") == 200, f"A 线程状态码: {results.get('a')}"
+    assert results.get("b") == 200, f"B 线程状态码: {results.get('b')}"
+
+    # 验证最终状态
     task_dir = tmp_path / "tasks" / task_id
-    request_data = FilesystemTaskRepository(tmp_path)._read_json(task_dir / "request.json")
+    repo2 = FilesystemTaskRepository(tmp_path)
+    request_data = repo2._read_json(task_dir / "request.json")
+
+    # script 是 B 的（后获取锁者胜出）
+    assert "B 的文案" in request_data.get("script", ""), \
+        f"script 应为 B 的，实际: {request_data.get('script')}"
+
+    # reference 是 A 上传的（B 没上传，preserve_reference=True 保留了 A 的）
     assert request_data.get("reference_audio") == "inputs/reference.wav"
-    assert (task_dir / "inputs" / "reference.wav").exists()
+    ref_path = task_dir / "inputs" / "reference.wav"
+    assert ref_path.exists(), "reference 文件应存在"
+    assert _sha256(ref_path) == hashlib.sha256(audio_a_content).hexdigest(), \
+        "reference 文件 sha256 应等于 A 上传的内容"
 
-    # B 不上传 reference（应保留 A 的 reference）
-    resp = client.post(
-        f"/api/v1/tasks/{task_id}/inputs",
-        data={"script": "第二个保存，不带参考音频，应保留已有的参考音频。"},
-    )
-    assert resp.status_code == 200
-
-    # 验证 reference 仍然存在
-    request_data = FilesystemTaskRepository(tmp_path)._read_json(task_dir / "request.json")
-    assert request_data.get("reference_audio") == "inputs/reference.wav"
-    assert (task_dir / "inputs" / "reference.wav").exists()
-
-    # 验证 script 已更新为 B 的内容
-    assert "第二个保存" in request_data.get("script", "")
+    # staging 清零
+    assert _count_staging_artifacts(task_dir) == 0
+    assert _count_task_artifacts(task_dir) == 0
 
 
 def test_different_tasks_can_parallel(tmp_path: Path):
