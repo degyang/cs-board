@@ -381,6 +381,72 @@ fix(mountain-web): close CCF asset settings review gaps
 
 报告逐项列出 3A.2 的 13 项处理结果、对应生产文件和行为测试，并包含：commit、git status、build、test 数量、warning 数量、真实 contract checker、已知 gap、未完成事项。未全部完成时只能写“执行中”。
 
+## 3B. CCF 二次审核收口指令
+
+### 3B.1 指令编号与起点
+
+```text
+instruction: CCF-ASSET-SETTINGS-05
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed commit: ee18ccc fix(mountain-web): close CCF asset settings review gaps
+result: rejected; implementation improved, verification incomplete
+```
+
+保留 `ee18ccc`，只形成增量 follow-up commit；不得重做已经通过的实现，不得 amend、squash 或 reset。
+
+### 3B.2 本轮唯一范围
+
+1. 将 `m07-ccf-asset-settings-04-report.md` 恢复为与已提交历史一致；不要通过提交事后修改旧报告来制造 clean 状态。新结论只写入 3B.5 指定的新报告。
+2. 清除测试输出中的全部 React Router Future Flag warning 和 `No routes matched location` warning。通过正确配置测试 Router/future flags 和补全目标路由解决，不得 mock 或屏蔽 `console.warn/error`。
+3. 将真实 contract checker 扩展到 Service list/detail/secrets/probe、Style list、Voice list、Voice Alignment、Toolchain、Storage、Diagnostics 和统一错误响应。
+4. Contract checker 必须双向验证字段：后端不得出现 DTO 未声明字段，DTO/fixture 的必填字段也不得从后端缺失；必须递归验证关键嵌套结构及 JSON 类型，至少覆盖 `config_status`、`secret_status`、`availability`、`items[]` 和 `error`。
+5. 真实模式只能访问 `MOUNTAIN_API_BASE`，网络失败或任何 endpoint/字段/type 不一致必须非零退出；fixture 模式只能作为本地静态检查，输出不得使用“All contracts aligned”冒充真实后端通过。
+6. 补齐 FormData 三种调用方 Header 大小写形式的行为测试：`Content-Type`、`content-type`、`CONTENT-TYPE` 均必须在最终 fetch headers 中不存在。
+7. 补齐风格预览完整行为测试：选择文件 -> `uploadAsset(file)` -> 获得 `asset_id` -> `createStyle/updateStyle` 请求携带同一 `preview_asset_id`；上传失败不得提交 style。
+8. 补齐 style/voice 筛选与 cursor 分页测试，包括 query 参数、追加下一页、跨页去重、tab/filter 重置，以及旧请求晚返回时不能污染新筛选结果。生产实现使用 request generation、AbortController 或等效机制消除竞态。
+9. 使用与 `app/router.tsx` 等价的 route tree 验证 `/settings/models`、new、detail、edit、voice-alignment、toolchain、storage、diagnostics；不得以手工传入单个组件代替生产路由验证。
+10. 完成后工作树必须真实干净；报告中的 commit、status、测试数、warning 数和 checker 状态必须与最终命令输出一致。
+
+### 3B.3 验收门禁
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+MOUNTAIN_API_BASE=http://127.0.0.1:<CCB_PORT>/api/v1 node web-v2/scripts/check-api-contract.mjs
+git diff --check
+git status --short
+```
+
+要求：0 failed、0 act warning、0 Router warning、0 unhandled rejection。若 CCB 服务尚未就绪，真实 checker 可标记 `blocked`，但整项状态仍为“执行中”，不得宣布完成。
+
+形成新提交：
+
+```text
+fix(mountain-web): finish CCF contract and verification gates
+```
+
+先本地提交，不推送远端。
+
+### 3B.4 禁止事项
+
+- 不扩大范围重构已通过的页面功能；
+- 不修改主台账；
+- 不通过吞掉 console、删除断言或降低类型严格度清除 warning；
+- 不用源码字符串断言代替用户交互和 HTTP 行为；
+- 不把 fixture checker 结果写成真实 API 验证通过。
+
+### 3B.5 完成报告
+
+只在 CCF worktree 创建：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-asset-settings-05-report.md
+```
+
+逐项报告 3B.2 的 10 项结果及测试名称，附最终 commit、clean status、build、tests、warning 数、fixture checker、真实 checker、已知 gap 和未完成事项。真实 checker 未通过时，报告状态只能是“执行中”。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
