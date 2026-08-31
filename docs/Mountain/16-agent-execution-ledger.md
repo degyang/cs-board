@@ -847,6 +847,88 @@ docs(mountain): report dynamic services frontend cleanup
 
 先本地提交，不推送。报告给出删除清单、引用搜索结果、实际 implementation commit、门禁摘要和保留的负向断言；执行者不得自行宣布最终审核通过。
 
+## 3I. CCF 单一垂直切片：预置风格浏览与主预览
+
+### 3I.1 指令编号与基线
+
+```text
+instruction: CCF-PRESET-STYLE-BROWSER-05
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: 66daa43 refactor(mountain-web): remove fixed provider frontend legacy
+accepted report: 733395d docs(mountain): report dynamic services frontend cleanup
+```
+
+审核者已复现 build、contract checker `48/48`、全量前端 `222/222`、fixture checker、动态 Service 四路由和生产残留扫描，本轮固定 Provider 清理验收通过。
+
+最新视觉与资产基准位于独立 main 文档工作树，CCF 必须直接读取以下绝对路径，不得假设这些文件已经合并到 CCF 分支：
+
+```text
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/asset-management/
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/public/styles/
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/preset-style-assets.md
+```
+
+### 3I.2 唯一目标
+
+只完成资产管理“预置风格”Tab 的浏览与详情视觉闭环。数据必须来自现有 `/api/v1/assets/styles?kind=preset`；不得把原型的 `SEED_PRESETS`、localStorage、图片路径映射或提示词硬编码复制进生产前端。
+
+要求：
+
+1. 列表按最新原型基准展示预置风格主缩略图、名称、短描述/description、标签和 badge（只有后端 DTO 提供时才展示）；无图时显示明确占位，不伪造图片。
+2. `preview_asset_id` 非空时，使用类型化 helper 构造 `/api/v1/assets/blobs/{asset_id}` URL 并显示真实图片；必须 URL encode，不展示 asset_id 或物理路径给普通用户。
+3. 详情区展示大图、名称、description、engine、tags、完整 `prompt_text`、可选 `negative_prompt` 和只读状态；长提示词可复制但不可直接编辑 preset。
+4. preset 只允许“复制为自定义”，不得出现编辑、删除、启停或新增 preset 操作；复制成功后给出反馈，并切换到/定位对应 custom 条目，不能让用户误以为修改了原 preset。
+5. 图片加载失败显示可访问的错误占位，不能让整页崩溃；快速切换条目时旧图、旧详情和旧请求不得覆盖新选择。
+6. 多参考图及语义路由目前后端 `StyleTemplate` 尚无正式字段。本轮不得从静态基准硬编码补齐；在报告中记录明确 API gap，等待后端后续提供逻辑 asset ID 列表与路由参数。
+7. 不修改自定义风格、音色库、设置、任务页、checker 核心或后端。
+
+### 3I.3 强制行为测试
+
+至少覆盖：
+
+- preset 列表对真实 DTO 渲染缩略图、description、tags；
+- blob URL 使用 encode 后的 `preview_asset_id`；
+- preview 为空及图片 onError 的占位行为；
+- 详情显示完整 prompt/negative prompt，复制按钮可用，但不存在编辑/删除/启停按钮；
+- copy API 成功后的反馈与 custom 定位行为，失败时保持当前 preset 且显示结构化错误；
+- 快速选择两个 preset 时最终详情始终对应最后选择；
+- custom 与 voice 既有回归测试继续通过。
+
+禁止复制 `assetStore.ts` 的 localStorage/seed 算法，禁止在测试中复制生产 URL 算法，禁止只断言组件文本存在而不触发真实交互。
+
+### 3I.4 门禁与提交
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+! rg -n "mountain\.assets|SEED_PRESETS|localStorage" web-v2/src/pages/AssetManagementPage.tsx web-v2/src/lib/api/assets.ts
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain-web): complete preset style browsing experience
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-preset-style-browser-05-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report preset style browser status
+```
+
+先本地提交，不推送。报告列出实际 implementation commit、视觉基准映射、行为测试、门禁和多参考图 API gap；执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
