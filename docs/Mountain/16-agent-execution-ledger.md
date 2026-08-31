@@ -1285,6 +1285,84 @@ docs(mountain): report reproducible runtime baseline
 
 先本地提交，不推送。报告只写命令实际输出，并列出所有未关闭债务；执行者不得自行宣布审核或联合验收通过。
 
+## 4D. CCB 单一垂直切片：Task 输入与启动边界
+
+### 4D.1 指令编号与已验收基线
+
+```text
+instruction: CCB-TASK-INPUT-START-08
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+accepted implementation: 5c3deff fix(mountain): make encrypted runtime baseline reproducible
+accepted report: 89626a7 docs(mountain): report reproducible runtime baseline
+```
+
+审核者已在指定共享解释器中复现：`cryptography 50.0.1`、模块 app 为 FastAPI、`427 passed, 5 skipped`、compileall 与 clean status。本轮基线通过。
+
+审核者还真实复现了 `create task -> multipart save inputs -> start`：输入保存返回 200，缺少 Service 时 start 返回 `400` 且 `body.error.code=CAPABILITY_NOT_AVAILABLE`。该行为不得返工或改回 `detail`。
+
+### 4D.2 唯一目标
+
+只收口 Task 的“保存输入、读取输入、启动运行”这一条垂直链。Router 负责 HTTP 解析/响应和受控上传 staging；Application command/query 负责领域校验、输入状态和启动前置条件；Repository 负责持久化。不得同时重构 artifacts、events、logs、diagnostics、final 或其他 Router。
+
+完成后，`webapp/mountain_task_api.py` 的以下三个 endpoint 不得出现 `repository.task_dir/run_dir`、`request.json/task.json`、`Path.read_text/write_text` 或自行解释 input manifest：
+
+- `POST /api/v1/tasks/{task_id}/inputs`
+- `GET /api/v1/tasks/{task_id}/inputs`
+- `POST /api/v1/tasks/{task_id}/runs/{run_id}/start`
+
+具体要求：
+
+1. Router 将上传文件分块写入受控临时 staging，设置大小上限，并在成功或失败后清理；不得先写入任务正式目录。
+2. `MountainCommands.save_inputs(...)` 接收 staging 引用，由 Application 校验 Task、音频类型/非空、制作参数和规则，并通过 Repository/输入存储接口原子提交 manifest 与 reference。
+3. `MountainCommands.get_inputs(task_id)` 返回稳定、非敏感 DTO；Router 不读取或合并 JSON。
+4. 启动前的“输入是否已保存”及所需 capability 计算进入 Application command/service；Router 只调用一个启动入口，不读取 request 文件、不遍历阶段映射。
+5. 缺输入继续返回 `400 body.error.code=VALIDATION_ERROR`；有输入但缺服务继续返回 `400 body.error.code=CAPABILITY_NOT_AVAILABLE`，并在单一位置返回非重复的 `unavailable` 详情。不得同时出现顶层空 `unavailable` 和 `details.unavailable`。
+6. 更新输入未提供新 reference 时保留旧 reference；失败时旧 manifest/reference 完整保留且 staging/partial 为零。
+7. CLI 与 Web 必须复用同一 Application 输入/启动语义；本轮不改变公开 CLI 参数。
+
+### 4D.3 强制行为测试
+
+至少覆盖：
+
+- 真实 multipart 分块上传后 GET 回读一致，DTO 不泄漏绝对路径、staging 路径或 Secret；
+- 超限、空文件、非法扩展/媒体、任务不存在均返回稳定 `body.error`，且无正式目录 partial；
+- 更新不带 reference 保留旧文件，更新失败也保留旧 manifest 和 sha256；
+- 缺输入 start 为 VALIDATION_ERROR；保存输入后缺 Service 为 CAPABILITY_NOT_AVAILABLE，`unavailable` 只出现一次且包含 stage/capability；
+- 注入 fake Application/Repository 时证明三个 endpoint 不绕过端口访问磁盘，并同时具有真实 HTTP 行为测试；
+- CLI 与 Web 对同一 Task 读取相同输入状态。
+
+禁止只用源码字符串、`hasattr`、mock 调用次数或宽松的“不是 500”断言替代行为验证。架构边界静态检查可作为附加门禁，但不能代替上述行为。
+
+### 4D.4 固定门禁与提交
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+refactor(mountain): move task input and start semantics into application
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-start-08-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report task input and start boundary status
+```
+
+先本地提交，不推送。报告必须给出 implementation commit、具体测试名、门禁原始摘要、三个 endpoint 的生产调用关系和仍未收口的 Router 债务；执行者不得自行宣布最终审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
