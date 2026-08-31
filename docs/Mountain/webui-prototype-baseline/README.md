@@ -48,6 +48,7 @@
 - `source/src/features/asset-management/`
 - `source/src/styles/app.css` 中的 `.mp-*` 样式
 - `screenshots/settings/` 中的六张配置页验收截图
+- `source/public/styles/` 中的 27 张预置风格图片，以及 [`preset-style-assets.md`](preset-style-assets.md) 中的参数与迁移清单
 
 当前原型将模型服务展示为只读注册表，将工具链、任务存储状态和系统诊断定义为只读运行状态；语音与对齐页明确不上传任务级文案或参考音频，也不伪造刷新/探测按钮。这些页面定义的是**视觉、信息层级和产品边界基准**，其中 fixture 仅用于展示状态。
 
