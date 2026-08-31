@@ -521,6 +521,68 @@ git status --short
 
 报告包含 3C.3 九项结果、checker 测试名称、竞态测试名称、implementation_commit、build、tests、warning 数、fixture checker、真实 checker、clean status、已知 gap 和未完成事项。真实 checker 未通过时状态只能为“执行中”。
 
+## 3D. CCF Checker 可执行性最终纠偏
+
+### 3D.1 指令编号与起点
+
+```text
+instruction: CCF-ASSET-SETTINGS-07
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+implementation base: c7695e2
+report commit: bdb37ba
+result: rejected; tests exercise copies/source strings instead of production checker
+```
+
+只处理本节问题，不返工已通过的页面、DTO 和基础交互。
+
+### 3D.2 必须完成
+
+1. 把 checker 核心拆成可导入模块，例如 `scripts/contract-checker-core.mjs`；CLI 脚本只负责读取环境、调用核心和设置退出码。测试必须直接 import 生产核心，删除测试文件中复制的 `extractInterfaceFields`、`verifyFieldsBidirectional`、`validateJsonType` 等实现。
+2. 生产 `verifyResponse/verifyNested` 必须实际调用类型验证，遍历所有存在的顶层字段和嵌套字段；当前 `validateJsonType()` 定义但从未调用必须修复。
+3. 类型验证必须区分 array、plain object 和 null；`items` 为对象、Record 为数组、复杂对象为字符串等必须失败。数组元素必须递归校验对应 DTO。
+4. HTTP checker 测试必须通过受控本地 HTTP server 或注入的真实 fetch transport 执行生产 `checkRealBackend()`，验证请求 method/path、响应解析和 violations；禁止通过 `toContain("method: 'POST'")` 等源码字符串断言代替行为。
+5. 自动化测试必须让以下生产行为失败：Probe 使用 GET、空 Registry、网络错误、缺必填字段、未知字段、顶层类型错误、嵌套类型错误、数组元素错误、404 非 JSON；并验证缺可选字段允许。
+6. 请求生命周期必须选择一种真实方案：
+   - 将 AbortSignal 从 AssetManagementPage 传入 `fetchStyles/fetchVoices` 并最终传入 fetch；或
+   - 删除无效 AbortController，使用 generation + mounted ref，并在 cleanup 中递增 generation、禁止完成后的任何 setState。
+   测试必须验证生产 API 收到 abort signal，或验证卸载后生产 guard 确实阻止状态更新，不能仅以“控制台没 warning”作为断言。
+7. 报告必须位于约定路径：`docs/Mountain/m07-ccf-asset-settings-07-report.md`，不得写入 `web-v2/docs`。旧的错误位置文件保留历史，不改写提交。
+8. 未运行真实 CCB checker 时整体状态写“执行中”；不得使用 Closeout/Done/全部完成措辞。
+
+### 3D.3 门禁与提交
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+MOUNTAIN_API_BASE=http://127.0.0.1:<CCB_PORT>/api/v1 MOUNTAIN_CONTRACT_SERVICE_ID=<service_id> node web-v2/scripts/check-api-contract.mjs
+git diff --check
+git status --short
+```
+
+先形成实现提交：
+
+```text
+fix(mountain-web): execute real contract validation paths
+```
+
+再形成报告提交：
+
+```text
+docs(mountain): report CCF checker execution status
+```
+
+报告记录 implementation commit；不要求记录报告提交自身 hash。先本地提交，不推送。
+
+### 3D.4 完成报告
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-asset-settings-07-report.md
+```
+
+报告列出 3D.2 八项结果、直接 import 生产核心的测试名称、本地 HTTP server 行为测试、请求生命周期测试、implementation_commit、build、tests、warning、fixture checker、真实 checker、clean status 和未完成事项。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
