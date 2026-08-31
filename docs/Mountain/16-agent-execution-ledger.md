@@ -1151,6 +1151,79 @@ docs(mountain): report CCB runtime closeout status
 
 报告逐项记录 4B.3 十二项结果及测试名称，包含 implementation_commit、pytest、compileall、默认加密启动、真实 HTTP、CCF checker、Secret 扫描、clean status、已知 gap 和未完成事项。任一真实门禁未完成时状态只能为“执行中”。
 
+## 4C. CCB 可复现运行基线纠偏指令
+
+### 4C.1 指令编号与审核结论
+
+```text
+instruction: CCB-RUNTIME-BASELINE-07
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation commit: b79291a fix(mountain): harden production runtime and task API boundaries
+reviewed report commit: 391fe40 docs(mountain): report CCB runtime closeout status
+result: rejected
+```
+
+保留上述提交，只允许形成增量 follow-up；不得 amend、squash、reset 或开始新功能。
+
+### 4C.2 审核者复现实证
+
+- 使用项目约定解释器 `/mnt/d/workstation/projects/cs-board/.venv/bin/python` 执行全量测试，实际结果为 `12 failed, 329 passed, 10 skipped, 80 errors`，不是报告中的 `426 passed, 5 skipped`。
+- 同一解释器执行 `import cryptography` 得到 `ModuleNotFoundError`，默认加密 `create_app()` 无法启动。
+- `cryptography` 虽写入两个 requirements 文件，但尚未形成“从项目安装入口安装后即可运行”的可复现闭环。
+- `webapp/mountain_task_api.py` 仍直接使用 `repository.task_dir/run_dir`，读取 `request.json/task.json/index.json/JSONL` 并拼接 `final.mp4`；因此报告中的“Task Router 不直接读取这些文件”不成立。该架构债留给下一个独立切片，本轮不得继续宣称已关闭。
+- 完成报告中的真实 HTTP 摘要显示 start 返回 `VALIDATION_ERROR`，不能作为“缺能力返回 CAPABILITY_NOT_AVAILABLE”的证明。
+
+### 4C.3 本轮唯一目标
+
+建立一条任何审核者都能在指定解释器中复现的后端运行基线。只处理依赖安装、默认加密启动、测试环境隔离和报告真实性，不改 Task Router 架构、不新增 API/业务功能。
+
+必须完成：
+
+1. 明确项目后端唯一安装入口，并保证执行该安装入口后，指定解释器可成功 `import cryptography`。不得依赖 CCB 自己终端中未记录的另一个 venv 或全局 site-packages。
+2. 保持默认 fail-closed：未设置 `CSBOARD_ALLOW_PLAINTEXT_SECRETS` 时，`create_app(temp_dir)` 成功且 `/api/v1/health` 返回 `secret_store.encrypted=true`；只有明确 scoped 测试才可启用明文。
+3. 修复因移除全局明文环境变量暴露出来的测试隔离问题。需要明文的旧测试逐个显式使用 fixture；验证默认加密行为的测试不得使用该 fixture。禁止重新引入全局环境变量或 autouse 明文 fixture。
+4. `webapp.mountain_server:app` 在依赖正确安装后必须是 FastAPI 实例，不能是 `None`；依赖缺失时必须给出明确启动错误，不能静默生成不可用 app。
+5. 在同一指定解释器中完整执行全量测试、compileall 和真实 TestClient/HTTP 冒烟；报告必须原样记录结果。任何失败都只能标记“执行中”。
+6. 报告必须明确保留的下一阶段债务：Task Router 仍有直接文件/目录访问，`CAPABILITY_NOT_AVAILABLE` 的真实 start 行为尚需独立审核（除非本轮不改业务代码即可真实证明），FastAPI 框架 422 尚未统一 `body.error`。
+
+### 4C.4 机器门禁
+
+所有命令必须在本指令指定 worktree 执行：
+
+```bash
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pip install -r requirements-dev.txt
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -c "import cryptography; from webapp.mountain_server import app; assert app is not None; print(cryptography.__version__)"
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+git status --short
+```
+
+另增加/保留一个行为测试，使用 `monkeypatch.delenv(..., raising=False)` 和临时 data dir 创建 app，断言 health 的 `encrypted is True`。不得用源码字符串、`hasattr` 或 mock 替代。
+
+### 4C.5 提交与报告
+
+实现提交：
+
+```text
+fix(mountain): make encrypted runtime baseline reproducible
+```
+
+报告提交：
+
+```text
+docs(mountain): report reproducible runtime baseline
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-runtime-baseline-07-report.md
+```
+
+先本地提交，不推送。报告只写命令实际输出，并列出所有未关闭债务；执行者不得自行宣布审核或联合验收通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
