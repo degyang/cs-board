@@ -1749,6 +1749,90 @@ docs(mountain): report production safe input transaction
 
 先本地提交，不推送。报告必须包含 `/mnt/d` 实测、每个故障点的最终状态断言、两个 commit hash 和所有未关闭事项；执行者不得自行宣布审核通过。
 
+## 4G. CCB 输入事务最终行为纠偏
+
+### 4G.1 指令编号与审核结论
+
+```text
+instruction: CCB-TASK-INPUT-TRANSACTION-11
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 7db67d6 fix(mountain): make task input transaction production safe
+reviewed report: 0ce3ba2 docs(mountain): report production safe input transaction
+result: rejected; 435 tests pass but mandatory transaction behavior is unproved and rollback is incorrect
+```
+
+保留已有提交，仅形成增量 follow-up。本轮禁止开始其他 Router、FastAPI 422 或新功能。
+
+### 4G.2 已确认问题
+
+1. 报告再次明确承认“每个提交动作故障注入测试”缺失，违反 §4F.4。
+2. `test_staging_on_same_filesystem` 注释称使用 `/mnt/d`，实际 `data_dir = tmp_path`，默认路径为 `/tmp/pytest-*`；没有覆盖真实数据盘。
+3. `test_chunked_read_verification` 只上传 10KB，没有记录 `UploadFile.read(size)`，没有注入上限，也没有测试上限加 1 字节。
+4. 回滚判断 `backup exists && target exists -> unlink backup` 会在新 target 已安装后删除旧备份，留下新 request/task/reference，恰好违背回滚目的。
+5. 跨扩展 reference 失败时可能恢复旧文件但不删除新扩展 target；首次提交失败且没有 backup 时，新 request/reference 也不会被删除。
+6. 无新 reference 时 `txn_dir=None`，request 与 task 顺序直写，不属于业务级原子提交。
+7. Router 在验证 Task 存在前调用 `create_staging(task_id)`，不存在的 task_id 可能被创建空任务目录。
+8. 工作树存在未跟踪 `docs/Mountain/mountain-engineering-debt.md`，报告中的 clean status 不真实。不得直接删除；应将其内容合并进本轮报告的未完成项后纳入报告提交，或作为独立、说明清楚的文档提交。
+
+### 4G.3 唯一目标
+
+使所有输入保存（有无 reference）都走同一、可故障注入、最终状态正确的事务：
+
+1. Application 在创建事务前先通过 Repository 验证 Task 存在；不存在时不得产生 task 目录、`.staging` 或任何文件。
+2. 每次 save_inputs 都创建唯一 transaction，包括仅更新文案且不上传 reference；在 transaction 中准备完整的新 request 和 task，以及可选 reference。
+3. 将所有目标安装动作收口到一个可在测试 Repository 中按序失败的生产方法（例如 `_replace_for_commit`）。不得为测试复制事务算法。
+4. 回滚必须先删除本事务已安装的新 target，再恢复旧 backup；提交前不存在的 target 在失败后必须重新不存在。不能根据“target 当前存在”推断它是旧文件。
+5. 成功提交后清除旧 reference（跨扩展时）、所有 backup、transaction 文件和空 staging 父目录；失败也同样清零事务垃圾。
+6. 上传限制作为 Router factory/config 的显式参数注入，生产默认 50MB/1MB；测试使用小上限，不得分配 50MB 才能验证边界。
+7. 使用真实 `/mnt/d/workstation/projects/cs-board` 下的 `TemporaryDirectory` 做至少一个 HTTP 上传测试；测试自行清理且不得把运行数据提交 Git。
+8. 保持 INTERNAL_ERROR 脱敏和既有 GET/start 契约。
+
+### 4G.4 强制测试矩阵
+
+必须基于生产事务实现验证：
+
+- 不存在 Task 上传：404/稳定错误，磁盘无该 task 目录；
+- 无 reference 的首次保存与更新保存，在每个 target 安装动作失败时均恢复提交前状态；
+- 有 reference 的首次保存：第 1/2/3 个安装动作分别失败后，request/reference 不存在，Task 原样；
+- 已有同扩展 reference 更新：每个故障点后 request、Task、reference sha256 与旧值一致；
+- 已有跨扩展 reference 更新：每个故障点后只有旧扩展文件且 sha256 一致，新扩展不存在；
+- 所有上述失败和成功场景后，递归扫描 `.staging/*.bak/*.tmp/*.partial` 为零；
+- 注入 `max_bytes=8, chunk_size=4`，8 字节成功、9 字节返回 VALIDATION_ERROR，并用记录型 UploadFile/生产上传函数证明每次 `read(4)`，无无参 read；
+- `/mnt/d` TemporaryDirectory 的真实 HTTP 小文件上传返回 200；
+- INTERNAL_ERROR 响应不含路径、Errno 和注入异常文本。
+
+测试不得使用源码字符串、虚假注释、只检查 mock 次数或宽松状态码。
+
+### 4G.5 门禁和提交
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+fix(mountain): prove and restore task input transactions
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-transaction-11-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report verified task input transactions
+```
+
+先本地提交，不推送。报告逐行列出故障矩阵结果、真实 `/mnt/d` 路径类别（隐藏随机目录名）、两个 commit hash和 clean status；任何矩阵未完成只能标“执行中”。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
