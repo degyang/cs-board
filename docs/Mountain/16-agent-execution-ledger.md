@@ -1585,6 +1585,85 @@ docs(mountain): report bounded atomic input status
 
 先本地提交，不推送。报告必须明确 staging 上限、事务策略、故障注入测试和两个 commit hash；执行者不得自行宣布审核通过。
 
+## 4F. CCB 原子输入生产路径纠偏
+
+### 4F.1 指令编号与审核结论
+
+```text
+instruction: CCB-TASK-INPUT-ATOMIC-10
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 349c954 fix(mountain): make task input upload bounded and atomic
+reviewed report: 0728c2d docs(mountain): report bounded atomic input status
+result: rejected
+```
+
+保留上述提交，只形成增量 follow-up。本轮仍只处理 Task 输入事务，不开始其他 Router 或新功能。
+
+### 4F.2 审核实证
+
+1. 报告明确承认 §4E 强制要求的第二/第三步故障注入测试未完成，因此不能通过。
+2. `test_chunked_upload_with_size_limit` 只上传 1KB 并断言 200；它没有验证分块 read 参数、恰好上限、超过上限或清理，测试名与证据不符。
+3. Router 用系统默认 `/tmp` 创建 staging，Repository 用 `Path.rename()` 移入 `/mnt/d` 数据目录。审核者在 `/mnt/d/workstation/projects/cs-board` 临时 data dir 真实复现：有效小文件上传返回 `400 INTERNAL_ERROR`，错误为 `[Errno 18] Invalid cross-device link`。
+4. 回滚逻辑在“无旧 request”时失败不会删除新 request；新旧 reference 扩展不同时，失败可能恢复旧 reference 但留下新扩展文件。
+5. 固定 `request.json.bak/task.json.bak/reference.wav.bak` 不是唯一事务备份，遇到陈旧备份或并发/崩溃恢复存在覆盖风险。
+6. `get_inputs()` 仍通过 `repository.task_dir()` 拼路径读取元数据，没有使用正式 Repository/输入存储 port。
+
+### 4F.3 唯一修复目标
+
+建立在 Windows/WSL 实际数据盘上也成立、可故障注入证明的 Task 输入事务：
+
+1. staging 必须由 Repository/专用 InputStore 创建在目标 Task 文件系统内的受控 staging 目录，Router 只能通过 port 获取写入句柄或 staging descriptor。禁止系统默认 `/tmp` 加跨设备 rename，禁止 Router 自行知道任务正式路径。
+2. 上传上限和 chunk size 必须可在测试中安全注入为小值；生产默认仍为 50MB/1MB。Router 对 UploadFile 只调用 `read(CHUNK_SIZE)`，并在 finally 中关闭上传和释放 staging。
+3. Repository 使用唯一 transaction ID/目录准备所有新文件；验证完成后在 Task lock 内提交。事务失败必须根据提交前快照恢复“存在”和“不存在”两种状态，并删除本事务产生的所有新 reference/request/task/temp/backup。
+4. 同扩展和跨扩展 reference 替换均须正确；成功后只保留 manifest 当前指向的 reference，失败后只保留旧 reference，不得留下孤儿新文件。
+5. 用 Repository/InputStore 正式接口读取当前 reference 元数据；Application 和 Router 不调用 `task_dir/run_dir`，不拼物理路径。
+6. 内部 I/O 错误返回稳定、已脱敏的 `body.error.code=INTERNAL_ERROR`，不得把绝对 staging/data 路径或 Python errno 原文暴露给客户端。
+
+### 4F.4 强制行为测试
+
+测试必须操作生产实现并覆盖：
+
+- data dir 明确位于 `/mnt/d`，小 WAV 上传成功，证明无跨文件系统错误；
+- 记录 UploadFile read 调用，全部带固定 size，恰好注入上限成功、上限加 1 字节失败；
+- 超限、Application 校验失败、Repository 第 1/2/3 个提交动作失败后，staging/transaction/`.bak/.tmp/.partial` 为零；
+- 已有输入场景记录 request、Task preparation、旧 reference sha256；新同扩展及新跨扩展提交分别在每个故障点失败，三者完全保持；
+- 首次保存在每个故障点失败后，request/reference 不存在，原 Task 原样存在；
+- 成功跨扩展替换后旧 reference 被清除，GET 只返回 manifest 当前文件；
+- HTTP INTERNAL_ERROR 响应不含 `/tmp`、`/mnt/`、反斜杠绝对路径、`Errno` 或异常原文；
+- 既有 start 契约测试继续通过。
+
+禁止源码字符串测试、只上传小文件却声称验证上限、只 mock 调用次数或仅断言状态码。
+
+### 4F.5 门禁、提交与报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+fix(mountain): make task input transaction production safe
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-atomic-10-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report production safe input transaction
+```
+
+先本地提交，不推送。报告必须包含 `/mnt/d` 实测、每个故障点的最终状态断言、两个 commit hash 和所有未关闭事项；执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
