@@ -244,10 +244,24 @@ export function verifyNested(tsContent, data, typeName, basePath, violations) {
     const nestedFields = extractInterfaceFields(tsContent, nestedCleanType)
     if (!nestedFields) continue
 
-    if (nestedType.endsWith('[]') && Array.isArray(value)) {
+    if (nestedType.endsWith('[]')) {
+      // Container guard: expected array must actually be an array
+      if (!Array.isArray(value)) {
+        violations.push(basePath + '.' + field + ': expected ' + nestedType + ' (array), got ' + typeof value)
+        continue
+      }
+
       for (let i = 0; i < value.length; i++) {
         const itemPath = basePath + '.' + field + '[' + i + ']'
-        const itemKeys = Object.keys(value[i])
+        const elem = value[i]
+
+        // Element guard: each element must be a plain object
+        if (elem === null || typeof elem !== 'object' || Array.isArray(elem)) {
+          violations.push(itemPath + ': expected ' + nestedCleanType + ' (object), got ' + (Array.isArray(elem) ? 'array' : typeof elem))
+          continue
+        }
+
+        const itemKeys = Object.keys(elem)
         const { backendExtra, missingRequired } = verifyFieldsBidirectional(itemKeys, nestedFields)
 
         if (backendExtra.length > 0) {
@@ -262,14 +276,20 @@ export function verifyNested(tsContent, data, typeName, basePath, violations) {
           const isOptional = nestedFields.optional.has(key)
           const elemTsType = nestedFields.required.get(key) || nestedFields.optional.get(key)
           if (elemTsType) {
-            const typeViolation = validateJsonType(value[i][key], elemTsType, itemPath + '.' + key, isOptional)
+            const typeViolation = validateJsonType(elem[key], elemTsType, itemPath + '.' + key, isOptional)
             if (typeViolation) violations.push(typeViolation)
           }
         }
 
-        verifyNested(tsContent, value[i], nestedCleanType, itemPath, violations)
+        verifyNested(tsContent, elem, nestedCleanType, itemPath, violations)
       }
-    } else if (typeof value === 'object' && !Array.isArray(value)) {
+    } else {
+      // Non-array nested field: must be a plain object
+      if (typeof value !== 'object' || Array.isArray(value)) {
+        violations.push(basePath + '.' + field + ': expected ' + nestedType + ' (object), got ' + (Array.isArray(value) ? 'array' : typeof value))
+        continue
+      }
+
       const objPath = basePath + '.' + field
       const itemKeys = Object.keys(value)
       const { backendExtra, missingRequired } = verifyFieldsBidirectional(itemKeys, nestedFields)

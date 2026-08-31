@@ -250,6 +250,66 @@ describe('verifyResponse', () => {
     verifyResponse(tsContent, data, 'ErrorResponse', 'test', violations)
     expect(violations.some(v => v.includes('error.code') && v.includes('required'))).toBe(true)
   })
+
+  // §3G: Complex nested container guard — 4 required cases
+
+  it('fails when ServiceDefinition.config_status is a string instead of object', () => {
+    const data = {
+      schema_version: 1, revision: 1, service_id: 'test', display_name: 'Test',
+      capability: 'text_generation', adapter_type: 'openai_compatible',
+      endpoint: null, model: null, enabled: true, priority: 0, is_default: false,
+      config: {}, required_secrets: [], optional_secrets: [],
+      config_status: 'wrong-string',
+      availability: { available: true, checked_at: null, latency_ms: null, component: null, error_code: null, suggestion: null },
+      secret_status: { configured: true, required: [], missing: [] },
+      created_at: '', updated_at: '',
+    }
+    const violations: string[] = []
+    verifyResponse(tsContent, data, 'ServiceDefinition', 'ServiceDefinition', violations)
+    expect(violations.some(v => v.includes('config_status') && v.includes('object'))).toBe(true)
+  })
+
+  it('fails when ServiceListResponse.items is a plain object instead of array', () => {
+    const data = {
+      items: { service_id: 'x', display_name: 'wrong' },
+      next_cursor: null,
+      total: 1,
+    }
+    const violations: string[] = []
+    verifyResponse(tsContent, data, 'ServiceListResponse', 'ServiceListResponse', violations)
+    expect(violations.some(v => v.includes('items') && v.includes('array'))).toBe(true)
+  })
+
+  it('fails when ServiceListResponse.items contains non-object elements', () => {
+    const data = {
+      items: ['wrong-string'],
+      next_cursor: null,
+      total: 1,
+    }
+    const violations: string[] = []
+    verifyResponse(tsContent, data, 'ServiceListResponse', 'ServiceListResponse', violations)
+    expect(violations.some(v => v.includes('items[0]') && v.includes('object'))).toBe(true)
+  })
+
+  it('passes for valid ServiceListResponse with nested ServiceDefinition array', () => {
+    const data = {
+      items: [{
+        schema_version: 1, revision: 1, service_id: 'test', display_name: 'Test',
+        capability: 'text_generation', adapter_type: 'openai_compatible',
+        endpoint: null, model: null, enabled: true, priority: 0, is_default: false,
+        config: {}, required_secrets: [], optional_secrets: [],
+        config_status: { configured: true, missing_fields: [], missing_secrets: [] },
+        availability: { available: true, checked_at: null, latency_ms: null, component: null, error_code: null, suggestion: null },
+        secret_status: { configured: true, required: [], missing: [] },
+        created_at: '', updated_at: '',
+      }],
+      next_cursor: null,
+      total: 1,
+    }
+    const violations: string[] = []
+    verifyResponse(tsContent, data, 'ServiceListResponse', 'ServiceListResponse', violations)
+    expect(violations).toEqual([])
+  })
 })
 
 // ── Fixture alignment ─────────────────────────────────────────────────────
