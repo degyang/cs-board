@@ -324,7 +324,7 @@ function setupDefaultMocks() {
 
 function renderWorkbench(initialPath = '/tasks/proj-abc123def456') {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter initialEntries={[initialPath]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/tasks/:taskId" element={<TaskWorkbenchPage />} />
         <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
@@ -910,7 +910,7 @@ describe('Diagnostics contract', () => {
 
   it('renders diagnostics page with stages', async () => {
     render(
-      <MemoryRouter initialEntries={['/tasks/proj-abc123def456/runs/run-xyz789abc123/diagnostics']}>
+      <MemoryRouter initialEntries={['/tasks/proj-abc123def456/runs/run-xyz789abc123/diagnostics']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
         </Routes>

@@ -366,12 +366,13 @@ export interface InputsReadback {
 export interface ApiError {
   code: string
   message: string
+  retryable?: boolean
   unavailable?: string[]
-  details?: Array<{
-    provider: string
-    error_code?: string
-    suggestion?: string
-  }>
+  details?: Record<string, unknown> | null
+}
+
+export interface ErrorResponse {
+  error: ApiError
 }
 
 // ==========================================================================
@@ -691,6 +692,12 @@ export interface DiagnosticsLogs {
   log_path: string | null
 }
 
+export interface DiagnosticsRecentError {
+  timestamp: string
+  component: string
+  message: string
+}
+
 export interface DiagnosticsSettings {
   api: DiagnosticsApiStatus
   services: DiagnosticsServiceSummary
@@ -698,9 +705,5 @@ export interface DiagnosticsSettings {
   storage: DiagnosticsStorageSummary
   telemetry: DiagnosticsTelemetry | null
   logs: DiagnosticsLogs | null
-  recent_errors: Array<{
-    timestamp: string
-    component: string
-    message: string
-  }>
+  recent_errors: DiagnosticsRecentError[]
 }

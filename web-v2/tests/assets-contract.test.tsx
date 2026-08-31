@@ -8,6 +8,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AssetManagementPage } from '../src/pages/AssetManagementPage'
 
+/** React Router v7 future flags — suppresses all Future Flag warnings */
+const ROUTER_FUTURE = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+}
+
 vi.mock('../src/lib/api/assets', () => ({
   fetchStyles: vi.fn(),
   fetchVoices: vi.fn(),
@@ -72,7 +78,7 @@ describe('AssetManagementPage', () => {
   it('renders the page title', async () => {
     vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
     expect(screen.getByText('资产管理')).toBeInTheDocument()
   })
@@ -80,7 +86,7 @@ describe('AssetManagementPage', () => {
   it('renders all three tabs', async () => {
     vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
     expect(screen.getByText('预置风格')).toBeInTheDocument()
     expect(screen.getByText('自定义风格')).toBeInTheDocument()
@@ -90,7 +96,7 @@ describe('AssetManagementPage', () => {
   it('loads and displays preset styles', async () => {
     vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles, next_cursor: null, total: 2 })
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await waitFor(() => {
@@ -102,7 +108,7 @@ describe('AssetManagementPage', () => {
   it('shows loading state', async () => {
     vi.mocked(fetchStyles).mockImplementation(() => new Promise(() => {}))
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
     expect(screen.getByText('加载中...')).toBeInTheDocument()
   })
@@ -110,7 +116,7 @@ describe('AssetManagementPage', () => {
   it('shows error state on fetch failure', async () => {
     vi.mocked(fetchStyles).mockRejectedValue(new Error('Network error'))
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await waitFor(() => {
@@ -121,7 +127,7 @@ describe('AssetManagementPage', () => {
   it('shows empty state when no items', async () => {
     vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await waitFor(() => {
@@ -132,7 +138,7 @@ describe('AssetManagementPage', () => {
   it('selects an item and shows detail', async () => {
     vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles, next_cursor: null, total: 2 })
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await waitFor(() => {
@@ -153,7 +159,7 @@ describe('AssetManagementPage', () => {
     vi.mocked(activateStyle).mockResolvedValue({ ...mockStyles[1], kind: 'custom', status: 'active' })
 
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     // Switch to custom tab
@@ -183,7 +189,7 @@ describe('AssetManagementPage', () => {
     vi.mocked(deactivateStyle).mockResolvedValue({ ...mockStyles[0], kind: 'custom', status: 'inactive' })
 
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     // Switch to custom tab
@@ -211,7 +217,7 @@ describe('AssetManagementPage', () => {
     vi.mocked(copyStyle).mockResolvedValue({ ...mockStyles[0], style_id: 's3', kind: 'custom' })
 
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await waitFor(() => {
@@ -236,7 +242,7 @@ describe('AssetManagementPage', () => {
     vi.mocked(fetchVoices).mockResolvedValue({ items: mockVoices, next_cursor: null, total: 1 })
 
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await userEvent.click(screen.getByText('音色库'))
@@ -251,7 +257,7 @@ describe('AssetManagementPage', () => {
     vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles, next_cursor: null, total: 2 })
 
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     await waitFor(() => {
@@ -273,7 +279,7 @@ describe('AssetManagementPage', () => {
     vi.mocked(activateStyle).mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
-      render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+      render(<MemoryRouter future={ROUTER_FUTURE}><AssetManagementPage /></MemoryRouter>)
     })
 
     // Switch to custom tab

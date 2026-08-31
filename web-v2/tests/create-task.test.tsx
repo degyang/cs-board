@@ -13,7 +13,7 @@ vi.mock('../src/lib/api/client', () => ({
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/tasks/new']}>
+    <MemoryRouter initialEntries={['/tasks/new']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/tasks/new" element={<CreateTaskPage />} />
         <Route path="/tasks/:id" element={<div>task-detail</div>} />

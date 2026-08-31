@@ -15,6 +15,21 @@ import { StoragePage } from '../pages/StoragePage'
 import { DiagnosticsPage } from '../pages/DiagnosticsPage'
 import { HelpPage } from '../pages/HelpPage'
 
+export const SETTINGS_ROUTES = {
+  path: 'settings',
+  element: <SettingsLayout />,
+  children: [
+    { path: 'models', element: <ModelServicesPage /> },
+    { path: 'models/new', element: <ServiceFormPage /> },
+    { path: 'models/:serviceId', element: <ServiceDetailPage /> },
+    { path: 'models/:serviceId/edit', element: <ServiceFormPage /> },
+    { path: 'voice-alignment', element: <VoiceAlignmentPage /> },
+    { path: 'toolchain', element: <ToolchainPage /> },
+    { path: 'storage', element: <StoragePage /> },
+    { path: 'diagnostics', element: <DiagnosticsPage /> },
+  ],
+}
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -26,22 +41,13 @@ export const router = createBrowserRouter([
       { path: 'tasks/:taskId/runs/:runId/diagnostics', element: <RunDiagnosticsPage /> },
       { path: 'assets', element: <AssetManagementPage /> },
       { path: 'settings', element: <Navigate to="/settings/models" replace /> },
-      {
-        path: 'settings',
-        element: <SettingsLayout />,
-        children: [
-          { path: 'models', element: <ModelServicesPage /> },
-          { path: 'models/new', element: <ServiceFormPage /> },
-          { path: 'models/:serviceId', element: <ServiceDetailPage /> },
-          { path: 'models/:serviceId/edit', element: <ServiceFormPage /> },
-          { path: 'voice-alignment', element: <VoiceAlignmentPage /> },
-          { path: 'toolchain', element: <ToolchainPage /> },
-          { path: 'storage', element: <StoragePage /> },
-          { path: 'diagnostics', element: <DiagnosticsPage /> },
-        ],
-      },
+      SETTINGS_ROUTES,
       { path: 'help', element: <HelpPage /> },
       { path: '*', element: <div className="page"><h2>404 — 页面不存在</h2></div> },
     ],
   },
-])
+], {
+  future: {
+    v7_relativeSplatPath: true,
+  },
+})

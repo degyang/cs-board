@@ -3,6 +3,7 @@
     "code": "VALIDATION_ERROR",
     "message": "Invalid request",
     "retryable": false,
+    "unavailable": [],
     "details": {
       "capability": "text_generation",
       "service_id": "test-service",

@@ -60,7 +60,7 @@ describe('ProvidersPage', () => {
   it('shows loading state initially', () => {
     mockFetchProviders.mockReturnValue(new Promise(() => {}))
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -70,7 +70,7 @@ describe('ProvidersPage', () => {
   it('renders provider list after loading', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -84,7 +84,7 @@ describe('ProvidersPage', () => {
   it('shows "模型服务" as page title', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -97,7 +97,7 @@ describe('ProvidersPage', () => {
   it('shows category badges from provider_type', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -113,7 +113,7 @@ describe('ProvidersPage', () => {
   it('shows model chip from config.model', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -126,7 +126,7 @@ describe('ProvidersPage', () => {
   it('shows Base URL from config', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -139,7 +139,7 @@ describe('ProvidersPage', () => {
   it('shows TTS URL from config', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -152,7 +152,7 @@ describe('ProvidersPage', () => {
   it('shows warning when not all providers are available', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -169,7 +169,7 @@ describe('ProvidersPage', () => {
       all_available: true,
     })
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -182,7 +182,7 @@ describe('ProvidersPage', () => {
   it('shows configured/unconfigured badges correctly', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -198,7 +198,7 @@ describe('ProvidersPage', () => {
   it('shows error_code when provider unavailable', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -211,7 +211,7 @@ describe('ProvidersPage', () => {
   it('shows suggestion when provider unavailable', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -224,7 +224,7 @@ describe('ProvidersPage', () => {
   it('renders links to provider detail pages', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -238,7 +238,7 @@ describe('ProvidersPage', () => {
   it('shows CRUD gap notice', async () => {
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -251,7 +251,7 @@ describe('ProvidersPage', () => {
   it('shows error state on fetch failure', async () => {
     mockFetchProviders.mockRejectedValueOnce(new Error('网络错误'))
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )
@@ -284,7 +284,7 @@ describe('ProvidersPage', () => {
 
     mockFetchProviders.mockResolvedValue(mockProviderData)
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ProvidersPage />
       </MemoryRouter>,
     )

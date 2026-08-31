@@ -1,35 +1,37 @@
 {
   "api": {
     "status": "healthy",
-    "version": "0.7.0",
-    "uptime_seconds": 86400
+    "endpoint": null,
+    "latency_ms": null
   },
-  "services": [
-    {
-      "service_id": "anthropic-claude",
-      "status": "available",
-      "latency_ms": 150
-    }
-  ],
-  "toolchain": [
-    {
-      "component": "ffmpeg",
-      "available": true,
-      "version": "6.1.1"
-    }
-  ],
+  "services": {
+    "total": 3,
+    "available": 2,
+    "unavailable": 1
+  },
+  "toolchain": {
+    "total": 4,
+    "available": 3,
+    "missing": 1
+  },
   "storage": {
-    "base_path": "/data/mountain",
-    "total_bytes": 107374182400,
-    "used_bytes": 53687091200,
-    "available_bytes": 53687091200
+    "writable": true,
+    "free_bytes": 53687091200,
+    "used_bytes": 53687091200
   },
   "telemetry": {
-    "enabled": false
+    "enabled": false,
+    "endpoint": null
   },
   "logs": {
-    "level": "info",
-    "path": "/var/log/mountain/app.log"
+    "recent_errors": 2,
+    "log_path": "/var/log/mountain/app.log"
   },
-  "recent_errors": []
+  "recent_errors": [
+    {
+      "timestamp": "2025-03-20T14:00:00Z",
+      "component": "pipeline",
+      "message": "Stage generate-illustrations failed: timeout"
+    }
+  ]
 }

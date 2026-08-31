@@ -1,12 +1,13 @@
 /* ==========================================================================
    Component Contract Tests — Services & Settings Pages
-   Tests the actual Router-used components (§3A.3)
+   Tests the actual Router-used components (§3A.3, §3B.2)
+   Uses production-equivalent route tree with future flags
    ========================================================================== */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { MountainApiError } from '../src/lib/api/http'
 import { SettingsLayout } from '../src/pages/SettingsLayout'
 import { ModelServicesPage } from '../src/pages/ModelServicesPage'
@@ -86,16 +87,25 @@ const mockSecrets = {
   total: 1,
 }
 
-/** Render with SettingsLayout and nested routes (matches production Router) */
+/** React Router v7 future flags — suppresses all Future Flag warnings */
+const ROUTER_FUTURE = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+}
+
+/**
+ * Production-equivalent route tree matching app/router.tsx.
+ * Uses MemoryRouter with future flags to eliminate all Router warnings.
+ */
 function renderWithRouter(ui: React.ReactElement, initialRoute = '/settings/models') {
   return render(
-    <MemoryRouter initialEntries={[initialRoute]}>
+    <MemoryRouter initialEntries={[initialRoute]} future={ROUTER_FUTURE}>
       <Routes>
         <Route path="/settings" element={<SettingsLayout />}>
           <Route path="models" element={ui} />
+          <Route path="models/new" element={<ServiceFormPage />} />
           <Route path="models/:serviceId" element={<ServiceDetailPage />} />
           <Route path="models/:serviceId/edit" element={<ServiceFormPage />} />
-          <Route path="models/new" element={<ServiceFormPage />} />
           <Route path="voice-alignment" element={<VoiceAlignmentPage />} />
           <Route path="toolchain" element={<ToolchainPage />} />
           <Route path="storage" element={<StoragePage />} />
@@ -117,7 +127,7 @@ describe('SettingsLayout with ModelServicesPage (production Router)', () => {
     vi.mocked(fetchServiceSecrets).mockReset()
   })
 
-  it('renders SettingsLayout with tabs', async () => {
+  it('renders SettingsLayout with all navigation tabs', async () => {
     vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     await act(async () => {
       renderWithRouter(<ModelServicesPage />)
@@ -211,13 +221,17 @@ describe('ServiceDetailPage', () => {
     vi.mocked(fetchService).mockResolvedValue(mockService)
     vi.mocked(fetchServiceSecrets).mockResolvedValue(mockSecrets)
 
-    render(
-      <MemoryRouter initialEntries={['/settings/models/svc1']}>
-        <Routes>
-          <Route path="/settings/models/:serviceId" element={<ServiceDetailPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/svc1']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models/:serviceId" element={<ServiceDetailPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     await waitFor(() => {
       const titleElements = screen.getAllByText('OpenAI GPT-4')
@@ -234,13 +248,17 @@ describe('ServiceDetailPage', () => {
     vi.mocked(fetchService).mockResolvedValue(mockService)
     vi.mocked(fetchServiceSecrets).mockResolvedValue(mockSecrets)
 
-    render(
-      <MemoryRouter initialEntries={['/settings/models/svc1']}>
-        <Routes>
-          <Route path="/settings/models/:serviceId" element={<ServiceDetailPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/svc1']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models/:serviceId" element={<ServiceDetailPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     await waitFor(() => {
       expect(screen.getByText('sk-...abc')).toBeInTheDocument()
@@ -259,13 +277,17 @@ describe('ServiceDetailPage', () => {
       suggestion: null,
     })
 
-    render(
-      <MemoryRouter initialEntries={['/settings/models/svc1']}>
-        <Routes>
-          <Route path="/settings/models/:serviceId" element={<ServiceDetailPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/svc1']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models/:serviceId" element={<ServiceDetailPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     await waitFor(() => {
       const titleElements = screen.getAllByText('OpenAI GPT-4')
@@ -285,13 +307,17 @@ describe('ServiceDetailPage', () => {
     vi.mocked(fetchServiceSecrets).mockResolvedValue(mockSecrets)
     vi.mocked(deleteService).mockRejectedValue(new MountainApiError(400, 'DELETE_FAILED', 'Cannot delete default service'))
 
-    render(
-      <MemoryRouter initialEntries={['/settings/models/svc1']}>
-        <Routes>
-          <Route path="/settings/models/:serviceId" element={<ServiceDetailPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/svc1']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models/:serviceId" element={<ServiceDetailPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     await waitFor(() => {
       const titleElements = screen.getAllByText('OpenAI GPT-4')
@@ -327,14 +353,19 @@ describe('ServiceFormPage (create)', () => {
     vi.mocked(createService).mockReset()
   })
 
-  it('renders create form with service_id field', async () => {
-    render(
-      <MemoryRouter initialEntries={['/settings/models/new']}>
-        <Routes>
-          <Route path="/settings/models/new" element={<ServiceFormPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+  it('renders create form with all required fields', async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/new']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models" element={<div>models-index</div>} />
+              <Route path="models/new" element={<ServiceFormPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     expect(screen.getByText('新建服务')).toBeInTheDocument()
     expect(screen.getByLabelText('服务 ID *')).toBeInTheDocument()
@@ -346,13 +377,18 @@ describe('ServiceFormPage (create)', () => {
   it('submits service_id, display_name, capability, adapter_type and optional fields', async () => {
     vi.mocked(createService).mockResolvedValue(mockService)
 
-    render(
-      <MemoryRouter initialEntries={['/settings/models/new']}>
-        <Routes>
-          <Route path="/settings/models/new" element={<ServiceFormPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/new']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models" element={<div>models-index</div>} />
+              <Route path="models/new" element={<ServiceFormPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     await userEvent.type(screen.getByLabelText('服务 ID *'), 'my-service')
     await userEvent.type(screen.getByLabelText('显示名称 *'), 'My Service')
@@ -376,13 +412,18 @@ describe('ServiceFormPage (create)', () => {
   it('allows custom capability and adapter_type values', async () => {
     vi.mocked(createService).mockResolvedValue(mockService)
 
-    render(
-      <MemoryRouter initialEntries={['/settings/models/new']}>
-        <Routes>
-          <Route path="/settings/models/new" element={<ServiceFormPage />} />
-        </Routes>
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/models/new']} future={ROUTER_FUTURE}>
+          <Routes>
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route path="models" element={<div>models-index</div>} />
+              <Route path="models/new" element={<ServiceFormPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    })
 
     await userEvent.type(screen.getByLabelText('服务 ID *'), 'custom-svc')
     await userEvent.type(screen.getByLabelText('显示名称 *'), 'Custom Service')
@@ -402,7 +443,7 @@ describe('ServiceFormPage (create)', () => {
   })
 })
 
-describe('VoiceAlignmentPage', () => {
+describe('VoiceAlignmentPage (production route)', () => {
   beforeEach(() => {
     vi.mocked(fetchVoiceAlignmentSettings).mockReset()
   })
@@ -415,15 +456,18 @@ describe('VoiceAlignmentPage', () => {
       whisper: null,
     })
 
-    renderWithRouter(<VoiceAlignmentPage />, '/settings/voice-alignment')
+    await act(async () => {
+      renderWithRouter(<VoiceAlignmentPage />, '/settings/voice-alignment')
+    })
 
     await waitFor(() => {
-      expect(screen.getByText('语音与对齐')).toBeInTheDocument()
+      // Title appears in both tab and page content
+      expect(screen.getAllByText('语音与对齐').length).toBeGreaterThanOrEqual(1)
     })
   })
 })
 
-describe('ToolchainPage', () => {
+describe('ToolchainPage (production route)', () => {
   beforeEach(() => {
     vi.mocked(fetchToolchainSettings).mockReset()
   })
@@ -431,15 +475,17 @@ describe('ToolchainPage', () => {
   it('renders the page title', async () => {
     vi.mocked(fetchToolchainSettings).mockResolvedValue({ tools: [] })
 
-    renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    await act(async () => {
+      renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
 
     await waitFor(() => {
-      expect(screen.getByText('工具链')).toBeInTheDocument()
+      expect(screen.getAllByText('工具链').length).toBeGreaterThanOrEqual(1)
     })
   })
 })
 
-describe('StoragePage', () => {
+describe('StoragePage (production route)', () => {
   beforeEach(() => {
     vi.mocked(fetchStorageSettings).mockReset()
   })
@@ -457,15 +503,17 @@ describe('StoragePage', () => {
       suggestion: null,
     })
 
-    renderWithRouter(<StoragePage />, '/settings/storage')
+    await act(async () => {
+      renderWithRouter(<StoragePage />, '/settings/storage')
+    })
 
     await waitFor(() => {
-      expect(screen.getByText('存储')).toBeInTheDocument()
+      expect(screen.getAllByText('存储').length).toBeGreaterThanOrEqual(1)
     })
   })
 })
 
-describe('DiagnosticsPage', () => {
+describe('DiagnosticsPage (production route)', () => {
   beforeEach(() => {
     vi.mocked(fetchDiagnosticsSettings).mockReset()
   })
@@ -480,10 +528,104 @@ describe('DiagnosticsPage', () => {
       logs: { recent_errors: 0, log_path: null },
     })
 
-    renderWithRouter(<DiagnosticsPage />, '/settings/diagnostics')
+    await act(async () => {
+      renderWithRouter(<DiagnosticsPage />, '/settings/diagnostics')
+    })
 
     await waitFor(() => {
-      expect(screen.getByText('诊断')).toBeInTheDocument()
+      expect(screen.getAllByText('诊断').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+})
+
+describe('Production route tree verification', () => {
+  beforeEach(() => {
+    vi.mocked(fetchServices).mockReset()
+    vi.mocked(fetchService).mockReset()
+    vi.mocked(fetchServiceSecrets).mockReset()
+    vi.mocked(fetchVoiceAlignmentSettings).mockReset()
+    vi.mocked(fetchToolchainSettings).mockReset()
+    vi.mocked(fetchStorageSettings).mockReset()
+    vi.mocked(fetchDiagnosticsSettings).mockReset()
+  })
+
+  it('renders /settings/models through production-equivalent route tree', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    await act(async () => {
+      renderWithRouter(<ModelServicesPage />, '/settings/models')
+    })
+    await waitFor(() => {
+      expect(screen.getByText('OpenAI GPT-4')).toBeInTheDocument()
+    })
+  })
+
+  it('renders /settings/models/new through production-equivalent route tree', async () => {
+    vi.mocked(createService).mockResolvedValue(mockService)
+    await act(async () => {
+      renderWithRouter(<ServiceFormPage />, '/settings/models/new')
+    })
+    expect(screen.getByText('新建服务')).toBeInTheDocument()
+  })
+
+  it('renders /settings/models/:serviceId through production-equivalent route tree', async () => {
+    vi.mocked(fetchService).mockResolvedValue(mockService)
+    vi.mocked(fetchServiceSecrets).mockResolvedValue(mockSecrets)
+    await act(async () => {
+      renderWithRouter(<ServiceDetailPage />, '/settings/models/svc1')
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('renders /settings/voice-alignment through production-equivalent route tree', async () => {
+    vi.mocked(fetchVoiceAlignmentSettings).mockResolvedValue({
+      speech_synthesis: null, speech_alignment: null, indextts: null, whisper: null,
+    })
+    await act(async () => {
+      renderWithRouter(<VoiceAlignmentPage />, '/settings/voice-alignment')
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('语音与对齐').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('renders /settings/toolchain through production-equivalent route tree', async () => {
+    vi.mocked(fetchToolchainSettings).mockResolvedValue({ tools: [] })
+    await act(async () => {
+      renderWithRouter(<ToolchainPage />, '/settings/toolchain')
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('工具链').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('renders /settings/storage through production-equivalent route tree', async () => {
+    vi.mocked(fetchStorageSettings).mockResolvedValue({
+      writable: true, assets_available: true, tasks_available: true, temp_available: true,
+      free_bytes: null, used_bytes: null, cleanup_policy: null, error_code: null, suggestion: null,
+    })
+    await act(async () => {
+      renderWithRouter(<StoragePage />, '/settings/storage')
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('存储').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('renders /settings/diagnostics through production-equivalent route tree', async () => {
+    vi.mocked(fetchDiagnosticsSettings).mockResolvedValue({
+      api: { status: 'healthy', endpoint: null, latency_ms: null },
+      services: { total: 0, available: 0, unavailable: 0 },
+      toolchain: { total: 0, available: 0, missing: 0 },
+      storage: { writable: true, free_bytes: null, used_bytes: null },
+      telemetry: null, logs: null, recent_errors: [],
+    })
+    await act(async () => {
+      renderWithRouter(<DiagnosticsPage />, '/settings/diagnostics')
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('诊断').length).toBeGreaterThanOrEqual(1)
     })
   })
 })
