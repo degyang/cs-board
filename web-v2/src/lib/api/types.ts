@@ -73,73 +73,6 @@ export interface CapabilitiesResponse {
   }
 }
 
-// ── Providers (legacy) ──────────────────────────────────────────────────
-
-export interface ProviderProfile {
-  provider_type: string
-  name: string
-  description: string
-  required_secrets: string[]
-  optional_secrets: string[]
-  config: Record<string, unknown>
-}
-
-export interface ConfigStatus {
-  configured: boolean
-  missing_secrets: string[]
-  configured_secrets: string[]
-  is_encrypted: boolean
-}
-
-export interface ProviderEntry {
-  profile: ProviderProfile
-  config_status: ConfigStatus
-  availability: ProviderAvailability
-}
-
-export interface ProviderListResponse {
-  providers: Record<string, ProviderEntry>
-  all_configured: boolean
-  all_available: boolean
-}
-
-export interface ProviderDetail {
-  name: string
-  profile: ProviderProfile
-  config: Record<string, unknown>
-  config_status: ConfigStatus
-  availability: ProviderAvailability
-}
-
-export interface UpdateConfigResponse {
-  ok: boolean
-  provider: string
-  config: Record<string, unknown>
-}
-
-// ── Secrets (legacy) ────────────────────────────────────────────────────
-
-export interface SecretInfo {
-  configured: boolean
-  masked_value: string | null
-}
-
-export interface SecretStatusResponse {
-  provider: string
-  secrets: Record<string, SecretInfo>
-}
-
-export interface SetSecretRequest {
-  key: string
-  value: string
-}
-
-export interface SecretOperationResponse {
-  ok: boolean
-  provider: string
-  key: string
-}
-
 // ── Tasks ───────────────────────────────────────────────────────────────
 
 export interface Task {
@@ -590,11 +523,6 @@ export interface CreateVoiceRequest {
 export interface UpdateVoiceRequest {
   name?: string
   tags?: string[]
-}
-
-export interface SetServiceSecretRequest {
-  key: string
-  value: string
 }
 
 // ── Settings ────────────────────────────────────────────────────────────

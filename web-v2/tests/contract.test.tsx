@@ -637,7 +637,7 @@ describe('Workbench contract: capability warning', () => {
     renderWorkbench()
     await screen.findByText('fish-speech')
     const link = screen.getByText('fish-speech')
-    expect(link.getAttribute('href')).toBe('/settings/providers/fish-speech')
+    expect(link.getAttribute('href')).toBe('/settings/models/fish-speech')
   })
 
   it('shows error_code from providers.providers[name]', async () => {

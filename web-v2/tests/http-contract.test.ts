@@ -17,12 +17,6 @@ import {
   fetchEvents,
   fetchLogs,
   getFinalUrl,
-  fetchProviders,
-  fetchProvider,
-  updateProviderConfig,
-  fetchProviderSecrets,
-  setProviderSecret,
-  deleteProviderSecret,
   fetchTasks,
 } from '../src/lib/api/client'
 
@@ -278,86 +272,6 @@ describe('HTTP contract: getFinalUrl', () => {
     const url = getFinalUrl('p1', 'r1')
     expect(url).not.toContain('artifacts')
     expect(url).not.toContain('.mp4')
-  })
-})
-
-// ── Provider endpoints ──────────────────────────────────────────────────
-
-describe('HTTP contract: fetchProviders', () => {
-  it('sends GET to /providers', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ providers: {}, all_configured: true, all_available: true }))
-
-    await fetchProviders()
-
-    const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/providers')
-    expect(opts.method).toBeUndefined() // GET is default
-  })
-})
-
-describe('HTTP contract: fetchProvider', () => {
-  it('sends GET to /providers/{name}', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({
-      name: 'text_model', profile: {}, config: {}, config_status: {}, availability: {},
-    }))
-
-    await fetchProvider('text_model')
-
-    const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/providers/text_model')
-  })
-})
-
-describe('HTTP contract: updateProviderConfig', () => {
-  it('sends PUT to /providers/{name}/config with body', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ ok: true, provider: 'text_model', config: {} }))
-
-    await updateProviderConfig('text_model', { base_url: 'https://example.com', model: 'gpt-4o' })
-
-    const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/providers/text_model/config')
-    expect(opts.method).toBe('PUT')
-    const body = JSON.parse(opts.body)
-    expect(body.base_url).toBe('https://example.com')
-    expect(body.model).toBe('gpt-4o')
-  })
-})
-
-describe('HTTP contract: fetchProviderSecrets', () => {
-  it('sends GET to /providers/{name}/secrets', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ provider: 'text_model', secrets: {} }))
-
-    await fetchProviderSecrets('text_model')
-
-    const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/providers/text_model/secrets')
-  })
-})
-
-describe('HTTP contract: setProviderSecret', () => {
-  it('sends POST to /providers/{name}/secrets with key and value', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ ok: true, provider: 'text_model', key: 'api_key' }))
-
-    await setProviderSecret('text_model', { key: 'api_key', value: 'sk-test123' })
-
-    const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/providers/text_model/secrets')
-    expect(opts.method).toBe('POST')
-    const body = JSON.parse(opts.body)
-    expect(body.key).toBe('api_key')
-    expect(body.value).toBe('sk-test123')
-  })
-})
-
-describe('HTTP contract: deleteProviderSecret', () => {
-  it('sends DELETE to /providers/{name}/secrets/{key}', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ ok: true, provider: 'text_model', key: 'api_key' }))
-
-    await deleteProviderSecret('text_model', 'api_key')
-
-    const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/api/v1/providers/text_model/secrets/api_key')
-    expect(opts.method).toBe('DELETE')
   })
 })
 

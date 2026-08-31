@@ -318,7 +318,7 @@ export function TaskWorkbenchPage() {
               const info = capData.providers.providers[name]
               return (
                 <span key={name} style={{ display: 'block', marginTop: 4 }}>
-                  <Link to={`/settings/providers/${name}`} style={{ fontWeight: 600 }}>{name}</Link>
+                  <Link to={`/settings/models/${name}`} style={{ fontWeight: 600 }}>{name}</Link>
                   {info?.error_code && <span> — {info.error_code}</span>}
                   {info?.suggestion && <span style={{ display: 'block', fontSize: 12, color: 'var(--nt-text-muted)', marginLeft: 16 }}>💡 {info.suggestion}</span>}
                 </span>

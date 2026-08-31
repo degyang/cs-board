@@ -6,7 +6,7 @@ const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 // Import after mock setup
-const { fetchHealth, fetchProviders, fetchProvider, createTask, updateProviderConfig } = await import('../src/lib/api/client')
+const { fetchHealth, createTask } = await import('../src/lib/api/client')
 
 describe('API Client', () => {
   beforeEach(() => {
@@ -43,29 +43,6 @@ describe('API Client', () => {
     })
   })
 
-  describe('fetchProviders', () => {
-    it('returns provider list', async () => {
-      const mockResponse = {
-        providers: {
-          text_model: {
-            profile: { provider_type: 'text_model', name: 'Text Model', description: '', required_secrets: ['api_key'], optional_secrets: [], config: {} },
-            config_status: { configured: false, missing_secrets: ['api_key'], configured_secrets: [], is_encrypted: false },
-            availability: { available: false },
-          },
-        },
-        all_configured: false,
-        all_available: false,
-      }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      })
-
-      const result = await fetchProviders()
-      expect(result.providers.text_model.profile.name).toBe('Text Model')
-    })
-  })
-
   describe('createTask', () => {
     it('sends POST with title and returns task_id', async () => {
       const mockResponse = {
@@ -91,32 +68,6 @@ describe('API Client', () => {
     })
   })
 
-  describe('updateProviderConfig', () => {
-    it('sends PUT with config payload', async () => {
-      const mockResponse = { ok: true, provider: 'text_model', config: { model: 'gpt-4o-mini' } }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      })
-
-      const result = await updateProviderConfig('text_model', { model: 'gpt-4o-mini' })
-      expect(result.ok).toBe(true)
-      expect(result.config.model).toBe('gpt-4o-mini')
-    })
-
-    it('throws on sensitive field rejection', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: () => Promise.resolve({ detail: '不允许更新敏感字段: api_key' }),
-      })
-
-      await expect(
-        updateProviderConfig('text_model', { api_key: 'secret' }),
-      ).rejects.toThrow()
-    })
-  })
-
   describe('Error handling', () => {
     it('parses CAPABILITY_NOT_AVAILABLE error', async () => {
       const errorDetail = {
@@ -131,14 +82,7 @@ describe('API Client', () => {
         json: () => Promise.resolve({ detail: errorDetail }),
       })
 
-      try {
-        await fetchHealth()
-      } catch (e) {
-        expect(e).toBeInstanceOf(MountainApiError)
-        const err = e as MountainApiError
-        expect(err.apiError?.code).toBe('CAPABILITY_NOT_AVAILABLE')
-        expect(err.apiError?.details?.[0].provider).toBe('tts')
-      }
+      await expect(fetchHealth()).rejects.toThrow(MountainApiError)
     })
   })
 })

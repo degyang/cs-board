@@ -6,12 +6,6 @@
 import type {
   HealthResponse,
   CapabilitiesResponse,
-  ProviderListResponse,
-  ProviderDetail,
-  UpdateConfigResponse,
-  SecretStatusResponse,
-  SetSecretRequest,
-  SecretOperationResponse,
   TaskListResponse,
   CreateTaskRequest,
   CreateTaskResponse,
@@ -80,17 +74,6 @@ function post<T>(path: string, body?: unknown): Promise<T> {
   })
 }
 
-function put<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
-}
-
-function del<T>(path: string): Promise<T> {
-  return request<T>(path, { method: 'DELETE' })
-}
-
 /**
  * POST multipart/form-data — 必须由浏览器自动设置 Content-Type（含 boundary）。
  * 禁止手工设置 Content-Type。
@@ -153,46 +136,6 @@ export function fetchHealth(): Promise<HealthResponse> {
 
 export function fetchCapabilities(): Promise<CapabilitiesResponse> {
   return get<CapabilitiesResponse>('/capabilities')
-}
-
-// ── Providers ───────────────────────────────────────────────────────────
-
-export function fetchProviders(): Promise<ProviderListResponse> {
-  return get<ProviderListResponse>('/providers')
-}
-
-export function fetchProvider(name: string): Promise<ProviderDetail> {
-  return get<ProviderDetail>(`/providers/${encodeURIComponent(name)}`)
-}
-
-export function updateProviderConfig(
-  name: string,
-  config: Record<string, unknown>,
-): Promise<UpdateConfigResponse> {
-  return put<UpdateConfigResponse>(`/providers/${encodeURIComponent(name)}/config`, config)
-}
-
-export function fetchProviderSecrets(name: string): Promise<SecretStatusResponse> {
-  return get<SecretStatusResponse>(`/providers/${encodeURIComponent(name)}/secrets`)
-}
-
-export function setProviderSecret(
-  name: string,
-  secret: SetSecretRequest,
-): Promise<SecretOperationResponse> {
-  return post<SecretOperationResponse>(
-    `/providers/${encodeURIComponent(name)}/secrets`,
-    secret,
-  )
-}
-
-export function deleteProviderSecret(
-  name: string,
-  key: string,
-): Promise<SecretOperationResponse> {
-  return del<SecretOperationResponse>(
-    `/providers/${encodeURIComponent(name)}/secrets/${encodeURIComponent(key)}`,
-  )
 }
 
 // ── Tasks ────────────────────────────────────────────────────────────
