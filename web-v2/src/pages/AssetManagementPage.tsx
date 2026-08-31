@@ -62,6 +62,8 @@ export function AssetManagementPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const loadedIdsRef = useRef<Set<string>>(new Set())
+  const generationRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   // Reset cursor and items when filters change
   const resetAndLoad = useCallback(() => {
@@ -73,8 +75,16 @@ export function AssetManagementPage() {
     setFeedback(null)
   }, [])
 
-  // Load items with cursor pagination
+  // Load items with cursor pagination and stale-request protection
   const loadItems = useCallback(async (cursor?: string) => {
+    // Abort any in-flight request
+    if (abortRef.current) {
+      abortRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortRef.current = controller
+    const gen = cursor ? generationRef.current : ++generationRef.current
+
     if (cursor) {
       setLoadingMore(true)
     } else {
@@ -90,6 +100,8 @@ export function AssetManagementPage() {
           cursor,
           limit: 20,
         })
+        // Stale-request guard: discard if a newer request was started
+        if (gen !== generationRef.current) return
         // Dedup: only add items not already loaded
         const newItems = res.items.filter(v => !loadedIdsRef.current.has(v.voice_id))
         for (const v of newItems) loadedIdsRef.current.add(v.voice_id)
@@ -106,6 +118,8 @@ export function AssetManagementPage() {
           cursor,
           limit: 20,
         })
+        // Stale-request guard: discard if a newer request was started
+        if (gen !== generationRef.current) return
         // Dedup: only add items not already loaded
         const newItems = res.items.filter(s => !loadedIdsRef.current.has(s.style_id))
         for (const s of newItems) loadedIdsRef.current.add(s.style_id)
@@ -114,15 +128,27 @@ export function AssetManagementPage() {
         setHasMore(res.next_cursor !== null)
       }
     } catch (err) {
+      // Don't update state if this request was superseded
+      if (gen !== generationRef.current) return
+      if (controller.signal.aborted) return
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      if (gen === generationRef.current) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
   }, [activeTab, search, statusFilter, engineFilter, resetAndLoad])
 
   // Load on mount and filter change
   useEffect(() => { loadItems() }, [activeTab, search, statusFilter, engineFilter])
+
+  // Cleanup: abort on unmount
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [])
 
   // Reset selected item and filters when tab changes
   useEffect(() => {
