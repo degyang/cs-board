@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:contract-checker": "vitest run tests/checker-behavior.test.ts tests/contract-checker-exec.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
