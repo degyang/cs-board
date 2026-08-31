@@ -91,6 +91,30 @@ def parser() -> argparse.ArgumentParser:
     pipeline_resume.add_argument("--policy", default="auto", choices=["auto", "gated", "targeted"])
     pipeline_resume.add_argument("--events", choices=["jsonl"], help="流式输出事件")
 
+    # ── asset ──────────────────────────────────────────────────────
+    asset = resources.add_parser("asset")
+    asset_actions = asset.add_subparsers(dest="action", required=True)
+    asset_list = asset_actions.add_parser("list")
+    asset_list.add_argument("--kind", choices=["preset", "custom"], help="按类型筛选")
+    asset_show = asset_actions.add_parser("show")
+    asset_show.add_argument("--template", required=True, help="模板 ID")
+    asset_create = asset_actions.add_parser("create")
+    asset_create.add_argument("--name", required=True, help="风格名称")
+    asset_create.add_argument("--prompt", required=True, help="风格配方")
+    asset_create.add_argument("--copy-from", help="从 preset 复制")
+
+    # ── provider ───────────────────────────────────────────────────
+    provider = resources.add_parser("provider")
+    provider_actions = provider.add_subparsers(dest="action", required=True)
+    provider_list = provider_actions.add_parser("list")
+    provider_check = provider_actions.add_parser("check")
+    provider_check.add_argument("--name", required=True, help="Provider 名称")
+
+    # ── settings ───────────────────────────────────────────────────
+    settings = resources.add_parser("settings")
+    settings_actions = settings.add_subparsers(dest="action", required=True)
+    settings_runtime = settings_actions.add_parser("runtime")
+
     # ── stage ────────────────────────────────────────────────────────
     stage = resources.add_parser("stage")
     stage_actions = stage.add_subparsers(dest="action", required=True)
@@ -266,6 +290,65 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         if not run_id:
             raise ValueError("需要 --run 或任务有活跃运行")
         return commands.stage_retry(args.task, run_id, args.stage, args.unit, args.visual)
+
+    # ── asset ──────────────────────────────────────────────────────
+    if (args.resource, args.action) == ("asset", "list"):
+        from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
+        repo = FilesystemAssetRepository(args.data_dir)
+        templates = repo.list_style_templates(kind=args.kind)
+        return {"items": [t.to_dict() for t in templates], "total": len(templates)}
+    if (args.resource, args.action) == ("asset", "show"):
+        from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
+        repo = FilesystemAssetRepository(args.data_dir)
+        template = repo.get_style_template(args.template)
+        return template.to_dict()
+    if (args.resource, args.action) == ("asset", "create"):
+        from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
+        from csboard.domain.style_template import StyleTemplate
+        import uuid
+        repo = FilesystemAssetRepository(args.data_dir)
+        now = "2026-08-31T00:00:00Z"
+        template_id = uuid.uuid4().hex[:16]
+        if args.copy_from:
+            source = repo.get_style_template(args.copy_from)
+            template = source.copy_to_custom(template_id, now)
+            template.name = args.name or template.name
+            template.prompt_text = args.prompt or template.prompt_text
+        else:
+            template = StyleTemplate(
+                template_id=template_id,
+                revision=1,
+                name=args.name,
+                kind="custom",
+                prompt_text=args.prompt,
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+        repo.save_style_template(template)
+        return template.to_dict()
+
+    # ── provider ───────────────────────────────────────────────────
+    if (args.resource, args.action) == ("provider", "list"):
+        from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
+        from csboard.adapters.provider_factory import ProviderFactory
+        factory = ProviderFactory(args.data_dir)
+        registry = DynamicServiceRegistry(factory)
+        return {"items": registry.list_services(), "total": len(registry.list_services())}
+    if (args.resource, args.action) == ("provider", "check"):
+        from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
+        from csboard.adapters.provider_factory import ProviderFactory
+        factory = ProviderFactory(args.data_dir)
+        registry = DynamicServiceRegistry(factory)
+        return registry.check_health(args.name)
+
+    # ── settings ───────────────────────────────────────────────────
+    if (args.resource, args.action) == ("settings", "runtime"):
+        from csboard.adapters.dynamic_service_registry import DynamicServiceRegistry
+        from csboard.adapters.provider_factory import ProviderFactory
+        factory = ProviderFactory(args.data_dir)
+        registry = DynamicServiceRegistry(factory)
+        return registry.get_runtime_status()
 
     raise ValueError("未知命令")
 
