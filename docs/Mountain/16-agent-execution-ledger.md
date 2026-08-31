@@ -523,6 +523,8 @@ git status --short
 
 ## 3D. CCF Checker 可执行性最终纠偏
 
+> 状态：已被 §3E 的小粒度指令取代，不再执行。原因：本节同时混合 checker、请求竞态和报告整改，不符合单一垂直切片原则。
+
 ### 3D.1 指令编号与起点
 
 ```text
@@ -582,6 +584,92 @@ docs(mountain): report CCF checker execution status
 ```
 
 报告列出 3D.2 八项结果、直接 import 生产核心的测试名称、本地 HTTP server 行为测试、请求生命周期测试、implementation_commit、build、tests、warning、fixture checker、真实 checker、clean status 和未完成事项。
+
+## 3E. CCF 单一垂直切片：可执行 Contract Checker
+
+### 3E.1 指令编号
+
+```text
+instruction: CCF-CONTRACT-CHECKER-01
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+base: bdb37ba
+scope: contract checker only
+```
+
+本轮禁止修改 React 页面、资产请求生命周期、业务 DTO、样式和其他功能。目标只有一个：生产 checker 必须真实执行字段、类型和 HTTP 契约验证，且其测试直接调用同一份生产实现。
+
+### 3E.2 唯一交付结果
+
+执行下面命令时，checker 必须对受控测试服务器完成真实 HTTP 校验：
+
+```bash
+npm --prefix web-v2 run test:contract-checker
+```
+
+该命令必须启动或连接测试进程内的受控 HTTP server，并验证：
+
+- GET Service detail；
+- GET Service secrets；
+- POST Service probe；
+- 404 `body.error`；
+- 顶层和嵌套必填字段；
+- 可选字段允许缺失；
+- 未知字段拒绝；
+- object/array/string/number/boolean/null 类型；
+- `items[]` 元素 DTO；
+- 空 Service Registry、网络错误和非 JSON 响应均失败。
+
+### 3E.3 实现边界
+
+1. checker 核心必须是唯一生产模块，例如 `contract-checker-core.mjs`；CLI 与测试都 import 它。
+2. 测试目录不得复制 checker 算法；不得读取 checker 源码后使用 `toContain` 证明行为。
+3. `verifyResponse()` 必须在生产调用链中实际执行类型校验。未被调用的验证函数视为未实现。
+4. 测试 HTTP server 必须记录 method/path 并返回真实 JSON；测试断言最终 violations/exit result，不能只断言 mock 被调用。
+5. 测试不得依赖 CCB、网络或现有用户数据，因此每次可确定性重复执行。
+6. 本轮不要求真实 CCB checker 通过；它属于后续联合验收，不得阻塞这个独立切片。
+
+### 3E.4 预定义机器门禁
+
+CCF 不得改变或弱化以下验收含义：
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+git diff --check
+```
+
+验收要求：
+
+- 所有命令退出码为 0；
+- 0 warning、0 unhandled rejection；
+- checker 专项测试至少包含一个完整成功场景和上述每类失败场景；
+- fixture mode 必须明确声明不是真实 API；
+- 不允许 `expect(true)`、源码字符串断言、复制生产算法或“状态码不是 400”式断言。
+
+### 3E.5 提交与报告
+
+先提交实现：
+
+```text
+fix(mountain-web): make contract checker executable and testable
+```
+
+得到 implementation commit 后，创建：
+
+```text
+docs/Mountain/m07-ccf-contract-checker-01-report.md
+```
+
+再提交报告：
+
+```text
+docs(mountain): report CCF contract checker slice
+```
+
+报告只记录：implementation commit、五条门禁原始摘要、专项成功/失败场景、git clean 状态。执行者只能写“门禁已执行”，不得写“最终验收通过”；最终通过由审核者判定。先本地提交，不推送。
 
 ## 4. CCB 当前执行指令
 
