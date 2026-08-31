@@ -1,7 +1,7 @@
-"""Mountain Service API — /api/v1/services 端点。
+"""Mountain Service API — /api/v1/services 路由。
 
-动态服务注册。
-不依赖 PROVIDER_PROFILES。
+动态 Service API，不依赖 PROVIDER_PROFILES。
+所有返回使用 public DTO（脱敏，不暴露 secret）。
 """
 
 from __future__ import annotations
@@ -9,150 +9,131 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
 from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
-from csboard.adapters.secrets import create_secret_store, mask_secret
+from csboard.adapters.secrets import create_secret_store
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.service_definition import ServiceDefinition
-
-
-def _error_response(status_code: int, code: str, message: str, retryable: bool = False) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content={"error": {"code": code, "message": message, "retryable": retryable}},
-    )
+from webapp.error_contract import domain_error_response
 
 
 def mountain_service_router(data_dir: Path) -> APIRouter:
-    """创建 /api/v1/services 路由器。"""
+    router = APIRouter()
     secret_store, _ = create_secret_store(data_dir, encrypted=False)
     registry = FilesystemServiceRegistry(data_dir, secret_store)
-    router = APIRouter(prefix="/api/v1/services", tags=["mountain-services"])
 
-    @router.get("")
+    def _to_public(service: ServiceDefinition) -> dict[str, Any]:
+        return registry.to_public_dict(service)
+
+    @router.get("/api/v1/services")
     def list_services(
         capability: str | None = None,
         enabled: bool | None = None,
-        q: str | None = None,
+        limit: int = 50,
         cursor: str | None = None,
-        limit: int = Query(50, ge=1, le=200),
-    ) -> dict[str, Any]:
-        services = registry.list_services(capability=capability, enabled=enabled)
-        if q:
-            services = [s for s in services if q.lower() in s.display_name.lower() or q.lower() in s.service_id.lower()]
-        # cursor 分页
-        if cursor:
-            ids = [s.service_id for s in services]
-            if cursor in ids:
-                idx = ids.index(cursor)
-                services = services[idx + 1:]
-        page = services[:limit]
-        next_cursor = services[limit].service_id if len(services) > limit else None
-        return {
-            "items": [s.to_dict() for s in page],
-            "next_cursor": next_cursor,
-            "total": len(services),
-        }
+    ):
+        page = registry.list_services(capability=capability, enabled=enabled, limit=limit, cursor=cursor)
+        next_cursor = page[-1].service_id if len(page) >= limit else None
+        return {"items": [_to_public(s) for s in page], "total": len(page), "next_cursor": next_cursor}
 
-    @router.post("")
-    def create_service(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    @router.post("/api/v1/services")
+    def create_service(payload: dict[str, Any] = Body(...)):
         try:
-            service = ServiceDefinition.from_dict(body)
+            service = ServiceDefinition.from_dict(payload)
             created = registry.create_service(service)
-            return created.to_dict()
+            return _to_public(created)
         except DomainError as exc:
-            return _error_response(422, exc.code, exc.message)
+            return domain_error_response(exc, status_code=400)
 
-    @router.get("/{service_id}")
-    def get_service(service_id: str) -> dict[str, Any]:
+    @router.get("/api/v1/services/{service_id}")
+    def get_service(service_id: str):
         try:
-            return registry.get_service(service_id).to_dict()
+            return _to_public(registry.get_service(service_id))
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
 
-    @router.patch("/{service_id}")
-    def update_service(service_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    @router.patch("/api/v1/services/{service_id}")
+    def update_service(service_id: str, payload: dict[str, Any] = Body(...)):
         try:
-            updated = registry.update_service(service_id, body)
-            return updated.to_dict()
+            updated = registry.update_service(service_id, payload)
+            return _to_public(updated)
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
         except DomainError as exc:
-            return _error_response(422, exc.code, exc.message)
+            status = 409 if exc.code == "REVISION_CONFLICT" else 400
+            return domain_error_response(exc, status_code=status)
 
-    @router.delete("/{service_id}")
-    def delete_service(service_id: str) -> dict[str, Any]:
+    @router.delete("/api/v1/services/{service_id}")
+    def delete_service(service_id: str):
         try:
             registry.delete_service(service_id)
             return {"ok": True}
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
         except DomainError as exc:
-            return _error_response(409, exc.code, exc.message)
+            return domain_error_response(exc, status_code=400)
 
-    @router.post("/{service_id}/activate")
-    def activate_service(service_id: str) -> dict[str, Any]:
+    @router.post("/api/v1/services/{service_id}/activate")
+    def activate_service(service_id: str):
         try:
-            return registry.activate_service(service_id).to_dict()
+            return _to_public(registry.activate_service(service_id))
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
 
-    @router.post("/{service_id}/deactivate")
-    def deactivate_service(service_id: str) -> dict[str, Any]:
+    @router.post("/api/v1/services/{service_id}/deactivate")
+    def deactivate_service(service_id: str):
         try:
-            return registry.deactivate_service(service_id).to_dict()
+            return _to_public(registry.deactivate_service(service_id))
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
 
-    @router.post("/{service_id}/probe")
-    def probe_service(service_id: str) -> dict[str, Any]:
+    @router.post("/api/v1/services/{service_id}/probe")
+    def probe_service(service_id: str):
         try:
             return registry.probe_service(service_id)
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
 
-    @router.post("/{service_id}/default")
-    def set_default(service_id: str) -> dict[str, Any]:
+    @router.post("/api/v1/services/{service_id}/default")
+    def set_default(service_id: str):
         try:
-            return registry.set_default(service_id).to_dict()
+            return _to_public(registry.set_default(service_id))
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
-
-    @router.get("/{service_id}/secrets")
-    def list_secrets(service_id: str) -> dict[str, Any]:
-        try:
-            secrets = registry.list_secrets(service_id)
-            return {"items": secrets, "total": len(secrets)}
-        except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
-
-    @router.post("/{service_id}/secrets")
-    def set_secret(service_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-        key = body.get("key", "")
-        value = body.get("value", "")
-        if not key or not value:
-            return _error_response(422, "VALIDATION_ERROR", "key 和 value 不能为空")
-        try:
-            registry.set_secret(service_id, key, value)
-            return {
-                "secret_key": key,
-                "configured": True,
-                "masked_value": mask_secret(value),
-                "updated_at": "",
-            }
-        except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
         except DomainError as exc:
-            return _error_response(422, exc.code, exc.message)
+            return domain_error_response(exc, status_code=400)
 
-    @router.delete("/{service_id}/secrets/{secret_key}")
-    def delete_secret(service_id: str, secret_key: str) -> dict[str, Any]:
+    @router.get("/api/v1/services/{service_id}/secrets")
+    def list_secrets(service_id: str):
+        try:
+            return {"secrets": registry.list_secrets(service_id)}
+        except NotFoundError as exc:
+            return domain_error_response(exc, status_code=404)
+
+    @router.post("/api/v1/services/{service_id}/secrets")
+    def set_secret(service_id: str, payload: dict[str, Any] = Body(...)):
+        try:
+            key = payload.get("key")
+            value = payload.get("value")
+            if not key or not value:
+                return domain_error_response(
+                    DomainError("VALIDATION_ERROR", "key 和 value 不能为空"), status_code=400
+                )
+            registry.set_secret(service_id, key, value)
+            return {"secret_key": key, "configured": True}
+        except NotFoundError as exc:
+            return domain_error_response(exc, status_code=404)
+        except DomainError as exc:
+            return domain_error_response(exc, status_code=400)
+
+    @router.delete("/api/v1/services/{service_id}/secrets/{secret_key}")
+    def delete_secret(service_id: str, secret_key: str):
         try:
             registry.delete_secret(service_id, secret_key)
             return {"ok": True}
         except NotFoundError as exc:
-            return _error_response(404, "NOT_FOUND", str(exc))
+            return domain_error_response(exc, status_code=404)
 
     return router

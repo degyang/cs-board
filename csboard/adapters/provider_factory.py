@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from csboard.adapters.secrets import SecretStoreProtocol, create_secret_store, mask_secret
+from csboard.domain.errors import DomainError
 from csboard.domain.provider_types import ProviderProfile, ProviderType
 
 
@@ -447,3 +448,82 @@ class ProviderFactory:
             if value:
                 secrets[secret_key] = value
         return secrets
+
+    def get_secret_value(self, secret_key: str) -> str | None:
+        """获取单个 secret 值（内部使用）。"""
+        return self._secret_store.get(secret_key)
+
+    def create_adapter(self, service_definition: Any) -> Any:
+        """根据 ServiceDefinition 构造 Adapter。
+
+        adapter_type 支持：
+        - openai_compatible → OpenAITextAdapter / OpenAIImageAdapter（按 capability）
+        - indextts → IndexTTSAdapter
+        - whisper → WhisperAlignmentAdapter
+        - ffmpeg → FFmpegMediaAdapter
+        - local_process → WhiteboardRendererAdapter
+        - codex_skill → CodexSkillAdapter（预留）
+
+        未知 adapter_type 抛出 UNSUPPORTED_ADAPTER。
+        """
+        adapter_type = service_definition.adapter_type
+        capability = service_definition.capability
+        config = service_definition.config.copy()
+        endpoint = service_definition.endpoint or ""
+
+        # 收集 secrets
+        secrets: dict[str, str] = {}
+        for key in service_definition.required_secrets + service_definition.optional_secrets:
+            full_key = f"{service_definition.service_id}_{key}"
+            value = self._secret_store.get(full_key)
+            if value:
+                secrets[key] = value
+
+        if adapter_type == "openai_compatible":
+            if capability == "text_generation":
+                from csboard.adapters.openai_compatible.text_adapter import OpenAITextAdapter
+                return OpenAITextAdapter(
+                    base_url=endpoint or config.get("base_url", "https://api.openai.com/v1"),
+                    api_key=secrets.get("api_key", ""),
+                    model=service_definition.model or config.get("model", "gpt-4o"),
+                    protocol=config.get("api_mode", "chat_completions"),
+                )
+            elif capability == "image_generation":
+                from csboard.adapters.openai_compatible.image_adapter import OpenAIImageAdapter
+                return OpenAIImageAdapter(
+                    base_url=endpoint or config.get("base_url", "https://api.openai.com/v1"),
+                    api_key=secrets.get("api_key", ""),
+                    model=service_definition.model or config.get("model", "gpt-image-1"),
+                )
+            else:
+                raise DomainError("UNSUPPORTED_ADAPTER", f"openai_compatible 不支持 capability: {capability}")
+
+        elif adapter_type == "indextts":
+            from csboard.adapters.indextts.tts_adapter import IndexTTSAdapter
+            return IndexTTSAdapter(
+                base_url=endpoint or "http://127.0.0.1:7860",
+                mode=config.get("mode", "gradio"),
+            )
+
+        elif adapter_type == "whisper":
+            from csboard.adapters.whisper.alignment_adapter import WhisperAlignmentAdapter
+            renderer_root = self._data_dir.parent / "video_renderer"
+            return WhisperAlignmentAdapter(
+                mode=config.get("mode", "node"),
+                renderer_root=renderer_root if renderer_root.exists() else None,
+                base_url=endpoint or "http://127.0.0.1:9000",
+            )
+
+        elif adapter_type == "ffmpeg":
+            from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
+            return FFmpegMediaAdapter()
+
+        elif adapter_type == "local_process":
+            from csboard.adapters.whiteboard.renderer_adapter import WhiteboardRendererAdapter
+            return WhiteboardRendererAdapter()
+
+        elif adapter_type == "codex_skill":
+            raise DomainError("UNSUPPORTED_ADAPTER", "codex_skill 适配器尚未实现")
+
+        else:
+            raise DomainError("UNSUPPORTED_ADAPTER", f"未知 adapter_type: {adapter_type}")
