@@ -82,7 +82,7 @@ def mountain_service_router(
         # secret_status
         base["secret_status"] = {
             "configured": len(missing_secrets) == 0,
-            "required": len(service.required_secrets),
+            "required": service.required_secrets,
             "missing": missing_secrets,
         }
 

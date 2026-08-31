@@ -36,9 +36,15 @@ class ProviderFactory:
             self._secret_store = secret_store
             self._is_encrypted = is_encrypted
         else:
-            # 兼容旧调用：默认使用明文（生产路径必须注入 secret_store）
-            encrypted = kwargs.get("encrypted", False)
-            self._secret_store, self._is_encrypted = create_secret_store(data_dir, encrypted)
+            # 生产路径必须注入 secret_store，禁止自行创建 encrypted=False 的降级
+            allow_plaintext = kwargs.get("allow_plaintext", False)
+            if not allow_plaintext:
+                raise ValueError(
+                    "ProviderFactory 必须注入 SecretStore。"
+                    "生产路径禁止自行创建 encrypted=False 的降级。"
+                    "传入 allow_plaintext=True 仅用于测试/开发。"
+                )
+            self._secret_store, self._is_encrypted = create_secret_store(data_dir, encrypted=False)
         self._profiles: dict[str, ProviderProfile] = {}
         self._load_profiles()
 

@@ -721,8 +721,10 @@ def test_v1_no_legacy_references(client: TestClient) -> None:
 def test_provider_factory_check_providers(tmp_path: Path) -> None:
     """ProviderFactory.check_all_providers 返回正确状态。"""
     from csboard.adapters.provider_factory import ProviderFactory
+    from csboard.adapters.secrets.secret_store import PlaintextSecretStore
 
-    factory = ProviderFactory(tmp_path)
+    store = PlaintextSecretStore(tmp_path / ".secrets")
+    factory = ProviderFactory(tmp_path, secret_store=store, is_encrypted=False)
 
     # 默认情况下，需要 secret 的 provider 未配置
     result = factory.check_all_providers()
@@ -742,8 +744,10 @@ def test_provider_factory_check_providers(tmp_path: Path) -> None:
 def test_provider_factory_create_adapters(tmp_path: Path) -> None:
     """ProviderFactory 可以构造真实 Adapter。"""
     from csboard.adapters.provider_factory import ProviderFactory
+    from csboard.adapters.secrets.secret_store import PlaintextSecretStore
 
-    factory = ProviderFactory(tmp_path)
+    store = PlaintextSecretStore(tmp_path / ".secrets")
+    factory = ProviderFactory(tmp_path, secret_store=store, is_encrypted=False)
 
     # 配置 text_model secret
     factory.secret_store.set("text_model_api_key", "sk-test")

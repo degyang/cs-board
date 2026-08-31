@@ -215,24 +215,36 @@ def mountain_settings_router(
         # Telemetry (DiagnosticsTelemetry)
         from csboard.adapters.observability import JsonlTelemetry
         from csboard.adapters.filesystem import FilesystemTaskRepository
+        from csboard.adapters.observability.redactor import DefaultRedactor
         repo = FilesystemTaskRepository(data_dir)
         telemetry = JsonlTelemetry(repo)
+        redactor = DefaultRedactor()
 
-        # Logs — count recent errors (DiagnosticsLogs)
+        # Logs — redacted recent errors (DiagnosticsLogs)
         recent_error_count = 0
         log_path = None
+        recent_errors: list[dict[str, Any]] = []
+        import json as _json
         for task_dir in sorted((data_dir / "tasks").glob("*/runs/*/observability"), reverse=True)[:5]:
             log_file = task_dir / "logs.jsonl"
             if log_file.exists():
                 if log_path is None:
                     log_path = str(log_file)
-                import json
                 for line in log_file.read_text(encoding="utf-8").splitlines()[-20:]:
                     try:
-                        entry = json.loads(line)
+                        entry = _json.loads(line)
                         if entry.get("level") == "ERROR":
                             recent_error_count += 1
-                    except (json.JSONDecodeError, ValueError):
+                            # 使用 DefaultRedactor 结构化脱敏
+                            safe_entry = redactor.redact({
+                                "timestamp": entry.get("timestamp", ""),
+                                "component": entry.get("component", ""),
+                                "stage": entry.get("stage", ""),
+                                "message": entry.get("message", ""),
+                                "details": entry.get("details", {}),
+                            })
+                            recent_errors.append(safe_entry)
+                    except (_json.JSONDecodeError, ValueError):
                         continue
 
         return {
@@ -256,7 +268,7 @@ def mountain_settings_router(
                 "recent_errors": recent_error_count,
                 "log_path": log_path,
             },
-            "recent_errors": [],
+            "recent_errors": recent_errors[:10],
         }
 
     return router

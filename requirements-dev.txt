@@ -1,2 +1,3 @@
 -r webapp/requirements.txt
+cryptography>=42.0.0
 jsonschema==4.25.1

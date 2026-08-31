@@ -37,7 +37,12 @@ def mountain_v1_router(
     """
     repository = FilesystemTaskRepository(data_dir)
     telemetry = JsonlTelemetry(repository)
-    provider_factory = ProviderFactory(data_dir, secret_store=secret_store)
+    # Legacy 路径：若未注入 secret_store，允许明文降级（仅用于旧 server.py 兼容）
+    provider_factory = ProviderFactory(
+        data_dir,
+        secret_store=secret_store,
+        allow_plaintext=secret_store is None,
+    )
     router = APIRouter(prefix="/api/v1", tags=["mountain-v1"])
 
     def _commands() -> MountainCommands:

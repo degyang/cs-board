@@ -87,6 +87,7 @@ class FileSecretStoreTest(unittest.TestCase):
     def test_persistence_across_instances(self) -> None:
         if not self.available:
             self.skipTest("cryptography not installed")
+        from csboard.adapters.secrets.file_secret_store import FileSecretStore
         path = self.root / "secrets.enc"
         store1 = FileSecretStore(path, master_key=self.key)
         store1.set("persisted", "encrypted_value")

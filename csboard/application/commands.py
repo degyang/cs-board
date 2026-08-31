@@ -31,18 +31,22 @@ class MountainCommands:
 
     service_resolver: 动态服务解析器（用于获取 ServiceDefinition）
     provider_factory: 适配器工厂（用于 create_adapter(service_definition)）
+    repository: 可选注入的 TaskRepository（组合根创建后注入）
+    telemetry: 可选注入的 Telemetry（组合根创建后注入）
     """
 
     root: Path
     provider_factory: Any | None = None  # ProviderFactory for real adapters
     service_resolver: Any | None = None  # ServiceResolver for dynamic resolution
-    repository: FilesystemTaskRepository = field(init=False)
-    telemetry: JsonlTelemetry = field(init=False)
+    repository: FilesystemTaskRepository | None = None  # 注入的 repository
+    telemetry: JsonlTelemetry | None = None  # 注入的 telemetry
     pipeline: PipelineOrchestrator = field(init=False)
 
     def __post_init__(self) -> None:
-        self.repository = FilesystemTaskRepository(self.root)
-        self.telemetry = JsonlTelemetry(self.repository)
+        if self.repository is None:
+            self.repository = FilesystemTaskRepository(self.root)
+        if self.telemetry is None:
+            self.telemetry = JsonlTelemetry(self.repository)
         self.pipeline = PipelineOrchestrator(
             get_run=self.repository.get_run,
             save_run=self.repository.save_run,

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import FileResponse
 
 from csboard.adapters.filesystem import FilesystemTaskRepository
@@ -27,6 +27,7 @@ from webapp.error_contract import domain_error_response
 
 def mountain_task_router(
     data_dir: Path,
+    commands: MountainCommands | None = None,
     repository: FilesystemTaskRepository | None = None,
     telemetry: JsonlTelemetry | None = None,
     service_resolver=None,
@@ -34,15 +35,20 @@ def mountain_task_router(
 ) -> APIRouter:
     """创建 /api/v1 路由器 — Task/Run/Stage 相关端点。
 
-    所有依赖由 create_app() 注入。
+    所有依赖由 create_app() 注入。commands 是唯一 MountainCommands 实例。
     """
     repository = repository or FilesystemTaskRepository(data_dir)
     telemetry = telemetry or JsonlTelemetry(repository)
+    # 若未注入 commands，则回退创建（CLI/测试兼容）
+    if commands is None:
+        commands = MountainCommands(
+            data_dir,
+            provider_factory=provider_factory,
+            service_resolver=service_resolver,
+            repository=repository,
+            telemetry=telemetry,
+        )
     router = APIRouter(prefix="/api/v1", tags=["mountain-tasks"])
-
-    def _get_commands() -> MountainCommands:
-        """创建 MountainCommands 实例，注入 ServiceResolver 和 ProviderFactory。"""
-        return MountainCommands(data_dir, provider_factory=provider_factory, service_resolver=service_resolver)
 
     def _context() -> CommandContext:
         """创建 Web 入口的 CommandContext。"""
@@ -57,11 +63,11 @@ def mountain_task_router(
             title = str(payload.get("title", ""))
             engine = Engine(payload.get("engine", "whiteboard"))
             pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
-            return _get_commands().create_task(
+            return commands.create_task(
                 title, pipeline_id, engine, context=_context()
             )
         except ValueError as error:
-            raise HTTPException(400, str(error)) from error
+            return domain_error_response(DomainError("VALIDATION_ERROR", str(error)), status_code=400)
 
     @router.get("/tasks")
     def list_tasks(
@@ -71,7 +77,7 @@ def mountain_task_router(
         q: str | None = None,
     ):
         """列出任务 — 委托 Application 层执行 filter→sort→cursor→limit。"""
-        return _get_commands().list_tasks(limit=limit, cursor=cursor, status=status, q=q)
+        return commands.list_tasks(limit=limit, cursor=cursor, status=status, q=q)
 
     @router.get("/tasks/{task_id}")
     def get_task(task_id: str):
@@ -85,7 +91,7 @@ def mountain_task_router(
             )
             return _task_detail_view(task, run)
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Input Upload ──────────────────────────────────────────────────
 
@@ -109,7 +115,7 @@ def mountain_task_router(
         if reference is not None:
             suffix = Path(reference.filename or "reference.wav").suffix.lower() or ".wav"
             if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
-                raise HTTPException(400, "参考音频格式不支持")
+                return domain_error_response(DomainError("VALIDATION_ERROR", "参考音频格式不支持"), status_code=400)
             input_dir = repository.task_dir(task_id) / "inputs"
             input_dir.mkdir(parents=True, exist_ok=True)
             target = input_dir / f"reference{suffix}"
@@ -121,7 +127,7 @@ def mountain_task_router(
             reference_audio_path = f"inputs/reference{suffix}"
 
         try:
-            return _get_commands().save_inputs(
+            return commands.save_inputs(
                 task_id,
                 script=script,
                 reference_audio_path=reference_audio_path,
@@ -136,7 +142,7 @@ def mountain_task_router(
                 context=_context(),
             )
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     @router.get("/tasks/{task_id}/inputs")
     def get_inputs(task_id: str):
@@ -144,7 +150,7 @@ def mountain_task_router(
         try:
             repository.get_task(task_id)
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
         request_path = repository.task_dir(task_id) / "request.json"
         if not request_path.exists():
@@ -203,54 +209,54 @@ def mountain_task_router(
         try:
             request_path = repository.task_dir(task_id) / "request.json"
             if not request_path.exists():
-                raise HTTPException(400, "请先上传文案与参考音频")
+                return domain_error_response(
+                    DomainError("VALIDATION_ERROR", "请先上传文案与参考音频"),
+                    status_code=400,
+                )
 
             # 使用 ServiceResolver 检查 capability 可用性
-            if _service_resolver is not None:
+            if service_resolver is not None:
                 from csboard.application.service_resolver import STAGE_CAPABILITY_MAP
                 unavailable = []
                 for stage_name, capability in STAGE_CAPABILITY_MAP.items():
                     try:
-                        _service_resolver.resolve(capability)
+                        service_resolver.resolve(capability)
                     except DomainError:
                         unavailable.append({"stage": stage_name, "capability": capability})
                 if unavailable:
-                    raise HTTPException(
-                        400,
-                        {
-                            "code": "CAPABILITY_NOT_AVAILABLE",
-                            "message": "缺少必要的服务配置",
-                            "unavailable": unavailable,
-                        },
+                    return domain_error_response(
+                        DomainError("CAPABILITY_NOT_AVAILABLE", "缺少必要的服务配置"),
+                        status_code=400,
+                        details={"unavailable": unavailable},
                     )
 
-            return _get_commands().pipeline_run(
+            return commands.pipeline_run(
                 task_id, run_id, policy, context=_context()
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/cancel")
     def cancel_run(task_id: str, run_id: str):
         """取消运行 — 委托 Application 层。"""
         try:
-            return _get_commands().cancel_run(task_id, run_id, _context())
+            return commands.cancel_run(task_id, run_id, _context())
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/retry")
     def retry_run(task_id: str, run_id: str):
         """重试失败的运行。"""
         try:
-            return _get_commands().pipeline_resume(
+            return commands.pipeline_resume(
                 task_id, run_id, context=_context()
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     # ── Stage Operations ──────────────────────────────────────────────────
 
@@ -258,13 +264,13 @@ def mountain_task_router(
     def run_stage(task_id: str, run_id: str, stage: str):
         """运行指定阶段。"""
         try:
-            return _get_commands().pipeline_run(
+            return commands.pipeline_run(
                 task_id, run_id, "targeted", stage, _context()
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/retry")
     def retry_stage(
@@ -276,13 +282,13 @@ def mountain_task_router(
     ):
         """重试指定阶段。"""
         try:
-            return _get_commands().stage_retry(
+            return commands.stage_retry(
                 task_id, run_id, stage, unit_id, visual_id, _context()
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     # ── Pipeline Operations ──────────────────────────────────────────────────
 
@@ -295,25 +301,25 @@ def mountain_task_router(
     ):
         """运行 Pipeline。"""
         try:
-            return _get_commands().pipeline_run(
+            return commands.pipeline_run(
                 task_id, run_id, policy, target_stage, _context()
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/pipeline/resume")
     def pipeline_resume(task_id: str, run_id: str, policy: str = "auto"):
         """恢复 Pipeline。"""
         try:
-            return _get_commands().pipeline_resume(
+            return commands.pipeline_resume(
                 task_id, run_id, policy, _context()
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
         except DomainError as error:
-            raise HTTPException(400, {"code": error.code, "message": error.message}) from error
+            return domain_error_response(error, status_code=400)
 
     # ── Run Status ──────────────────────────────────────────────────────
 
@@ -324,7 +330,7 @@ def mountain_task_router(
             run = repository.get_run(task_id, run_id)
             return _run_view(run)
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     @router.get("/tasks/{task_id}/runs/{run_id}/stages")
     def get_stages(task_id: str, run_id: str):
@@ -338,7 +344,7 @@ def mountain_task_router(
                 ]
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Voice Units ──────────────────────────────────────────────────────
 
@@ -367,7 +373,7 @@ def mountain_task_router(
                 ]
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Artifacts ──────────────────────────────────────────────────────
 
@@ -386,7 +392,7 @@ def mountain_task_router(
             ]
             return {"items": items}
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     @router.get("/tasks/{task_id}/runs/{run_id}/artifacts/{artifact_key}")
     def download_artifact(task_id: str, run_id: str, artifact_key: str):
@@ -397,17 +403,17 @@ def mountain_task_router(
             )
             item = index.get("artifacts", {}).get(artifact_key)
             if not item or item.get("status") != "succeeded":
-                raise HTTPException(404, "产物不可用")
+                return domain_error_response(NotFoundError("产物不可用"), status_code=404)
             path = (
                 repository.run_dir(task_id, run_id)
                 / "artifacts"
                 / str(item["relative_path"])
             )
             if not path.is_file():
-                raise HTTPException(404, "产物文件不存在")
+                return domain_error_response(NotFoundError("产物文件不存在"), status_code=404)
             return FileResponse(path, filename=path.name)
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     @router.get("/tasks/{task_id}/runs/{run_id}/artifacts/{artifact_key}/content")
     def artifact_content(task_id: str, run_id: str, artifact_key: str):
@@ -418,14 +424,14 @@ def mountain_task_router(
             )
             item = index.get("artifacts", {}).get(artifact_key)
             if not item:
-                raise HTTPException(404, "产物不存在")
+                return domain_error_response(NotFoundError("产物不存在"), status_code=404)
             path = (
                 repository.run_dir(task_id, run_id)
                 / "artifacts"
                 / str(item["relative_path"])
             )
             if not path.exists():
-                raise HTTPException(404, "产物文件不存在")
+                return domain_error_response(NotFoundError("产物文件不存在"), status_code=404)
             if path.suffix == ".json":
                 content = json.loads(path.read_text(encoding="utf-8"))
             else:
@@ -436,21 +442,26 @@ def mountain_task_router(
                 "metadata": item,
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Events ──────────────────────────────────────────────────────────
 
     @router.get("/tasks/{task_id}/runs/{run_id}/events")
     def get_events(task_id: str, run_id: str, after: int = 0):
-        """获取事件列表。"""
+        """获取事件列表（结构化脱敏）。"""
         try:
+            from csboard.adapters.observability.redactor import DefaultRedactor
+            redactor = DefaultRedactor()
+
             items = telemetry.read_events(task_id, run_id, after)
+            # 使用 DefaultRedactor 结构化脱敏
+            safe_items = [redactor.redact(entry) for entry in items]
             return {
-                "items": items,
+                "items": safe_items,
                 "next_cursor": items[-1]["sequence"] if items else after,
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Logs ──────────────────────────────────────────────────────────
 
@@ -462,15 +473,18 @@ def mountain_task_router(
         component: str = "",
         stage: str = "",
     ):
-        """获取日志列表。"""
+        """获取日志列表（结构化脱敏）。"""
         try:
+            from csboard.adapters.observability.redactor import DefaultRedactor
+            redactor = DefaultRedactor()
+
             path = (
                 repository.run_dir(task_id, run_id)
                 / "observability"
                 / "logs.jsonl"
             )
             repository.get_run(task_id, run_id)
-            items = (
+            raw_items = (
                 []
                 if not path.exists()
                 else [
@@ -479,17 +493,19 @@ def mountain_task_router(
                     if line
                 ]
             )
-            return {
-                "items": [
-                    item
-                    for item in items
-                    if (not level or item.get("level") == level)
-                    and (not component or item.get("component") == component)
-                    and (not stage or item.get("stage") == stage)
-                ]
-            }
+            # 过滤后脱敏
+            filtered = [
+                item
+                for item in raw_items
+                if (not level or item.get("level") == level)
+                and (not component or item.get("component") == component)
+                and (not stage or item.get("stage") == stage)
+            ]
+            # 使用 DefaultRedactor 结构化脱敏
+            items = [redactor.redact(entry) for entry in filtered]
+            return {"items": items}
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Trace ──────────────────────────────────────────────────────────
 
@@ -504,7 +520,7 @@ def mountain_task_router(
                 "entrypoint": run.entrypoint.value,
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Metrics ──────────────────────────────────────────────────────────
 
@@ -525,7 +541,7 @@ def mountain_task_router(
                 ),
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Diagnostics ──────────────────────────────────────────────────────
 
@@ -539,7 +555,7 @@ def mountain_task_router(
                 "download_url": f"/api/v1/tasks/{task_id}/runs/{run_id}/diagnostics/{bundle.name}",
             }
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     @router.get("/tasks/{task_id}/runs/{run_id}/diagnostics/{filename}")
     def download_diagnostics(task_id: str, run_id: str, filename: str):
@@ -549,19 +565,19 @@ def mountain_task_router(
             or not filename.endswith(".zip")
             or "/" in filename
         ):
-            raise HTTPException(400, "诊断包名称无效")
+            return domain_error_response(DomainError("VALIDATION_ERROR", "诊断包名称无效"), status_code=400)
         try:
             repository.get_run(task_id, run_id)
             path = (
                 repository.run_dir(task_id, run_id) / "diagnostics" / filename
             )
             if not path.is_file():
-                raise HTTPException(404, "诊断包不存在")
+                return domain_error_response(NotFoundError("诊断包不存在"), status_code=404)
             return FileResponse(
                 path, media_type="application/zip", filename=filename
             )
         except NotFoundError as error:
-            raise HTTPException(404, error.message) from error
+            return domain_error_response(error, status_code=404)
 
     # ── Final Video ──────────────────────────────────────────────────────
 
@@ -575,7 +591,7 @@ def mountain_task_router(
             / "final.mp4"
         )
         if not path.exists():
-            raise HTTPException(404, "成片尚未生成")
+            return domain_error_response(NotFoundError("成片尚未生成"), status_code=404)
         return FileResponse(
             path, media_type="video/mp4", filename=f"cs-board-{task_id}.mp4"
         )

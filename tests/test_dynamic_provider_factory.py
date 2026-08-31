@@ -21,9 +21,9 @@ from csboard.domain.service_definition import ServiceDefinition
 
 @pytest.fixture()
 def factory(tmp_path: Path) -> ProviderFactory:
-    # 创建 secret store
-    PlaintextSecretStore(tmp_path / ".secrets")
-    return ProviderFactory(tmp_path)
+    # 创建 secret store 并注入
+    store = PlaintextSecretStore(tmp_path / ".secrets")
+    return ProviderFactory(tmp_path, secret_store=store, is_encrypted=False)
 
 
 def _make_service(service_id: str, adapter_type: str, capability: str, **kwargs) -> ServiceDefinition:

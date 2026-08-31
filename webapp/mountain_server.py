@@ -58,6 +58,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     from csboard.adapters.secrets import create_secret_store
     from csboard.application.service_resolver import ServiceResolver
     from csboard.adapters.provider_factory import ProviderFactory
+    from csboard.application.commands import MountainCommands
 
     # 检查是否允许明文 secret
     allow_plaintext = os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS", "") == "1"
@@ -90,8 +91,18 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     telemetry = JsonlTelemetry(task_repository)
     asset_repository = FilesystemAssetRepository(effective_data_dir)
 
+    # 唯一 MountainCommands 实例 — 注入共享 repository/telemetry
+    commands = MountainCommands(
+        effective_data_dir,
+        provider_factory=provider_factory,
+        service_resolver=service_resolver,
+        repository=task_repository,
+        telemetry=telemetry,
+    )
+
     app.include_router(mountain_task_router(
         effective_data_dir,
+        commands=commands,
         repository=task_repository,
         telemetry=telemetry,
         service_resolver=service_resolver,
