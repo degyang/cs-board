@@ -108,6 +108,92 @@ class FilesystemTaskRepository:
                 }
         return None
 
+    def commit_inputs(
+        self,
+        task_id: str,
+        request_data: dict,
+        preparation: dict,
+        visual_anchor_enabled: bool,
+        staging_path: Path | None = None,
+        reference_filename: str | None = None,
+    ) -> None:
+        """原子提交：request + task preparation + reference。
+
+        使用备份和锁保证任一失败时恢复原状态。
+        """
+        with self.task_lock(task_id):
+            task_dir = self.task_dir(task_id)
+            input_dir = task_dir / "inputs"
+            input_dir.mkdir(parents=True, exist_ok=True)
+
+            # 备份旧文件
+            request_bak = task_dir / "request.json.bak"
+            task_bak = task_dir / "task.json.bak"
+            old_ref_backup = None
+
+            # 读取旧状态
+            request_path = task_dir / "request.json"
+            task_path = task_dir / "task.json"
+
+            old_request = None
+            if request_path.exists():
+                old_request = self._read_json(request_path)
+                # 备份旧 request
+                request_path.rename(request_bak)
+
+            old_task = None
+            if task_path.exists():
+                old_task = self._read_json(task_path)
+                # 备份旧 task
+                task_path.rename(task_bak)
+
+            # 备份旧 reference（如果有新 reference 且旧 reference 存在）
+            old_reference_path = None
+            if old_request and old_request.get("reference_audio"):
+                old_ref_path = task_dir / old_request["reference_audio"]
+                if old_ref_path.exists() and staging_path:
+                    old_ref_backup = task_dir / f"{old_ref_path.name}.bak"
+                    old_ref_path.rename(old_ref_backup)
+                    old_reference_path = old_ref_path
+
+            try:
+                # 写入新 reference（如果有）
+                if staging_path and staging_path.exists():
+                    suffix = Path(reference_filename or "reference.wav").suffix.lower() or ".wav"
+                    target = input_dir / f"reference{suffix}"
+                    staging_path.rename(target)
+
+                # 写入新 request
+                self._write_json(request_path, request_data)
+
+                # 更新 task preparation
+                if old_task:
+                    task_data = old_task.copy()
+                else:
+                    task_data = self._read_json(task_path) if task_path.exists() else {}
+                task_data["script_preparation"] = preparation
+                task_data["visual_anchor_enabled"] = visual_anchor_enabled
+                self._write_json(task_path, task_data)
+
+                # 成功：清理备份文件
+                request_bak.unlink(missing_ok=True)
+                task_bak.unlink(missing_ok=True)
+                if old_ref_backup:
+                    old_ref_backup.unlink(missing_ok=True)
+
+            except Exception:
+                # 失败：恢复旧状态
+                if request_bak.exists():
+                    request_bak.rename(request_path)
+                if task_bak.exists():
+                    task_bak.rename(task_path)
+                if old_ref_backup and old_ref_backup.exists() and old_reference_path:
+                    old_ref_backup.rename(old_reference_path)
+                # 清理 staging
+                if staging_path and staging_path.exists():
+                    staging_path.unlink(missing_ok=True)
+                raise
+
     def read_json(self, path: Path) -> dict:
         return self._read_json(path)
 

@@ -18,6 +18,15 @@ class TaskRepository(Protocol):
     def get_request(self, task_id: str) -> dict | None: ...
     def save_input_file(self, task_id: str, filename: str, data: bytes) -> Path: ...
     def get_input_audio(self, task_id: str) -> dict | None: ...
+    def commit_inputs(
+        self,
+        task_id: str,
+        request_data: dict,
+        preparation: dict,
+        visual_anchor_enabled: bool,
+        staging_path: Path | None = None,
+        reference_filename: str | None = None,
+    ) -> None: ...
 
 
 class ArtifactStore(Protocol):

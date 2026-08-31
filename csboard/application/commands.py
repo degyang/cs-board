@@ -237,7 +237,7 @@ class MountainCommands:
         self,
         task_id: str,
         script: str,
-        reference_audio_data: bytes | None = None,
+        reference_audio_path: str | None = None,
         reference_audio_filename: str | None = None,
         style: str = "极简粗线简笔白板风",
         include_subtitles: bool = True,
@@ -249,41 +249,28 @@ class MountainCommands:
         visual_anchor_enabled: bool = True,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
-        """保存任务输入：通过 Application command 和 Repository 接口。"""
-        self.repository.get_task(task_id)  # validate task exists
+        """保存任务输入：通过 Application command 和 Repository 接口。
+
+        接收 staging 文件路径（由 Router 创建），在验证完成后原子提交。
+        """
+        # 验证任务存在
+        self.repository.get_task(task_id)
 
         if len(script.strip()) < 10:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
-        # 保存音频文件（如果有）
-        reference_audio_path = None
-        if reference_audio_data and reference_audio_filename:
-            suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
+        # 验证音频文件（如果有）
+        if reference_audio_path:
+            staging_path = Path(reference_audio_path)
+            if not staging_path.exists():
+                raise DomainError("VALIDATION_ERROR", "staging 文件不存在")
+            if staging_path.stat().st_size == 0:
+                raise DomainError("VALIDATION_ERROR", "参考音频文件为空")
+            suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
             if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
                 raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
-            reference_audio_path = str(self.repository.save_input_file(
-                task_id, f"reference{suffix}", reference_audio_data
-            ))
 
-        # 读取已有 request 以保留 reference_audio
-        existing = self.repository.get_request(task_id) or {}
-        request_data = {
-            "script": script.strip(),
-            "reference_audio": reference_audio_path if reference_audio_path else existing.get("reference_audio"),
-            "style": style,
-            "include_subtitles": include_subtitles,
-            "pen_text": pen_text[:12],
-            "stroke_detail": stroke_detail if stroke_detail in {"light", "standard", "detailed", "full"} else "detailed",
-            "target_chars": target_chars,
-            "min_chars": min_chars,
-            "max_chars": max_chars,
-            "visual_anchor_enabled": visual_anchor_enabled,
-        }
-
-        # 原子写入 request.json
-        self.repository.save_request(task_id, request_data)
-
-        # 文案整理
+        # 验证规则参数
         try:
             preparation = prepare_script(
                 script.strip(),
@@ -294,15 +281,47 @@ class MountainCommands:
         except ValueError as exc:
             raise DomainError("VALIDATION_ERROR", str(exc))
 
-        # 更新 task.json 的 script_preparation
-        task = self.repository.get_task(task_id)
-        task_data = task.to_dict()
-        task_data["script_preparation"] = preparation
-        task_data["visual_anchor_enabled"] = visual_anchor_enabled
-        self.repository.save_task(Task.from_dict(task_data))
+        # 所有验证通过，执行原子提交
+        # 读取已有 request 以保留 reference_audio
+        existing = self.repository.get_request(task_id) or {}
+
+        reference_audio_relative = None
+        if reference_audio_path:
+            suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
+            reference_audio_relative = f"inputs/reference{suffix}"
+        else:
+            # 保留旧 reference
+            reference_audio_relative = existing.get("reference_audio")
+
+        request_data = {
+            "script": script.strip(),
+            "reference_audio": reference_audio_relative,
+            "style": style,
+            "include_subtitles": include_subtitles,
+            "pen_text": pen_text[:12],
+            "stroke_detail": stroke_detail if stroke_detail in {"light", "standard", "detailed", "full"} else "detailed",
+            "target_chars": target_chars,
+            "min_chars": min_chars,
+            "max_chars": max_chars,
+            "visual_anchor_enabled": visual_anchor_enabled,
+        }
+
+        # 原子提交：request + task preparation + reference
+        try:
+            self.repository.commit_inputs(
+                task_id=task_id,
+                request_data=request_data,
+                preparation=preparation,
+                visual_anchor_enabled=visual_anchor_enabled,
+                staging_path=Path(reference_audio_path) if reference_audio_path else None,
+                reference_filename=reference_audio_filename,
+            )
+        except Exception as exc:
+            raise DomainError("INTERNAL_ERROR", f"输入提交失败: {exc}")
 
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        run_id = task_data.get("active_run_id", "")
+        task = self.repository.get_task(task_id)
+        run_id = task.active_run_id or ""
         if run_id:
             self.telemetry.append_event(task_id, run_id, {
                 "event_type": "InputsSaved",
@@ -324,9 +343,19 @@ class MountainCommands:
                 "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
             }
 
-        audio_meta = self.repository.get_input_audio(task_id) or {
-            "uploaded": False, "filename": None, "content_type": None, "size_bytes": None
-        }
+        # 从 request.json 读取 reference 元数据（不扫描目录）
+        audio_meta: dict[str, Any] = {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None}
+        reference_audio = request_data.get("reference_audio")
+        if reference_audio:
+            # 从相对路径读取元数据
+            ref_path = self.repository.task_dir(task_id) / reference_audio
+            if ref_path.exists():
+                audio_meta = {
+                    "uploaded": True,
+                    "filename": ref_path.name,
+                    "content_type": f"audio/{ref_path.suffix.lstrip('.')}",
+                    "size_bytes": ref_path.stat().st_size,
+                }
 
         task = self.repository.get_task(task_id)
         task_data = task.to_dict()

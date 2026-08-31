@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,11 @@ def mountain_task_router(
 
     # ── Input Upload ──────────────────────────────────────────────────
 
+    # 上传大小上限：50MB
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    # 分块大小：1MB
+    CHUNK_SIZE = 1024 * 1024
+
     @router.post("/tasks/{task_id}/inputs")
     async def upload_inputs(
         task_id: str,
@@ -110,17 +116,50 @@ def mountain_task_router(
         visual_anchor_enabled: bool = Form(True),
     ):
         """上传任务输入（文案和参考音频）— 委托 Application 层。"""
-        reference_audio_data = None
+        import tempfile
+
+        staging_path = None
+        reference_audio_path = None
         reference_audio_filename = None
-        if reference is not None:
-            reference_audio_data = await reference.read()
-            reference_audio_filename = reference.filename
 
         try:
-            return commands.save_inputs(
+            # 分块写入 staging 文件
+            if reference is not None:
+                reference_audio_filename = reference.filename
+                suffix = Path(reference_audio_filename or "reference.wav").suffix.lower() or ".wav"
+                if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
+                    return domain_error_response(
+                        DomainError("VALIDATION_ERROR", "参考音频格式不支持"),
+                        status_code=400,
+                    )
+
+                # 创建临时 staging 文件
+                staging_fd, staging_str = tempfile.mkstemp(suffix=suffix, prefix="upload-")
+                staging_path = Path(staging_str)
+                os.close(staging_fd)
+
+                # 分块写入，检查大小上限
+                total_bytes = 0
+                with staging_path.open("wb") as f:
+                    while chunk := await reference.read(CHUNK_SIZE):
+                        total_bytes += len(chunk)
+                        if total_bytes > MAX_UPLOAD_BYTES:
+                            # 超限：清理 staging 并返回错误
+                            staging_path.unlink(missing_ok=True)
+                            staging_path = None
+                            return domain_error_response(
+                                DomainError("VALIDATION_ERROR", f"参考音频超过大小上限 ({MAX_UPLOAD_BYTES // (1024*1024)}MB)"),
+                                status_code=400,
+                            )
+                        f.write(chunk)
+
+                reference_audio_path = str(staging_path)
+
+            # 委托 Application 处理
+            result = commands.save_inputs(
                 task_id,
                 script=script,
-                reference_audio_data=reference_audio_data,
+                reference_audio_path=reference_audio_path,
                 reference_audio_filename=reference_audio_filename,
                 style=style,
                 include_subtitles=include_subtitles,
@@ -132,8 +171,19 @@ def mountain_task_router(
                 visual_anchor_enabled=visual_anchor_enabled,
                 context=_context(),
             )
+
+            # 成功后清理 staging（已由 Repository 持久化）
+            if staging_path and staging_path.exists():
+                staging_path.unlink(missing_ok=True)
+                staging_path = None
+
+            return result
         except DomainError as error:
             return domain_error_response(error, status_code=400)
+        finally:
+            # 确保 staging 文件被清理
+            if staging_path and staging_path.exists():
+                staging_path.unlink(missing_ok=True)
 
     @router.get("/tasks/{task_id}/inputs")
     def get_inputs(task_id: str):
