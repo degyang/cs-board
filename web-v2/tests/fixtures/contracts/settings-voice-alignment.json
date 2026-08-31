@@ -1,0 +1,19 @@
+{
+  "speech_synthesis": {
+    "enabled": true,
+    "default_voice_id": "voice-warm-female-001",
+    "default_format": "wav"
+  },
+  "speech_alignment": {
+    "enabled": true,
+    "backend": "whisper"
+  },
+  "indextts": {
+    "endpoint": "http://localhost:8080",
+    "enabled": false
+  },
+  "whisper": {
+    "model": "whisper-large-v3",
+    "language": "zh"
+  }
+}

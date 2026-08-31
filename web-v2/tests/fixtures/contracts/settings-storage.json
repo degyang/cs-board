@@ -1,0 +1,11 @@
+{
+  "writable": true,
+  "assets_available": true,
+  "tasks_available": true,
+  "temp_available": true,
+  "free_bytes": 53687091200,
+  "used_bytes": 53687091200,
+  "cleanup_policy": "auto",
+  "error_code": null,
+  "suggestion": null
+}

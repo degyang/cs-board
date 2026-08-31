@@ -466,9 +466,10 @@ export interface ServiceListResponse {
 }
 
 export interface ServiceSecret {
-  key: string
+  secret_key: string
   configured: boolean
   masked_value: string | null
+  updated_at: string | null
 }
 
 // ── Assets: Styles ──────────────────────────────────────────────────────

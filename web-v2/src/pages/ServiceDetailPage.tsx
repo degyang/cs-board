@@ -1,15 +1,17 @@
 /* ==========================================================================
    Service Detail Page /settings/models/:serviceId
+   Shows service info, availability, secrets, and actions.
    ========================================================================== */
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { BackButton } from '../components/ui/BackButton'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { MountainApiError } from '../lib/api/http'
-import { fetchService, activateService, deactivateService, probeService, setDefaultService } from '../lib/api/services'
+import { fetchService, activateService, deactivateService, probeService, setDefaultService, deleteService, fetchServiceSecrets, setServiceSecret, deleteServiceSecret } from '../lib/api/services'
 import { KNOWN_CAPABILITIES, KNOWN_ADAPTERS } from '../lib/api/types'
-import type { ServiceDefinition } from '../lib/api/types'
+import type { ServiceDefinition, ServiceSecret } from '../lib/api/types'
 
 export function ServiceDetailPage() {
   const { serviceId } = useParams<{ serviceId: string }>()
@@ -18,6 +20,14 @@ export function ServiceDetailPage() {
   const [error, setError] = useState<MountainApiError | null>(null)
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  // Secrets state
+  const [secrets, setSecrets] = useState<ServiceSecret[]>([])
+  const [secretsLoading, setSecretsLoading] = useState(false)
+  const [secretValues, setSecretValues] = useState<Record<string, string>>({})
+  const [secretAction, setSecretAction] = useState<string | null>(null)
+  const [secretError, setSecretError] = useState<string | null>(null)
 
   const load = () => {
     if (!serviceId) return
@@ -29,7 +39,16 @@ export function ServiceDetailPage() {
       .finally(() => setIsLoading(false))
   }
 
-  useEffect(() => { load() }, [serviceId])
+  const loadSecrets = () => {
+    if (!serviceId) return
+    setSecretsLoading(true)
+    fetchServiceSecrets(serviceId)
+      .then(setSecrets)
+      .catch(() => {})
+      .finally(() => setSecretsLoading(false))
+  }
+
+  useEffect(() => { load(); loadSecrets() }, [serviceId])
 
   const doAction = async (label: string, fn: () => Promise<unknown>) => {
     setActing(true)
@@ -45,8 +64,50 @@ export function ServiceDetailPage() {
     }
   }
 
+  const handleSaveSecret = async (key: string) => {
+    if (!serviceId) return
+    const value = secretValues[key]
+    if (!value) return
+    setSecretAction(key)
+    setSecretError(null)
+    try {
+      await setServiceSecret(serviceId, { key, value })
+      setSecretValues(prev => ({ ...prev, [key]: '' }))
+      loadSecrets()
+      load()
+    } catch (err) {
+      setSecretError(err instanceof MountainApiError ? `保存 ${key} 失败: ${err.message}` : `保存 ${key} 失败`)
+    } finally {
+      setSecretAction(null)
+    }
+  }
+
+  const handleDeleteSecret = async (key: string) => {
+    if (!serviceId) return
+    setSecretAction(key)
+    setSecretError(null)
+    try {
+      await deleteServiceSecret(serviceId, key)
+      loadSecrets()
+      load()
+    } catch (err) {
+      setSecretError(err instanceof MountainApiError ? `删除 ${key} 失败: ${err.message}` : `删除 ${key} 失败`)
+    } finally {
+      setSecretAction(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!serviceId) return
+    await doAction('删除', () => deleteService(serviceId))
+    setShowDeleteDialog(false)
+    if (!actionMsg?.includes('失败')) {
+      window.history.back()
+    }
+  }
+
   if (!serviceId) return <div className="error-card">缺少 serviceId</div>
-  if (isLoading) return <div className="loading"><span className="spinner" />加载中...</div>
+  if (isLoading) return <div className="page"><div className="loading"><span className="spinner" />加载中...</div></div>
   if (error) {
     return (
       <div className="page">
@@ -54,7 +115,6 @@ export function ServiceDetailPage() {
         <div className="error-card">
           <div className="code">{error.code}</div>
           <div>{error.message}</div>
-          {error.details && <div className="sug">{JSON.stringify(error.details)}</div>}
           <button type="button" className="btn btn-ghost btn-sm" onClick={load} style={{ marginTop: 8 }}>重试</button>
         </div>
       </div>
@@ -78,6 +138,7 @@ export function ServiceDetailPage() {
       )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <Link to={`/settings/models/${serviceId}/edit`} className="btn btn-ghost btn-sm">编辑</Link>
         <button
           type="button"
           className="btn btn-primary btn-sm"
@@ -100,9 +161,17 @@ export function ServiceDetailPage() {
           type="button"
           className="btn btn-ghost btn-sm"
           disabled={acting}
-          onClick={() => doAction('Probe', () => probeService(svc.service_id))}
+          onClick={() => doAction('探测', () => probeService(svc.service_id))}
         >
-          Probe
+          探测
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          disabled={acting}
+          onClick={() => setShowDeleteDialog(true)}
+        >
+          删除
         </button>
       </div>
 
@@ -140,22 +209,6 @@ export function ServiceDetailPage() {
         <div className="settings-row">
           <span className="k">默认</span>
           <span className="v">{svc.is_default ? '是' : '否'}</span>
-        </div>
-        <div className="settings-row">
-          <span className="k">Schema 版本</span>
-          <span className="v mono">{svc.schema_version}</span>
-        </div>
-        <div className="settings-row">
-          <span className="k">修订版本</span>
-          <span className="v mono">{svc.revision}</span>
-        </div>
-        <div className="settings-row">
-          <span className="k">创建时间</span>
-          <span className="v">{svc.created_at ? new Date(svc.created_at).toLocaleString('zh-CN') : '—'}</span>
-        </div>
-        <div className="settings-row">
-          <span className="k">更新时间</span>
-          <span className="v">{svc.updated_at ? new Date(svc.updated_at).toLocaleString('zh-CN') : '—'}</span>
         </div>
       </div>
 
@@ -198,29 +251,20 @@ export function ServiceDetailPage() {
         )}
       </div>
 
-      {/* Config */}
+      {/* Config status */}
       <div className="card">
-        <div className="card-title">配置</div>
+        <div className="card-title">配置状态</div>
         <div className="settings-row">
-          <span className="k">配置状态</span>
-          <span className="v"><StatusBadge status={svc.config_status === 'ok' ? 'succeeded' : svc.config_status === 'error' ? 'failed' : 'running'} label={svc.config_status} /></span>
+          <span className="k">配置</span>
+          <span className="v"><StatusBadge status={svc.config_status === 'ok' || svc.config_status === 'configured' ? 'succeeded' : 'failed'} label={svc.config_status} /></span>
         </div>
         <div className="settings-row">
-          <span className="k">端点</span>
-          <span className="v mono">{svc.endpoint || '—'}</span>
+          <span className="k">Secret</span>
+          <span className="v"><StatusBadge status={svc.secret_status === 'ok' || svc.secret_status === 'configured' ? 'succeeded' : svc.secret_status === 'required' ? 'pending' : 'failed'} label={svc.secret_status} /></span>
         </div>
-        <div className="settings-row">
-          <span className="k">模型</span>
-          <span className="v mono">{svc.model || '—'}</span>
-        </div>
-      </div>
-
-      {/* Secrets */}
-      <div className="card">
-        <div className="card-title">Secrets</div>
         {svc.required_secrets.length > 0 && (
           <div className="settings-row">
-            <span className="k">必填</span>
+            <span className="k">必填 Secret</span>
             <span className="v">
               {svc.required_secrets.map(s => <span key={s} className="badge tag-warn" style={{ marginRight: 4 }}>{s}</span>)}
             </span>
@@ -228,20 +272,108 @@ export function ServiceDetailPage() {
         )}
         {svc.optional_secrets.length > 0 && (
           <div className="settings-row">
-            <span className="k">可选</span>
+            <span className="k">可选 Secret</span>
             <span className="v">
               {svc.optional_secrets.map(s => <span key={s} className="badge" style={{ marginRight: 4 }}>{s}</span>)}
             </span>
           </div>
         )}
-        {svc.required_secrets.length === 0 && svc.optional_secrets.length === 0 && (
-          <div className="empty-sub">无 Secret 配置</div>
-        )}
-        <div className="settings-row">
-          <span className="k">Secret 状态</span>
-          <span className="v"><StatusBadge status={svc.secret_status === 'ok' ? 'succeeded' : svc.secret_status === 'missing' ? 'pending' : 'failed'} label={svc.secret_status} /></span>
-        </div>
       </div>
+
+      {/* Secrets management */}
+      <div className="card">
+        <div className="card-title">Secret 管理</div>
+        {secretError && <div className="error-card" role="alert" style={{ marginBottom: 8 }}><div>{secretError}</div></div>}
+        {secretsLoading ? (
+          <div className="loading"><span className="spinner" />加载中...</div>
+        ) : secrets.length === 0 && svc.required_secrets.length === 0 ? (
+          <div className="empty-sub">无 Secret 配置</div>
+        ) : (
+          <div className="secrets-list">
+            {/* Show required secrets as input fields */}
+            {svc.required_secrets.map(key => {
+              const existing = secrets.find(s => s.secret_key === key)
+              return (
+                <div key={key} className="secret-row">
+                  <span className="secret-key">{key}</span>
+                  {existing?.configured ? (
+                    <span className="secret-masked">{existing.masked_value ?? '****'}</span>
+                  ) : (
+                    <span className="badge tag-warn">未配置</span>
+                  )}
+                  <input
+                    type="password"
+                    className="input secret-input"
+                    placeholder={existing?.configured ? '输入新值以更新' : '输入 Secret 值'}
+                    value={secretValues[key] ?? ''}
+                    onChange={e => setSecretValues(prev => ({ ...prev, [key]: e.target.value }))}
+                    aria-label={`${key} 值`}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={secretAction === key || !(secretValues[key]?.trim())}
+                    onClick={() => handleSaveSecret(key)}
+                  >
+                    {secretAction === key ? '保存中...' : '保存'}
+                  </button>
+                  {existing?.configured && (
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={secretAction === key}
+                      onClick={() => handleDeleteSecret(key)}
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+            {/* Show optional secrets that are configured */}
+            {secrets.filter(s => !svc.required_secrets.includes(s.secret_key)).map(s => (
+              <div key={s.secret_key} className="secret-row">
+                <span className="secret-key">{s.secret_key}</span>
+                <span className="secret-masked">{s.masked_value ?? '****'}</span>
+                <input
+                  type="password"
+                  className="input secret-input"
+                  placeholder="输入新值以更新"
+                  value={secretValues[s.secret_key] ?? ''}
+                  onChange={e => setSecretValues(prev => ({ ...prev, [s.secret_key]: e.target.value }))}
+                  aria-label={`${s.secret_key} 值`}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={secretAction === s.secret_key || !(secretValues[s.secret_key]?.trim())}
+                  onClick={() => handleSaveSecret(s.secret_key)}
+                >
+                  {secretAction === s.secret_key ? '保存中...' : '保存'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={secretAction === s.secret_key}
+                  onClick={() => handleDeleteSecret(s.secret_key)}
+                >
+                  删除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={showDeleteDialog}
+        title="删除服务"
+        message={`确定删除服务「${svc.display_name}」？此操作不可恢复。`}
+        confirmLabel="删除"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
     </div>
   )
 }

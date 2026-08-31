@@ -1,0 +1,7 @@
+{
+  "mountain_generate": true,
+  "storyboard_generate": true,
+  "image_generate": true,
+  "video_generate": true,
+  "video_assembly": true
+}

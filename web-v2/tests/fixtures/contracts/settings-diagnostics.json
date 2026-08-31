@@ -1,0 +1,35 @@
+{
+  "api": {
+    "status": "healthy",
+    "version": "0.7.0",
+    "uptime_seconds": 86400
+  },
+  "services": [
+    {
+      "service_id": "anthropic-claude",
+      "status": "available",
+      "latency_ms": 150
+    }
+  ],
+  "toolchain": [
+    {
+      "component": "ffmpeg",
+      "available": true,
+      "version": "6.1.1"
+    }
+  ],
+  "storage": {
+    "base_path": "/data/mountain",
+    "total_bytes": 107374182400,
+    "used_bytes": 53687091200,
+    "available_bytes": 53687091200
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "logs": {
+    "level": "info",
+    "path": "/var/log/mountain/app.log"
+  },
+  "recent_errors": []
+}

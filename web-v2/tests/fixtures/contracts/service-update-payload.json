@@ -1,0 +1,9 @@
+{
+  "display_name": "OpenAI GPT-4o (Updated)",
+  "model": "gpt-4o-2024-08-06",
+  "priority": 3,
+  "config": {
+    "temperature": 0.3,
+    "max_tokens": 4096
+  }
+}

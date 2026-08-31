@@ -1,14 +1,23 @@
 /* ==========================================================================
-   素材管理 — Asset Management Page
+   资产管理 — Asset Management Page (§3.7)
 
    Tabs: 预置风格 | 自定义风格 | 音色库
-   Layout: left list + right detail
+   - Preset: read-only, copy only
+   - Custom: full CRUD
+   - Voice: upload, edit, play, activate/deactivate, delete
    ========================================================================== */
 
 import { useState, useEffect, useCallback } from 'react'
 import { Tabs } from '../components/ui/Tabs'
 import { CopyButton } from '../components/ui/CopyButton'
-import { fetchStyles, fetchVoices, activateStyle, deactivateStyle, copyStyle, activateVoice, deactivateVoice } from '../lib/api/assets'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { getVoiceContentUrl } from '../lib/api/http'
+import {
+  fetchStyles, createStyle, updateStyle, deleteStyle,
+  activateStyle, deactivateStyle, copyStyle,
+  fetchVoices, createVoice, updateVoice, deleteVoice,
+  activateVoice, deactivateVoice,
+} from '../lib/api/assets'
 import type { StyleTemplate, VoiceDefinition } from '../lib/api/types'
 
 const TAB_ITEMS = [
@@ -26,6 +35,9 @@ export function AssetManagementPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingItem, setEditingItem] = useState<StyleTemplate | VoiceDefinition | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<StyleTemplate | VoiceDefinition | null>(null)
 
   const loadItems = useCallback(async () => {
     setLoading(true)
@@ -46,72 +58,89 @@ export function AssetManagementPage() {
     }
   }, [activeTab, search])
 
-  useEffect(() => {
-    loadItems()
-  }, [loadItems])
-
-  useEffect(() => {
-    setSelected(null)
-    setFeedback(null)
-  }, [activeTab])
-
-  const handleActivate = async (id: string) => {
-    setSubmitting(id)
-    setFeedback(null)
-    try {
-      if (activeTab === 'voice') {
-        await activateVoice(id)
-      } else {
-        await activateStyle(id)
-      }
-      setFeedback('已启用')
-      await loadItems()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '操作失败')
-    } finally {
-      setSubmitting(null)
-    }
-  }
-
-  const handleDeactivate = async (id: string) => {
-    setSubmitting(id)
-    setFeedback(null)
-    try {
-      if (activeTab === 'voice') {
-        await deactivateVoice(id)
-      } else {
-        await deactivateStyle(id)
-      }
-      setFeedback('已停用')
-      await loadItems()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '操作失败')
-    } finally {
-      setSubmitting(null)
-    }
-  }
-
-  const handleCopy = async (id: string) => {
-    setSubmitting(id)
-    setFeedback(null)
-    try {
-      await copyStyle(id)
-      setFeedback('已复制')
-      await loadItems()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '操作失败')
-    } finally {
-      setSubmitting(null)
-    }
-  }
+  useEffect(() => { loadItems() }, [loadItems])
+  useEffect(() => { setSelected(null); setFeedback(null) }, [activeTab])
 
   const isVoice = (item: StyleTemplate | VoiceDefinition): item is VoiceDefinition =>
     'voice_id' in item
 
+  const getId = (item: StyleTemplate | VoiceDefinition) =>
+    isVoice(item) ? item.voice_id : item.style_id
+
+  const handleActivate = async (id: string) => {
+    setSubmitting(id); setFeedback(null)
+    try {
+      if (activeTab === 'voice') await activateVoice(id)
+      else await activateStyle(id)
+      setFeedback('已启用')
+      await loadItems()
+    } catch (err) { setError(err instanceof Error ? err.message : '操作失败') }
+    finally { setSubmitting(null) }
+  }
+
+  const handleDeactivate = async (id: string) => {
+    setSubmitting(id); setFeedback(null)
+    try {
+      if (activeTab === 'voice') await deactivateVoice(id)
+      else await deactivateStyle(id)
+      setFeedback('已停用')
+      await loadItems()
+    } catch (err) { setError(err instanceof Error ? err.message : '操作失败') }
+    finally { setSubmitting(null) }
+  }
+
+  const handleCopy = async (id: string) => {
+    setSubmitting(id); setFeedback(null)
+    try {
+      await copyStyle(id)
+      setFeedback('已复制为自定义风格')
+      await loadItems()
+    } catch (err) { setError(err instanceof Error ? err.message : '操作失败') }
+    finally { setSubmitting(null) }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    const id = getId(deleteTarget)
+    setSubmitting(id); setFeedback(null)
+    try {
+      if (isVoice(deleteTarget)) await deleteVoice(id)
+      else await deleteStyle(id)
+      setFeedback('已删除')
+      setSelected(null)
+      await loadItems()
+    } catch (err) { setError(err instanceof Error ? err.message : '删除失败') }
+    finally { setSubmitting(null); setDeleteTarget(null) }
+  }
+
+  const handleEdit = (item: StyleTemplate | VoiceDefinition) => {
+    setEditingItem(item)
+    setShowForm(true)
+  }
+
+  const handleCreate = () => {
+    setEditingItem(null)
+    setShowForm(true)
+  }
+
+  const handleFormClose = () => {
+    setShowForm(false)
+    setEditingItem(null)
+  }
+
+  const handleFormSaved = async () => {
+    setShowForm(false)
+    setEditingItem(null)
+    setFeedback('已保存')
+    await loadItems()
+  }
+
+  const isPreset = activeTab === 'preset'
+
   return (
     <div className="page-container">
       <div className="am-header">
-        <h1 className="am-title">素材管理</h1>
+        <h1 className="am-title">资产管理</h1>
         <p className="am-description">管理预置风格、自定义风格和音色库</p>
       </div>
 
@@ -120,14 +149,21 @@ export function AssetManagementPage() {
       {feedback && <div className="am-feedback">{feedback}</div>}
       {error && <div className="am-error">{error}</div>}
 
-      <div className="am-search">
+      <div className="am-toolbar">
         <input
           type="text"
           placeholder="搜索..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="am-search-input"
+          aria-label="搜索"
         />
+        {activeTab === 'custom' && (
+          <button type="button" className="btn btn-primary btn-sm" onClick={handleCreate}>新建风格</button>
+        )}
+        {activeTab === 'voice' && (
+          <button type="button" className="btn btn-primary btn-sm" onClick={handleCreate}>上传音色</button>
+        )}
       </div>
 
       {loading ? (
@@ -139,8 +175,8 @@ export function AssetManagementPage() {
           <div className="am-list">
             {items.map(item => (
               <div
-                key={isVoice(item) ? item.voice_id : item.style_id}
-                className={`am-list-item ${selected && (isVoice(item) ? item.voice_id : item.style_id) === (isVoice(selected) ? selected.voice_id : selected.style_id) ? 'am-list-item--selected' : ''}`}
+                key={getId(item)}
+                className={`am-list-item ${selected && getId(selected) === getId(item) ? 'am-list-item--selected' : ''}`}
                 onClick={() => setSelected(item)}
               >
                 <div className="am-list-item-name">{item.name}</div>
@@ -151,60 +187,419 @@ export function AssetManagementPage() {
 
           <div className="am-detail">
             {selected ? (
-              <>
-                <h2 className="am-detail-name">{selected.name}</h2>
-                {selected.description && <p className="am-detail-desc">{selected.description}</p>}
-                <div className="am-detail-meta">
-                  <span>状态: {selected.status}</span>
-                  <span>创建: {new Date(selected.created_at).toLocaleDateString()}</span>
-                </div>
-
-                <div className="am-detail-actions">
-                  {selected.status === 'active' ? (
-                    <button
-                      className="btn btn-secondary"
-                      disabled={submitting !== null}
-                      onClick={() => {
-                        const id = isVoice(selected) ? selected.voice_id : selected.style_id
-                        handleDeactivate(id)
-                      }}
-                    >
-                      {submitting === (isVoice(selected) ? selected.voice_id : selected.style_id) ? '处理中...' : '停用'}
-                    </button>
-                  ) : (
-                    <button
-                      className="btn btn-primary"
-                      disabled={submitting !== null}
-                      onClick={() => {
-                        const id = isVoice(selected) ? selected.voice_id : selected.style_id
-                        handleActivate(id)
-                      }}
-                    >
-                      {submitting === (isVoice(selected) ? selected.voice_id : selected.style_id) ? '处理中...' : '启用'}
-                    </button>
-                  )}
-
-                  {!isVoice(selected) && activeTab === 'preset' && (
-                    <button
-                      className="btn btn-secondary"
-                      disabled={submitting !== null}
-                      onClick={() => handleCopy(selected.style_id)}
-                    >
-                      {submitting === selected.style_id ? '处理中...' : '复制为自定义'}
-                    </button>
-                  )}
-
-                  {isVoice(selected) && selected.content_url && (
-                    <CopyButton text={selected.content_url}>复制链接</CopyButton>
-                  )}
-                </div>
-              </>
+              isVoice(selected) ? (
+                <VoiceDetail
+                  voice={selected}
+                  submitting={submitting}
+                  isPreset={false}
+                  onActivate={handleActivate}
+                  onDeactivate={handleDeactivate}
+                  onEdit={() => handleEdit(selected)}
+                  onDelete={() => setDeleteTarget(selected)}
+                />
+              ) : (
+                <StyleDetail
+                  style={selected}
+                  submitting={submitting}
+                  isPreset={isPreset}
+                  onActivate={handleActivate}
+                  onDeactivate={handleDeactivate}
+                  onCopy={handleCopy}
+                  onEdit={() => handleEdit(selected)}
+                  onDelete={() => setDeleteTarget(selected)}
+                />
+              )
             ) : (
               <div className="am-detail-empty">选择一项查看详情</div>
             )}
           </div>
         </div>
       )}
+
+      {showForm && (
+        activeTab === 'voice' ? (
+          <VoiceFormDialog
+            voice={editingItem as VoiceDefinition | null}
+            onClose={handleFormClose}
+            onSaved={handleFormSaved}
+          />
+        ) : (
+          <StyleFormDialog
+            style={editingItem as StyleTemplate | null}
+            onClose={handleFormClose}
+            onSaved={handleFormSaved}
+          />
+        )
+      )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={deleteTarget && isVoice(deleteTarget) ? '删除音色' : '删除风格'}
+        message={deleteTarget ? `确定删除「${deleteTarget.name}」？此操作不可恢复。` : ''}
+        confirmLabel="删除"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </div>
+  )
+}
+
+/* ── Style Detail ──────────────────────────────────────────────────────── */
+
+function StyleDetail({
+  style: s,
+  submitting,
+  isPreset,
+  onActivate,
+  onDeactivate,
+  onCopy,
+  onEdit,
+  onDelete,
+}: {
+  style: StyleTemplate
+  submitting: string | null
+  isPreset: boolean
+  onActivate: (id: string) => void
+  onDeactivate: (id: string) => void
+  onCopy: (id: string) => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <>
+      <h2 className="am-detail-name">{s.name}</h2>
+      <div className="am-detail-meta">
+        <span>状态: {s.status === 'active' ? '已启用' : '未启用'}</span>
+        <span>类型: {s.kind === 'preset' ? '预置' : '自定义'}</span>
+        <span>修订: {s.revision}</span>
+        <span>创建: {new Date(s.created_at).toLocaleDateString()}</span>
+      </div>
+      {s.description && <p className="am-detail-desc">{s.description}</p>}
+      {s.engine && <div className="am-detail-field"><span className="am-detail-label">引擎:</span> {s.engine}</div>}
+      {s.tags.length > 0 && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">标签:</span>
+          {s.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
+        </div>
+      )}
+      {s.prompt_text && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">提示词:</span>
+          <div className="am-detail-prompt">{s.prompt_text}</div>
+        </div>
+      )}
+      {s.negative_prompt && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">反向提示词:</span>
+          <div className="am-detail-prompt">{s.negative_prompt}</div>
+        </div>
+      )}
+
+      <div className="am-detail-actions">
+        {isPreset ? (
+          /* Preset: only copy allowed */
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={submitting !== null}
+            onClick={() => onCopy(s.style_id)}
+          >
+            {submitting === s.style_id ? '处理中...' : '复制为自定义'}
+          </button>
+        ) : (
+          /* Custom: full CRUD */
+          <>
+            <button type="button" className="btn btn-ghost" onClick={onEdit}>编辑</button>
+            {s.status === 'active' ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={submitting !== null}
+                onClick={() => onDeactivate(s.style_id)}
+              >
+                {submitting === s.style_id ? '处理中...' : '停用'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={submitting !== null}
+                onClick={() => onActivate(s.style_id)}
+              >
+                {submitting === s.style_id ? '处理中...' : '启用'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={submitting !== null}
+              onClick={onDelete}
+            >
+              删除
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+/* ── Voice Detail ──────────────────────────────────────────────────────── */
+
+function VoiceDetail({
+  voice: v,
+  submitting,
+  onActivate,
+  onDeactivate,
+  onEdit,
+  onDelete,
+}: {
+  voice: VoiceDefinition
+  submitting: string | null
+  isPreset: boolean
+  onActivate: (id: string) => void
+  onDeactivate: (id: string) => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const audioUrl = getVoiceContentUrl(v.voice_id)
+
+  return (
+    <>
+      <h2 className="am-detail-name">{v.name}</h2>
+      <div className="am-detail-meta">
+        <span>状态: {v.status === 'active' ? '已启用' : '未启用'}</span>
+        <span>修订: {v.duration_ms ? `${(v.duration_ms / 1000).toFixed(1)}s` : '—'}</span>
+        <span>创建: {new Date(v.created_at).toLocaleDateString()}</span>
+      </div>
+      {v.tags.length > 0 && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">标签:</span>
+          {v.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
+        </div>
+      )}
+      <div className="am-detail-field">
+        <span className="am-detail-label">采样率:</span> {v.sample_rate ? `${v.sample_rate} Hz` : '—'}
+      </div>
+      <div className="am-detail-field">
+        <span className="am-detail-label">声道:</span> {v.channels ?? '—'}
+      </div>
+      <div className="am-detail-field">
+        <span className="am-detail-label">格式:</span> {v.format ?? '—'}
+      </div>
+
+      <div className="am-detail-field">
+        <audio controls src={audioUrl} preload="metadata" style={{ width: '100%', marginTop: 8 }}>
+          您的浏览器不支持音频播放
+        </audio>
+      </div>
+
+      <div className="am-detail-actions">
+        <button type="button" className="btn btn-ghost" onClick={onEdit}>编辑</button>
+        {v.status === 'active' ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={submitting !== null}
+            onClick={() => onDeactivate(v.voice_id)}
+          >
+            {submitting === v.voice_id ? '处理中...' : '停用'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={submitting !== null}
+            onClick={() => onActivate(v.voice_id)}
+          >
+            {submitting === v.voice_id ? '处理中...' : '启用'}
+          </button>
+        )}
+        <CopyButton text={audioUrl}>复制链接</CopyButton>
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={submitting !== null}
+          onClick={onDelete}
+        >
+          删除
+        </button>
+      </div>
+    </>
+  )
+}
+
+/* ── Style Form Dialog ─────────────────────────────────────────────────── */
+
+function StyleFormDialog({
+  style: existing,
+  onClose,
+  onSaved,
+}: {
+  style: StyleTemplate | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const isEdit = !!existing
+  const [name, setName] = useState(existing?.name ?? '')
+  const [description, setDescription] = useState(existing?.description ?? '')
+  const [engine, setEngine] = useState(existing?.engine ?? '')
+  const [promptText, setPromptText] = useState(existing?.prompt_text ?? '')
+  const [negativePrompt, setNegativePrompt] = useState(existing?.negative_prompt ?? '')
+  const [tags, setTags] = useState(existing?.tags?.join(', ') ?? '')
+  const [previewAssetId, setPreviewAssetId] = useState(existing?.preview_asset_id ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const payload = {
+        name,
+        description: description || undefined,
+        engine: engine || undefined,
+        prompt_text: promptText || undefined,
+        negative_prompt: negativePrompt || undefined,
+        tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+        preview_asset_id: previewAssetId || undefined,
+      }
+      if (isEdit && existing) {
+        await updateStyle(existing.style_id, payload)
+      } else {
+        await createStyle(payload)
+      }
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <h2 className="modal-title">{isEdit ? '编辑风格' : '新建自定义风格'}</h2>
+        {error && <div className="error-card" role="alert"><div>{error}</div></div>}
+        <form onSubmit={handleSubmit} className="style-form">
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-name">名称 *</label>
+            <input id="style-name" type="text" className="input" required value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-desc">描述</label>
+            <input id="style-desc" type="text" className="input" value={description} onChange={e => setDescription(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-engine">引擎</label>
+            <input id="style-engine" type="text" className="input" value={engine} onChange={e => setEngine(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-prompt">提示词</label>
+            <textarea id="style-prompt" className="input" rows={3} value={promptText} onChange={e => setPromptText(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-neg">反向提示词</label>
+            <textarea id="style-neg" className="input" rows={2} value={negativePrompt} onChange={e => setNegativePrompt(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-tags">标签（逗号分隔）</label>
+            <input id="style-tags" type="text" className="input" value={tags} onChange={e => setTags(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="style-preview">预览素材 ID</label>
+            <input id="style-preview" type="text" className="input" value={previewAssetId} onChange={e => setPreviewAssetId(e.target.value)} placeholder="先上传素材，再填入 ID" />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>取消</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? '保存中...' : (isEdit ? '保存修改' : '创建')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ── Voice Form Dialog ─────────────────────────────────────────────────── */
+
+function VoiceFormDialog({
+  voice: existing,
+  onClose,
+  onSaved,
+}: {
+  voice: VoiceDefinition | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const isEdit = !!existing
+  const [name, setName] = useState(existing?.name ?? '')
+  const [tags, setTags] = useState(existing?.tags?.join(', ') ?? '')
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      if (isEdit && existing) {
+        await updateVoice(existing.voice_id, {
+          name,
+          tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+        })
+      } else {
+        if (!audioFile) { setError('请选择音频文件'); setSaving(false); return }
+        const form = new FormData()
+        form.append('file', audioFile)
+        form.append('name', name)
+        if (tags) {
+          const tagList = tags.split(',').map(t => t.trim()).filter(Boolean)
+          for (const t of tagList) form.append('tags', t)
+        }
+        await createVoice(form)
+      }
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <h2 className="modal-title">{isEdit ? '编辑音色' : '上传音色'}</h2>
+        {error && <div className="error-card" role="alert"><div>{error}</div></div>}
+        <form onSubmit={handleSubmit} className="style-form">
+          <div className="form-field">
+            <label className="form-label" htmlFor="voice-name">名称 *</label>
+            <input id="voice-name" type="text" className="input" required value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          {!isEdit && (
+            <div className="form-field">
+              <label className="form-label" htmlFor="voice-file">音频文件 *</label>
+              <input id="voice-file" type="file" accept="audio/*" onChange={e => setAudioFile(e.target.files?.[0] ?? null)} />
+            </div>
+          )}
+          <div className="form-field">
+            <label className="form-label" htmlFor="voice-tags">标签（逗号分隔）</label>
+            <input id="voice-tags" type="text" className="input" value={tags} onChange={e => setTags(e.target.value)} />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>取消</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? '保存中...' : (isEdit ? '保存修改' : '上传')}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

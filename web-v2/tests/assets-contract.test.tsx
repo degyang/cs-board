@@ -16,17 +16,42 @@ vi.mock('../src/lib/api/assets', () => ({
   copyStyle: vi.fn(),
   activateVoice: vi.fn(),
   deactivateVoice: vi.fn(),
+  createStyle: vi.fn(),
+  updateStyle: vi.fn(),
+  deleteStyle: vi.fn(),
+  createVoice: vi.fn(),
+  updateVoice: vi.fn(),
+  deleteVoice: vi.fn(),
 }))
 
-import { fetchStyles, fetchVoices, activateStyle, deactivateStyle, copyStyle } from '../src/lib/api/assets'
+import {
+  fetchStyles, fetchVoices, activateStyle, deactivateStyle, copyStyle,
+  createStyle, updateStyle, deleteStyle,
+  createVoice, updateVoice, deleteVoice,
+} from '../src/lib/api/assets'
 
 const mockStyles = [
-  { style_id: 's1', kind: 'preset', name: '水彩风', description: '水彩画风格', status: 'active', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
-  { style_id: 's2', kind: 'preset', name: '油画风', description: '油画风格', status: 'inactive', created_at: '2025-01-02T00:00:00Z', updated_at: '2025-01-02T00:00:00Z' },
+  {
+    style_id: 's1', kind: 'preset' as const, name: '水彩风', description: '水彩画风格',
+    engine: 'sdxl', status: 'active' as const, revision: 1, tags: ['水彩'],
+    prompt_text: null, negative_prompt: null, preview_asset_id: null, config: {},
+    created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z',
+  },
+  {
+    style_id: 's2', kind: 'preset' as const, name: '油画风', description: '油画风格',
+    engine: 'sdxl', status: 'inactive' as const, revision: 1, tags: ['油画'],
+    prompt_text: null, negative_prompt: null, preview_asset_id: null, config: {},
+    created_at: '2025-01-02T00:00:00Z', updated_at: '2025-01-02T00:00:00Z',
+  },
 ]
 
 const mockVoices = [
-  { voice_id: 'v1', name: '温柔女声', description: '适合讲故事', status: 'active', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+  {
+    voice_id: 'v1', name: '温柔女声', tags: ['女声', '叙述'],
+    status: 'active' as const, enabled: true, duration_ms: 5200,
+    sample_rate: 44100, channels: 1, format: 'wav',
+    created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z',
+  },
 ]
 
 describe('AssetManagementPage', () => {
@@ -36,16 +61,22 @@ describe('AssetManagementPage', () => {
     vi.mocked(activateStyle).mockReset()
     vi.mocked(deactivateStyle).mockReset()
     vi.mocked(copyStyle).mockReset()
+    vi.mocked(createStyle).mockReset()
+    vi.mocked(updateStyle).mockReset()
+    vi.mocked(deleteStyle).mockReset()
+    vi.mocked(createVoice).mockReset()
+    vi.mocked(updateVoice).mockReset()
+    vi.mocked(deleteVoice).mockReset()
   })
 
   it('renders the page title', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: [] })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
-    expect(screen.getByText('素材管理')).toBeInTheDocument()
+    expect(screen.getByText('资产管理')).toBeInTheDocument()
   })
 
   it('renders all three tabs', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: [] })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
     expect(screen.getByText('预置风格')).toBeInTheDocument()
     expect(screen.getByText('自定义风格')).toBeInTheDocument()
@@ -53,7 +84,7 @@ describe('AssetManagementPage', () => {
   })
 
   it('loads and displays preset styles', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles, next_cursor: null, total: 2 })
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
 
     await waitFor(() => {
@@ -78,7 +109,7 @@ describe('AssetManagementPage', () => {
   })
 
   it('shows empty state when no items', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: [] })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
 
     await waitFor(() => {
@@ -87,7 +118,7 @@ describe('AssetManagementPage', () => {
   })
 
   it('selects an item and shows detail', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles, next_cursor: null, total: 2 })
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
 
     await waitFor(() => {
@@ -101,13 +132,16 @@ describe('AssetManagementPage', () => {
     })
   })
 
-  it('calls activateStyle when clicking activate button', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
-    vi.mocked(activateStyle).mockResolvedValue({ ...mockStyles[1], status: 'active' })
-    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: mockStyles })
-    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: mockStyles.map(s => s.style_id === 's2' ? { ...s, status: 'active' } : s) })
+  it('calls activateStyle when clicking activate button on custom tab', async () => {
+    const customStyles = [{ ...mockStyles[1], kind: 'custom' as const, status: 'inactive' as const }]
+    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: customStyles, next_cursor: null, total: 1 })
+    vi.mocked(activateStyle).mockResolvedValue({ ...mockStyles[1], kind: 'custom', status: 'active' })
 
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+
+    // Switch to custom tab
+    await userEvent.click(screen.getByText('自定义风格'))
 
     await waitFor(() => {
       expect(screen.getByText('油画风')).toBeInTheDocument()
@@ -126,13 +160,16 @@ describe('AssetManagementPage', () => {
     })
   })
 
-  it('calls deactivateStyle when clicking deactivate button', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
-    vi.mocked(deactivateStyle).mockResolvedValue({ ...mockStyles[0], status: 'inactive' })
-    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: mockStyles })
-    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: mockStyles.map(s => s.style_id === 's1' ? { ...s, status: 'inactive' } : s) })
+  it('calls deactivateStyle when clicking deactivate button on custom tab', async () => {
+    const customStyles = [{ ...mockStyles[0], kind: 'custom' as const }]
+    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: customStyles, next_cursor: null, total: 1 })
+    vi.mocked(deactivateStyle).mockResolvedValue({ ...mockStyles[0], kind: 'custom', status: 'inactive' })
 
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+
+    // Switch to custom tab
+    await userEvent.click(screen.getByText('自定义风格'))
 
     await waitFor(() => {
       expect(screen.getByText('水彩风')).toBeInTheDocument()
@@ -152,10 +189,8 @@ describe('AssetManagementPage', () => {
   })
 
   it('calls copyStyle when clicking copy button for preset styles', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: [mockStyles[0]], next_cursor: null, total: 1 })
     vi.mocked(copyStyle).mockResolvedValue({ ...mockStyles[0], style_id: 's3', kind: 'custom' })
-    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: mockStyles })
-    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: [...mockStyles, { style_id: 's3', kind: 'custom', name: '水彩风 (副本)', status: 'active', created_at: '2025-01-03T00:00:00Z', updated_at: '2025-01-03T00:00:00Z' }] })
 
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
 
@@ -177,8 +212,8 @@ describe('AssetManagementPage', () => {
   })
 
   it('switches to voice tab and loads voices', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: [] })
-    vi.mocked(fetchVoices).mockResolvedValue({ items: mockVoices })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(fetchVoices).mockResolvedValue({ items: mockVoices, next_cursor: null, total: 1 })
 
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
 
@@ -191,7 +226,7 @@ describe('AssetManagementPage', () => {
   })
 
   it('search input triggers fetch with query', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
+    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles, next_cursor: null, total: 2 })
 
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
 
@@ -208,10 +243,15 @@ describe('AssetManagementPage', () => {
   })
 
   it('prevents double submit on activate', async () => {
-    vi.mocked(fetchStyles).mockResolvedValue({ items: mockStyles })
+    const customStyles = [{ ...mockStyles[1], kind: 'custom' as const, status: 'inactive' as const }]
+    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(fetchStyles).mockResolvedValueOnce({ items: customStyles, next_cursor: null, total: 1 })
     vi.mocked(activateStyle).mockImplementation(() => new Promise(() => {}))
 
     render(<MemoryRouter><AssetManagementPage /></MemoryRouter>)
+
+    // Switch to custom tab
+    await userEvent.click(screen.getByText('自定义风格'))
 
     await waitFor(() => {
       expect(screen.getByText('油画风')).toBeInTheDocument()

@@ -105,11 +105,16 @@ function ModelsSection() {
 
   if (isLoading) return <div className="loading"><span className="spinner" />加载中...</div>
   if (error) {
+    // §3.8: 只在 UI 输出 code/message/request_id，details 仅输出到 DevTools
+    if (error.details) console.error('[Settings error details]', error.details)
+    const requestId = error.details && typeof error.details === 'object' && 'request_id' in error.details
+      ? (error.details as Record<string, unknown>).request_id as string
+      : undefined
     return (
       <div className="error-card">
         <div className="code">{error.code}</div>
         <div>{error.message}</div>
-        {error.details && <div className="sug">{JSON.stringify(error.details)}</div>}
+        {requestId && <div className="sug">请求 ID: {requestId}</div>}
         <button type="button" className="btn btn-ghost btn-sm" onClick={load} style={{ marginTop: 8 }}>重试</button>
       </div>
     )

@@ -1,0 +1,20 @@
+{
+  "tools": [
+    {
+      "component": "ffmpeg",
+      "available": true,
+      "version": "6.1.1",
+      "path": "/usr/bin/ffmpeg",
+      "error_code": null,
+      "suggestion": null
+    },
+    {
+      "component": "ffprobe",
+      "available": true,
+      "version": "6.1.1",
+      "path": "/usr/bin/ffprobe",
+      "error_code": null,
+      "suggestion": null
+    }
+  ]
+}
