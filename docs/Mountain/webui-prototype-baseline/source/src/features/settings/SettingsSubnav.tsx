@@ -1,5 +1,5 @@
 import { Tabs } from '../../components/ui/Tabs'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 /* 设置二级导航（统一）：模型服务 / 语音与对齐 / 工具链 / 存储 / 诊断。
  * - 模型服务 / 工具链 / 存储 / 诊断 为设置页内分页（复用 Tabs 视觉与交互）；
@@ -16,10 +16,12 @@ const SETTINGS_NAV = [
 
 export function SettingsSubnav({ active }: { active: string }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const onSelect = (key: string) => {
     if (key === 'voice-alignment') navigate('/settings/voice-alignment')
-    else navigate(`/settings#${key}`)
+    /* 保留当前查询参数（如 ?demo=），避免切换分页时丢失演示态；
+       hash 用于页内分页，由 React Router 的 useLocation().hash 响应式驱动。 */
+    else navigate(`/settings${location.search}#${key}`)
   }
   return <Tabs items={SETTINGS_NAV} active={active} onChange={onSelect} />
 }
-

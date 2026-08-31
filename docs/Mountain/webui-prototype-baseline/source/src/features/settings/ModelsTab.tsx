@@ -1,343 +1,93 @@
-import { useState } from 'react'
+import { MODEL_REGISTRY_VIEW } from './modelsRegistry/fixtures'
 import {
-  useModelProviders,
-  MODEL_CATEGORIES,
-  categoryLabel,
-  maskApiKey,
-  type ModelProvider,
-} from './modelProvidersStore'
+  type ModelServiceVM,
+  type ConfigStatus,
+  type Availability,
+  CAPABILITY_LABEL,
+  SERVICE_TYPE_LABEL,
+  CONFIG_STATUS_LABEL,
+  AVAILABILITY_LABEL,
+} from './modelsRegistry/types'
 
-/* 设置-模型 · 模型服务商列表
-   列表卡片（名称 + 类别徽标 + 模型 chips + 掩码 API Key + Base URL），
-   新增/编辑走内联表单；API Key 缺省 password 掩码，点眼睛图标切换明文。 */
+/* 设置-模型服务 · 模型服务注册表（只读原型）
+   展示当前已接入的模型服务能力：本地引擎（Codex Skills / IndexTTS / Whisper / FFmpeg / 白板渲染器）
+   与未来可加入的外部 API（未配置 / 未探测）。
+   安全边界：本页不存储、不回显、不编辑任何 API Key / token / secret；
+   密钥未来仅作为一次性 password 输入提交后端 SecretStore，成功后立即清空。 */
 
-const EMPTY_DRAFT = (id: string): ModelProvider => ({
-  id,
-  name: '',
-  categories: [],
-  models: [],
-  apiKey: '',
-  baseUrl: '',
-})
+/** 状态徽标（复用既有 .badge .st-* 体系） */
+function StateBadge({ kind, label }: { kind: 'succeeded' | 'failed' | 'pending'; label: string }) {
+  return <span className={`badge st-${kind}`}>{label}</span>
+}
+
+const CONFIG_BADGE: Record<ConfigStatus, 'succeeded' | 'pending'> = {
+  'no-key-required': 'succeeded',
+  configured: 'succeeded',
+  unconfigured: 'pending',
+}
+const AVAIL_BADGE: Record<Availability, 'succeeded' | 'failed' | 'pending'> = {
+  available: 'succeeded',
+  unavailable: 'failed',
+  'not-probed': 'pending',
+}
+
+function ServiceCard({ s }: { s: ModelServiceVM }) {
+  const available = s.availability === 'available'
+  return (
+    <div className="ss-card">
+      <div className="ss-card-head">
+        <h3 className="ss-card-name">{s.name}</h3>
+        <span className="badge tag-neutral">{SERVICE_TYPE_LABEL[s.type]}</span>
+      </div>
+
+      {s.modelOrMode && <div className="ss-card-purpose">{s.modelOrMode}</div>}
+
+      <div className="ms-caps">
+        {s.capabilities.map((c) => (
+          <span key={c} className="badge tag-neutral mono">
+            {CAPABILITY_LABEL[c]}
+          </span>
+        ))}
+      </div>
+
+      <div className="ms-meta-row">
+        <StateBadge kind={CONFIG_BADGE[s.configStatus]} label={CONFIG_STATUS_LABEL[s.configStatus]} />
+        <StateBadge kind={AVAIL_BADGE[s.availability]} label={AVAILABILITY_LABEL[s.availability]} />
+      </div>
+
+      {s.baseUrl && <div className="ss-card-meta mono">Base URL：{s.baseUrl}</div>}
+
+      {!available && (
+        <div className="ss-error">
+          <div className="ss-error-head">
+            <span className="ss-error-code mono">{s.error_code ?? 'E-UNKNOWN'}</span>
+          </div>
+          <p className="ss-error-suggestion">{s.suggestion ?? '请检查服务配置后重试。'}</p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function ModelsTab() {
-  const { providers, addProvider, updateProvider, removeProvider, uid } = useModelProviders()
-
-  /* editingId：'new' = 新建中；其它 = 正在编辑该 id；null = 全部只读 */
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<ModelProvider | null>(null)
-  const [modelsText, setModelsText] = useState('') // 本地缓冲：允许输入尾逗号不被吞
-  const [showKey, setShowKey] = useState(false) // API Key 明/暗切换（表单内）
-  const [revealedId, setRevealedId] = useState<string | null>(null) // 列表内临时显示完整 Key
-  const [confirmId, setConfirmId] = useState<string | null>(null) // 两步删除确认
-  const [nameErr, setNameErr] = useState('')
-
-  const startNew = () => {
-    setDraft(EMPTY_DRAFT(uid('mp')))
-    setModelsText('')
-    setEditingId('new')
-    setShowKey(false)
-    setNameErr('')
-  }
-  const startEdit = (p: ModelProvider) => {
-    setDraft({ ...p })
-    setModelsText(p.models.join(', '))
-    setEditingId(p.id)
-    setShowKey(false)
-    setNameErr('')
-  }
-  const cancel = () => {
-    setEditingId(null)
-    setDraft(null)
-    setNameErr('')
-  }
-  const save = () => {
-    if (!draft) return
-    if (!draft.name.trim()) {
-      setNameErr('名称为必填')
-      return
-    }
-    if (editingId === 'new') addProvider(draft)
-    else updateProvider(draft)
-    setEditingId(null)
-    setDraft(null)
-  }
-
+  const services = MODEL_REGISTRY_VIEW.services
   return (
     <div className="card">
-      <h2 className="card-title">模型服务</h2>
+      <h2 className="card-title">模型服务注册表</h2>
       <p className="card-sub">
-        维护文本 / 图片 / 视频 / 语音各类模型服务的接入信息；每个服务可包含多个模型（逗号分隔）。API Key 缺省隐藏，点眼睛图标可显示完整内容。
+        当前已接入的模型服务能力（只读）。本地引擎开箱可用、无需密钥；外部 API 为未来可加入的 Provider，待后端契约与密钥库支持。
       </p>
 
-      <div className="mp-toolbar">
-        <button type="button" className="btn btn-primary btn-sm" onClick={startNew} disabled={editingId !== null}>
-          ＋ 添加模型服务
-        </button>
-        <span className="hint" style={{ margin: 0 }}>{providers.length} 个服务</span>
+      <div className="ss-hint">
+        密钥安全边界：API Key / token / secret 由后端密钥库（SecretStore）统一管理。本页不存储、不回显、不提供编辑入口；
+        未来密钥仅作为一次性 password 输入提交，落库后立即清空。
       </div>
 
-      <div className="mp-list">
-        {providers.map((p) =>
-          editingId === p.id && draft ? (
-            <ProviderForm
-              key={p.id}
-              draft={draft}
-              setDraft={setDraft}
-              modelsText={modelsText}
-              setModelsText={setModelsText}
-              showKey={showKey}
-              setShowKey={setShowKey}
-              nameErr={nameErr}
-              onSave={save}
-              onCancel={cancel}
-              isNew={false}
-            />
-          ) : (
-            <div key={p.id} className="mp-card">
-              <div className="mp-head">
-                <span className="mp-name">{p.name}</span>
-                <span className="mp-cats">
-                  {p.categories.map((c) => (
-                    <span key={c} className="badge">{categoryLabel(c)}</span>
-                  ))}
-                </span>
-                <span className="mp-actions">
-                  {confirmId === p.id ? (
-                    <>
-                      <span className="mp-confirm-text">确认删除？</span>
-                      <button
-                        type="button"
-                        className="btn btn-sm set-danger"
-                        onClick={() => {
-                          removeProvider(p.id)
-                          setConfirmId(null)
-                        }}
-                      >
-                        删除
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmId(null)}>
-                        取消
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(p)} disabled={editingId !== null}>
-                        编辑
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm set-danger"
-                        onClick={() => setConfirmId(p.id)}
-                        disabled={editingId !== null}
-                      >
-                        删除
-                      </button>
-                    </>
-                  )}
-                </span>
-              </div>
-              {p.models.length > 0 && (
-                <div className="mp-models">
-                  {p.models.map((m) => (
-                    <span key={m} className="badge tag-neutral mono">{m}</span>
-                  ))}
-                </div>
-              )}
-              <div className="mp-meta">
-                <span className="mp-meta-item">
-                  API Key：
-                  {p.apiKey ? (
-                    <>
-                      <span className="mono">{revealedId === p.id ? p.apiKey : maskApiKey(p.apiKey)}</span>
-                      <button
-                        type="button"
-                        className="mp-eye"
-                        title={revealedId === p.id ? '隐藏' : '显示完整 Key'}
-                        onClick={() => setRevealedId(revealedId === p.id ? null : p.id)}
-                      >
-                        <EyeIcon open={revealedId === p.id} />
-                      </button>
-                    </>
-                  ) : (
-                    <span className="hint" style={{ display: 'inline' }}>未设置</span>
-                  )}
-                </span>
-                {p.baseUrl && (
-                  <span className="mp-meta-item">
-                    Base URL：<span className="mono">{p.baseUrl}</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          ),
-        )}
-
-        {editingId === 'new' && draft && (
-          <ProviderForm
-            draft={draft}
-            setDraft={setDraft}
-            modelsText={modelsText}
-            setModelsText={setModelsText}
-            showKey={showKey}
-            setShowKey={setShowKey}
-            nameErr={nameErr}
-            onSave={save}
-            onCancel={cancel}
-            isNew
-          />
-        )}
-
-        {providers.length === 0 && editingId === null && (
-          <div className="mp-empty">暂无模型服务，点击上方「添加模型服务」创建。</div>
-        )}
+      <div className="ss-grid">
+        {services.map((s) => (
+          <ServiceCard key={s.id} s={s} />
+        ))}
       </div>
     </div>
   )
 }
-
-/* ---------------- 内联新增/编辑表单 ---------------- */
-function ProviderForm({
-  draft,
-  setDraft,
-  modelsText,
-  setModelsText,
-  showKey,
-  setShowKey,
-  nameErr,
-  onSave,
-  onCancel,
-  isNew,
-}: {
-  draft: ModelProvider
-  setDraft: (p: ModelProvider) => void
-  modelsText: string
-  setModelsText: (v: string) => void
-  showKey: boolean
-  setShowKey: (v: boolean) => void
-  nameErr: string
-  onSave: () => void
-  onCancel: () => void
-  isNew: boolean
-}) {
-  const toggleCat = (key: string) => {
-    const has = draft.categories.includes(key)
-    setDraft({
-      ...draft,
-      categories: has ? draft.categories.filter((c) => c !== key) : [...draft.categories, key],
-    })
-  }
-
-  return (
-    <div className="mp-card mp-form">
-      <div className="mp-form-title">{isNew ? '添加模型服务' : `编辑：${draft.name || '（未命名）'}`}</div>
-
-      <div className="field">
-        <label>名称 *</label>
-        <input
-          className={`input${nameErr ? ' is-error' : ''}`}
-          value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          placeholder="例如：OpenAI 官方 / 阿里云百炼 / 本地 vLLM"
-          autoFocus
-        />
-        {nameErr && <div className="set-error">{nameErr}</div>}
-      </div>
-
-      <div className="field">
-        <label>类别（可多选）</label>
-        <div className="mp-cat-row">
-          {MODEL_CATEGORIES.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              className={'mp-cat' + (draft.categories.includes(c.key) ? ' on' : '')}
-              onClick={() => toggleCat(c.key)}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="field">
-        <label>模型</label>
-        <input
-          className="input mono"
-          value={modelsText}
-          onChange={(e) => {
-            setModelsText(e.target.value)
-            setDraft({
-              ...draft,
-              models: e.target.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
-            })
-          }}
-          placeholder="多个模型以逗号分隔，例如：gpt-4o, gpt-4o-mini"
-        />
-        <div className="hint">
-          {draft.models.length > 0 ? `已解析 ${draft.models.length} 个模型` : '输入模型名称，逗号分隔'}
-        </div>
-      </div>
-
-      <div className="field">
-        <label>API Key</label>
-        <div className="mp-key-row">
-          <input
-            className="input mono"
-            type={showKey ? 'text' : 'password'}
-            value={draft.apiKey}
-            onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })}
-            placeholder="输入 API Key"
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            className="mp-eye"
-            title={showKey ? '隐藏' : '显示完整 Key'}
-            onClick={() => setShowKey(!showKey)}
-          >
-            <EyeIcon open={showKey} />
-          </button>
-        </div>
-        <div className="hint">原型阶段保存在本机浏览器；正式版将迁入系统密钥库，日志与诊断包不含密钥。</div>
-      </div>
-
-      <div className="field">
-        <label>Base URL</label>
-        <input
-          className="input mono"
-          value={draft.baseUrl}
-          onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
-          placeholder="https://api.example.com/v1"
-        />
-      </div>
-
-      <div className="mp-form-actions">
-        <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={!draft.name.trim()}>
-          保存
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
-          取消
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/* 眼睛图标（开=明文显示，闭=掩码） */
-function EyeIcon({ open }: { open: boolean }) {
-  return open ? (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  ) : (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  )
-}
-

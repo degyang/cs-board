@@ -1,23 +1,15 @@
+import { Link } from 'react-router-dom'
 import type { VoiceServiceCardVM } from './types'
 
 /* 语音与对齐 · 服务卡片（IndexTTS / Whisper 共用）
- * 纯展示 + 动作回调：刷新状态 / 配置。数据由 Props 注入，无内部存储。 */
+ * 纯展示：配置状态、可用性、错误码与修复建议、非敏感配置键值。
+ * 不提供刷新按钮（不得伪装真实服务探测），也不提供配置编辑入口；
+ * IndexTTS / Whisper 对齐统一在「模型服务」中维护，点「查看模型服务」跳转到 /settings#models。 */
 
-export function VoiceServiceCard({
-  vm,
-  refreshing,
-  onRefresh,
-}: {
-  vm: VoiceServiceCardVM
-  /** 原型演示：刷新动作期间短暂置灰 */
-  refreshing: boolean
-  onRefresh: () => void
-}) {
+export function VoiceServiceCard({ vm }: { vm: VoiceServiceCardVM }) {
   const available = vm.availability.state === 'available'
   const configured = vm.config_status === 'configured'
   const configEntries = Object.entries(vm.config).filter(([, v]) => v != null && v !== '')
-  /* 配置归属：IndexTTS / Whisper 对齐均统一在「模型服务」中维护，本页不提供配置入口 */
-  const targetRoute = vm.id === 'indextts' ? '/settings/providers/tts' : '/settings/providers/alignment'
 
   return (
     <div className="va-card">
@@ -62,17 +54,11 @@ export function VoiceServiceCard({
       )}
 
       <div className="va-card-actions">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={refreshing}>
-          {refreshing ? '刷新中…' : '刷新状态'}
-        </button>
-        <button type="button" className="btn btn-sm" disabled title="配置在「模型服务」中统一维护">
-          在模型服务中配置
-        </button>
+        <Link className="btn btn-sm" to="/settings#models">
+          查看模型服务
+        </Link>
       </div>
-      <div className="va-card-hint">
-        <div>{vm.configure_hint}</div>
-        <div className="va-route mono">目标路由 {targetRoute}</div>
-      </div>
+      <div className="va-card-hint">{vm.configure_hint}</div>
     </div>
   )
 }
@@ -80,4 +66,3 @@ export function VoiceServiceCard({
 function StatusChip({ ok, label }: { ok: boolean; label: string }) {
   return <span className={`badge ${ok ? 'st-succeeded' : 'st-failed'}`}>{label}</span>
 }
-

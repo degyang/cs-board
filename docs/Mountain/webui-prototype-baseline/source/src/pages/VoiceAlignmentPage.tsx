@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SettingsSubnav } from '../features/settings/SettingsSubnav'
 import { VoiceServiceCard } from '../features/voice-alignment/VoiceServiceCard'
@@ -10,14 +9,18 @@ import type { VoiceAlignmentView } from '../features/voice-alignment/types'
  * 边界：
  *  - 参考音频与文案属于任务工作台的制作输入，本页不提供任何上传入口；
  *  - 同步策略是产品规则，只读展示，不提供策略下拉 / 重试开关 / 阈值编辑；
- *  - 数据全部经 Props 注入（原型用 fixtures 演示三态），无任何本地存储。 */
+ *  - 数据全部经 Props 注入（原型用 fixtures 演示三态），无任何本地存储；
+ *  - 不提供伪刷新按钮（不得伪装真实服务探测）。 */
 
 /** 同步策略 · 产品规则（严格只读，顺序即执行顺序） */
 const SYNC_RULES: { title: string; desc: string }[] = [
-  { title: '文案整理', desc: '文案先被拆分为多个 Voice Unit（按整理规则、字数与句边界）。' },
-  { title: '逐段合成', desc: '每个 Unit 独立生成语音，单段失败不影响其它段落。' },
-  { title: '对齐驱动', desc: 'Whisper 成功时，以文字时间点驱动画面切换，字幕精确到字。' },
-  { title: '等比降级', desc: 'Whisper 失败时，按该 Unit 内图片数等比例分配语音总时长。' },
+  {
+    title: '文案整理',
+    desc: '新建任务时，按用户规则、目标字数与句子边界整理为多个 Voice Unit；每个 Unit 保留连续原文与顺序。这不是运行时的再次切分文案。',
+  },
+  { title: '逐段合成', desc: '每个 Unit 独立生成 Voice，单段失败不影响其它段落。' },
+  { title: '对齐驱动', desc: 'Whisper 成功时，以已确定锚定文字的时间点驱动画面切换，字幕精确到字。' },
+  { title: '等比降级', desc: 'Whisper 失败时，仅在该 Unit 内按图片数量等比例分配 Voice 总时长。' },
   { title: '可见降级', desc: 'fallback 是可见的降级标记（工作台可识别），不等同于制作失败。' },
 ]
 
@@ -33,18 +36,6 @@ export function VoiceAlignmentPage({
   const demoKey = new URLSearchParams(location.search).get('demo') ?? 'available'
   const demo = VA_DEMO_VIEWS.find((d) => d.key === demoKey) ?? VA_DEMO_VIEWS[0]
   const vm = view ?? demo.view
-
-  /* 原型刷新：点击后该卡片短暂 loading，再回到当前演示态（不触达任何真实 API） */
-  const [refreshingId, setRefreshingId] = useState<string | null>(null)
-  const timer = useRef<number | null>(null)
-  useEffect(() => () => {
-    if (timer.current) window.clearTimeout(timer.current)
-  }, [])
-  const fakeRefresh = (id: string) => {
-    setRefreshingId(id)
-    if (timer.current) window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setRefreshingId(null), 900)
-  }
 
   return (
     <div className="page page-narrow">
@@ -63,16 +54,8 @@ export function VoiceAlignmentPage({
       ) : (
         <>
           <div className="va-grid">
-            <VoiceServiceCard
-              vm={vm.tts}
-              refreshing={refreshingId === vm.tts.id}
-              onRefresh={() => fakeRefresh(vm.tts.id)}
-            />
-            <VoiceServiceCard
-              vm={vm.alignment}
-              refreshing={refreshingId === vm.alignment.id}
-              onRefresh={() => fakeRefresh(vm.alignment.id)}
-            />
+            <VoiceServiceCard vm={vm.tts} />
+            <VoiceServiceCard vm={vm.alignment} />
           </div>
 
           {/* 同步策略 · 严格只读 */}
@@ -94,7 +77,7 @@ export function VoiceAlignmentPage({
             </ol>
           </div>
 
-          {/* 项目入口：制作输入在任务工作台 */}
+          {/* 任务入口：制作输入在任务工作台 */}
           <div className="card va-entry-card">
             <div className="va-entry-body">
               <h2 className="card-title">参考音频与文案</h2>
@@ -144,4 +127,3 @@ function LoadingSkeleton() {
     </>
   )
 }
-

@@ -721,4 +721,3 @@ export function useAssetStore() {
     uid,
   }
 }
-

@@ -2,9 +2,8 @@
    语音与对齐 · View Model 类型
    仅为「设置-语音与对齐」原型页定义的数据契约：
    页面组件全部通过 Props 注入 VoiceAlignmentView，不持有任何存储或请求逻辑，
-   便于后续产品工程直接替换为真实 API 数据：
-     - /api/v1/providers/tts        → VoiceAlignmentView.tts
-     - /api/v1/providers/alignment  → VoiceAlignmentView.alignment
+   便于后续产品工程直接替换为真实 API 数据（IndexTTS / Whisper 统一出现在
+   「模型服务注册表」，其接入状态由 /api/v1/models/registry 候选契约返回）。
    字段映射（真实 API → VM）：
      profile                  → name / description / category
      config                   → config（仅展示非敏感键值：base_url / mode 等）
@@ -54,4 +53,3 @@ export interface VoiceAlignmentView {
   /** Whisper 对齐服务卡片 */
   alignment: VoiceServiceCardVM
 }
-

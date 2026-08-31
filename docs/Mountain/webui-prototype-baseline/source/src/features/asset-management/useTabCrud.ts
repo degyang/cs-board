@@ -81,4 +81,3 @@ export function useTabCrud<T extends { id: string }>(
     doDelete,
   }
 }
-

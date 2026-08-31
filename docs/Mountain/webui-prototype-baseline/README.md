@@ -35,17 +35,33 @@
 4. 原型不等于后端契约。遇到字段、命令或交互不匹配时，先记录 API gap，不得在前端伪造业务状态。
 5. 每个 WebUI PR 都必须在 `docs/Mountain/` 增加“原型文件 → web-v2 文件/API”的映射，并在审查中逐项核对。
 
-## 设置－模型基准更新（2026-08-30）
+## 设置－模型基准更新（2026-08-31）
 
-本次同步了原型新增的模型服务商列表设计：
+本次再次从来源目录同步了配置与资产相关设计。当前快照包含：
 
 - `source/src/features/settings/ModelsTab.tsx`
-- `source/src/features/settings/modelProvidersStore.ts`
+- `source/src/features/settings/modelsRegistry/`
 - `source/src/features/settings/SettingsPage.tsx`
-- `source/src/features/settings/settingsStore.ts`
+- `source/src/features/settings/systemStatus/`
+- `source/src/pages/VoiceAlignmentPage.tsx`
+- `source/src/features/voice-alignment/`
+- `source/src/features/asset-management/`
 - `source/src/styles/app.css` 中的 `.mp-*` 样式
+- `screenshots/settings/` 中的六张配置页验收截图
 
-这些文件定义的是列表卡片、模型类别、多模型 chip、内联新增/编辑和删除确认的**交互与视觉基准**。原型中的 `localStorage`、`SEED_PROVIDERS`、示例 API Key、明文显示 Key 的眼睛按钮都属于原型假数据实现，严禁迁移到 `web-v2/`。正式实现必须使用 `/api/v1/providers`、Provider Profile API 与 SecretStore；Secret 只能提交、删除或显示后端掩码值，永不由前端持久化或回显明文。
+当前原型将模型服务展示为只读注册表，将工具链、任务存储状态和系统诊断定义为只读运行状态；语音与对齐页明确不上传任务级文案或参考音频，也不伪造刷新/探测按钮。这些页面定义的是**视觉、信息层级和产品边界基准**，其中 fixture 仅用于展示状态。
+
+正式实现的权威契约仍是动态 Service Registry：使用 `/api/v1/services`、资产 API 和 SecretStore；不得恢复固定 Provider Profile、`/api/v1/providers`、localStorage 业务持久化或明文 Secret。原型中的只读模型卡片不取消正式产品已经确定的 Service 创建、编辑、Secret 提交和显式 Probe 能力；实现时应保留原型的信息层级，并由真实 API 驱动这些操作。
+
+本次快照校验值：
+
+| 文件 | SHA-256 |
+| --- | --- |
+| `ModelsTab.tsx` | `dcdbc7573c9cb5abcb506d441cc069b796e07603b6be3c8da2aa556374c45ecc` |
+| `SettingsPage.tsx` | `6a21443091c46ccf6f6b01d6e5f0f8415e60ea63d86b79c665461d39366fec17` |
+| `VoiceAlignmentPage.tsx` | `98bd3cfe04de3920851d53ab00bacb0af015612a677c9e5e4700c8e0b0837cc7` |
+| `AssetManagementPage.tsx` | `e88d66fb6a3e7b3e6d1c95592c9f37607f1e68f050a251ff02e0eaa5073ff309` |
+| `app.css` | `8479a0072082b5715b9bc1de9caa6fe1a6dd71aabe00bf02dc862ac11d6645df` |
 
 ## 重点页面
 

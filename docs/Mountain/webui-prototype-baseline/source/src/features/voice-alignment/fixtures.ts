@@ -63,7 +63,7 @@ export const VA_VIEW_WHISPER_UNAVAILABLE: VoiceAlignmentView = {
       state: 'unavailable',
       error_code: 'E-ALIGN-TOOLCHAIN-MISSING',
       suggestion:
-        'Whisper 对齐组件未检测到。请安装对齐工具链后点击「刷新状态」重新探测；安装前任务将使用等比例分配的可见降级。',
+        'Whisper 对齐组件未检测到。请安装对齐工具链后由运行环境重新探测；安装前任务将使用等比例分配的可见降级。',
     },
   },
 }
@@ -82,4 +82,3 @@ export const VA_DEMO_VIEWS: { key: string; label: string; view: VoiceAlignmentVi
   { key: 'whisper-unavailable', label: 'Whisper 不可用', view: VA_VIEW_WHISPER_UNAVAILABLE },
   { key: 'loading', label: '加载中', view: VA_VIEW_LOADING },
 ]
-

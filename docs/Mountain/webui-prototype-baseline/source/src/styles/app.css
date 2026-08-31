@@ -894,34 +894,183 @@ a { color: var(--nt-primary-700); }
 .mp-form-actions { display: flex; gap: 8px; margin-top: 4px; }
 .mp-empty { padding: 24px 0; text-align: center; color: var(--nt-text-muted); font-size: 13px; }
 
-/* 设置 · 语音与对齐（VoiceAlignmentPage，.va-* 命名空间） */
-.va-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 14px; }
-.va-card { background: var(--nt-bg); border: 1px solid var(--nt-border); border-radius: var(--nt-radius-md); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
-.va-card-title-row, .va-status-row, .va-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.va-card-actions { margin-top: auto; }
+/* ---------------- 设置 · 语音与对齐（VoiceAlignmentPage，.va-* 命名空间） ---------------- */
+/* 原型演示切换器（已移除：演示态改由 URL ?demo= 参数驱动，见 VoiceAlignmentPage） */
+
+/* 服务卡片双列 */
+.va-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.va-card {
+  background: var(--nt-bg);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.va-card-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .va-card-name { font-size: 15px; font-weight: 600; margin: 0; }
-.va-card-desc, .va-rule-desc, .va-card-hint { color: var(--nt-text-muted); font-size: 12.5px; line-height: 1.6; }
+.va-card-desc { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--nt-text-muted); }
+
+/* 状态行：配置状态 + 可用性 */
+.va-status-row { display: flex; gap: 20px; flex-wrap: wrap; }
 .va-status-item { display: flex; align-items: center; gap: 8px; }
-.va-status-label, .va-config-key { font-size: 12.5px; color: var(--nt-text-muted); }
-.va-config { display: flex; flex-direction: column; background: var(--nt-bg-sunken); border: 1px solid var(--nt-border); border-radius: var(--nt-radius-sm, 6px); overflow: hidden; }
-.va-config-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 12px; }
+.va-status-label { font-size: 12.5px; color: var(--nt-text-muted); }
+
+/* 非敏感配置键值 */
+.va-config {
+  display: flex; flex-direction: column;
+  background: var(--nt-bg-sunken);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-sm, 6px);
+  overflow: hidden;
+}
+.va-config-row {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 7px 12px;
+}
 .va-config-row + .va-config-row { border-top: 1px solid var(--nt-border); }
-.va-config-key { flex: none; width: 76px; }
+.va-config-key { flex: none; width: 76px; font-size: 12px; color: var(--nt-text-muted); }
 .va-config-val { font-size: 12.5px; word-break: break-all; }
-.va-error { border: 1px solid rgba(178, 66, 31, .35); background: rgba(212, 95, 65, .07); border-radius: var(--nt-radius-sm, 6px); padding: 10px 12px; }
+
+/* 不可用错误块 */
+.va-error {
+  border: 1px solid rgba(178, 66, 31, 0.35);
+  background: rgba(212, 95, 65, 0.07);
+  border-radius: var(--nt-radius-sm, 6px);
+  padding: 10px 12px;
+}
 .va-error-head { display: flex; align-items: center; gap: 8px; }
 .va-error-code { font-size: 12.5px; color: #B2421F; font-weight: 600; }
 .va-error-suggestion { margin: 6px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--nt-text); }
+
+/* 动作区 */
+.va-card-actions { display: flex; gap: 8px; margin-top: auto; }
+.va-card-hint { font-size: 11.5px; color: var(--nt-text-muted); }
 .va-route { margin-top: 3px; font-size: 11px; color: var(--nt-text-muted); }
+
+/* 同步策略（只读） */
 .va-rules { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .va-rule { display: flex; gap: 12px; align-items: flex-start; }
-.va-rule-step { flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--nt-primary-700); color: #fff; font-size: 12.5px; font-weight: 600; }
+.va-rule-step {
+  flex: none;
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--nt-primary-700);
+  color: #fff;
+  font-size: 12.5px; font-weight: 600;
+}
 .va-rule-body { display: flex; flex-direction: column; gap: 2px; }
 .va-rule-title { font-size: 13.5px; font-weight: 600; }
+.va-rule-desc { font-size: 12.5px; line-height: 1.6; color: var(--nt-text-muted); }
+
+/* 项目入口卡 */
 .va-entry-card { margin-top: 12px; }
 .va-entry-body { display: flex; flex-direction: column; gap: 6px; }
 .va-entry-actions { display: flex; gap: 8px; margin-top: 12px; }
-.va-skeleton .va-sk-line, .va-skeleton .va-sk-chip { border-radius: 6px; background: linear-gradient(90deg, var(--nt-bg-sunken) 25%, var(--nt-border) 50%, var(--nt-bg-sunken) 75%); background-size: 200% 100%; animation: va-shimmer 1.2s ease-in-out infinite; }
-.va-sk-line { height: 14px; margin-bottom: 10px; }.va-sk-row { display: flex; gap: 10px; margin-bottom: 10px; }.va-sk-chip { width: 72px; height: 22px; }
-.va-sk-line.w-30 { width: 30%; }.va-sk-line.w-40 { width: 40%; }.va-sk-line.w-50 { width: 50%; }.va-sk-line.w-60 { width: 60%; }.va-sk-line.w-70 { width: 70%; }.va-sk-line.w-75 { width: 75%; }.va-sk-line.w-80 { width: 80%; }
-@keyframes va-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* 加载骨架 */
+.va-skeleton .va-sk-line,
+.va-skeleton .va-sk-chip {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--nt-bg-sunken) 25%, var(--nt-border) 50%, var(--nt-bg-sunken) 75%);
+  background-size: 200% 100%;
+  animation: va-shimmer 1.2s ease-in-out infinite;
+}
+.va-sk-line { height: 14px; margin-bottom: 10px; }
+.va-sk-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.va-sk-chip { width: 72px; height: 22px; }
+.va-sk-line.w-30 { width: 30%; } .va-sk-line.w-40 { width: 40%; }
+.va-sk-line.w-50 { width: 50%; } .va-sk-line.w-60 { width: 60%; }
+.va-sk-line.w-70 { width: 70%; } .va-sk-line.w-75 { width: 75%; }
+.va-sk-line.w-80 { width: 80%; }
+@keyframes va-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* （设置二级导航现复用 .tabs-bar / .tab-btn，见 features/settings/SettingsSubnav） */
+
+/* ==========================================================================
+   系统状态原型（系统工具链 / 任务存储状态 / 系统诊断）— 只读状态面板
+   与 .va-* 同源观感，复用既有 --nt-* Token 与 .badge .st-* 体系。
+   ========================================================================== */
+.ss-section { margin-top: 2px; }
+
+/* —— 系统工具链：双列状态卡 —— */
+.ss-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.ss-card {
+  background: var(--nt-bg);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ss-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ss-card-name { font-size: 15px; font-weight: 600; margin: 0; }
+.ss-card-purpose { margin: 0; font-size: 13px; line-height: 1.6; color: var(--nt-text-muted); }
+.ss-card-meta { font-size: 12px; color: var(--nt-text-muted); }
+.ss-card-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; }
+
+/* —— 不可用错误块（复刻 .va-error 观感，统一只读语义） —— */
+.ss-error {
+  border: 1px solid rgba(178, 66, 31, 0.35);
+  background: rgba(212, 95, 65, 0.07);
+  border-radius: var(--nt-radius-sm, 6px);
+  padding: 10px 12px;
+}
+.ss-error-head { display: flex; align-items: center; gap: 8px; }
+.ss-error-code { font-size: 12.5px; color: #B2421F; font-weight: 600; }
+.ss-error-suggestion { margin: 6px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--nt-text); }
+
+/* —— 存储策略提示条 —— */
+.ss-hint {
+  background: var(--nt-bg-sunken);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 10px 12px;
+  font-size: 12.5px; line-height: 1.6; color: var(--nt-text-muted);
+  margin: 4px 0 14px;
+}
+
+/* —— 存储状态列表 —— */
+.ss-storage-list { list-style: none; margin: 0; padding: 0; }
+.ss-storage-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 0; border-bottom: 1px solid var(--nt-border);
+  font-size: 13.5px; flex-wrap: wrap;
+}
+.ss-storage-row:last-child { border-bottom: none; }
+.ss-storage-name { flex: none; width: 150px; font-family: var(--nt-font-display); font-weight: 600; color: var(--nt-text-secondary); font-size: 13px; }
+.ss-storage-summary { color: var(--nt-text-muted); font-size: 12.5px; }
+
+/* —— 服务健康 / 能力矩阵 列表 —— */
+.ss-health-list, .ss-cap-list { margin-top: 12px; }
+.ss-health-row, .ss-cap-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--nt-border);
+  font-size: 13.5px; flex-wrap: wrap;
+}
+.ss-health-row:last-child, .ss-cap-row:last-child { border-bottom: none; }
+.ss-health-name, .ss-cap-name { flex: none; width: 200px; font-family: var(--nt-font-display); font-weight: 600; color: var(--nt-text-secondary); font-size: 13px; }
+.ss-health-ver { font-size: 12px; color: var(--nt-text-muted); }
+.ss-health-detail, .ss-cap-detail { font-size: 12.5px; color: var(--nt-text-muted); flex: 1; min-width: 200px; }
+
+/* —— 任务级诊断卡 —— */
+.ss-task-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ss-task-body { flex: 1; min-width: 260px; }
+.ss-task-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ss-task-hint { font-size: 12.5px; color: var(--nt-text-muted); }
+
+/* —— 模型服务注册表（只读，复用 .ss-* 观感） —— */
+.ms-caps { display: flex; flex-wrap: wrap; gap: 6px; }
+.ms-meta-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
