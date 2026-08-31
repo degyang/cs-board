@@ -221,3 +221,11 @@ export function getBaseUrl(): string {
 export function getVoiceContentUrl(voiceId: string): string {
   return `${BASE}/assets/voices/${encodeURIComponent(voiceId)}/content`
 }
+
+/**
+ * Build URL for asset blob content (style preview images, etc.).
+ * Uses encoded asset_id in path; callers must encodeURIComponent.
+ */
+export function getAssetBlobUrl(assetId: string): string {
+  return `${BASE}/assets/blobs/${encodeURIComponent(assetId)}`
+}

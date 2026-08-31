@@ -148,7 +148,9 @@ describe('AssetManagementPage', () => {
     await userEvent.click(screen.getByText('水彩风'))
 
     await waitFor(() => {
-      expect(screen.getByText('水彩画风格')).toBeInTheDocument()
+      // Description appears in both list and detail
+      const matches = screen.getAllByText('水彩画风格')
+      expect(matches.length).toBeGreaterThanOrEqual(2)
     })
   })
 

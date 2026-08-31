@@ -3,7 +3,7 @@
    Styles (preset + custom) and voices.
    ========================================================================== */
 
-import { get, post, patch, del, postForm, getVoiceContentUrl } from './http'
+import { get, post, patch, del, postForm, getVoiceContentUrl, getAssetBlobUrl } from './http'
 import type {
   StyleTemplate,
   StyleListResponse,
@@ -13,7 +13,7 @@ import type {
   VoiceListParams,
 } from './types'
 
-export { getVoiceContentUrl }
+export { getVoiceContentUrl, getAssetBlobUrl }
 
 /** Response from POST /api/v1/assets/uploads */
 export interface UploadResponse {

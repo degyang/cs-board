@@ -1,8 +1,8 @@
 /* ==========================================================================
-   资产管理 — Asset Management Page (§3.7)
+   资产管理 — Asset Management Page (§3I)
 
    Tabs: 预置风格 | 自定义风格 | 音色库
-   - Preset: read-only, copy only
+   - Preset: read-only browse with real preview image, copy-as-custom only
    - Custom: full CRUD with preview upload
    - Voice: upload, edit, play, activate/deactivate, delete
    - Filtering: kind/status/engine/q for styles, status/q for voices
@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Tabs } from '../components/ui/Tabs'
 import { CopyButton } from '../components/ui/CopyButton'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
-import { getVoiceContentUrl } from '../lib/api/http'
+import { getVoiceContentUrl, getAssetBlobUrl } from '../lib/api/http'
 import {
   fetchStyles, createStyle, updateStyle, deleteStyle,
   activateStyle, deactivateStyle, copyStyle,
@@ -41,6 +41,272 @@ const ENGINE_OPTIONS = [
   { value: 'dalle3', label: 'DALL·E 3' },
   { value: 'midjourney', label: 'Midjourney' },
 ]
+
+/* ── Preview Image with error placeholder ──────────────────────────────── */
+
+function PreviewImage({ assetId, alt }: { assetId: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false)
+
+  // Reset error state when assetId changes
+  useEffect(() => { setFailed(false) }, [assetId])
+
+  if (!assetId || failed) {
+    return (
+      <div className="am-preview-placeholder" role="img" aria-label="暂无预览图">
+        <span className="am-preview-placeholder-icon">🎨</span>
+        <span className="am-preview-placeholder-text">暂无预览图</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      className="am-preview-img"
+      src={getAssetBlobUrl(assetId)}
+      alt={alt}
+      onError={() => setFailed(true)}
+      draggable={false}
+    />
+  )
+}
+
+/* ── Preset Detail (read-only) ─────────────────────────────────────────── */
+
+function PresetDetail({
+  style: s,
+  submitting,
+  onCopy,
+}: {
+  style: StyleTemplate
+  submitting: string | null
+  onCopy: (id: string) => void
+}) {
+  return (
+    <div className="am-preset-detail">
+      <div className="am-preset-preview">
+        <PreviewImage assetId={s.preview_asset_id} alt={s.name} />
+      </div>
+
+      <div className="am-preset-info">
+        <h2 className="am-detail-name">{s.name}</h2>
+
+        {s.description && (
+          <p className="am-preset-description">{s.description}</p>
+        )}
+
+        <div className="am-preset-meta">
+          {s.engine && <span className="am-preset-engine">{s.engine}</span>}
+          <span className="am-preset-kind">预置风格</span>
+        </div>
+
+        {s.tags.length > 0 && (
+          <div className="am-preset-tags">
+            {s.tags.map(t => (
+              <span key={t} className="am-tag">{t}</span>
+            ))}
+          </div>
+        )}
+
+        {s.prompt_text && (
+          <div className="am-prompt-section">
+            <label className="am-prompt-label">提示词</label>
+            <pre className="am-prompt-text">{s.prompt_text}</pre>
+          </div>
+        )}
+
+        {s.negative_prompt && (
+          <div className="am-prompt-section">
+            <label className="am-prompt-label">反向提示词</label>
+            <pre className="am-prompt-text am-prompt-negative">{s.negative_prompt}</pre>
+          </div>
+        )}
+
+        <div className="am-preset-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={submitting !== null}
+            onClick={() => onCopy(s.style_id)}
+          >
+            {submitting === s.style_id ? '复制中...' : '复制为自定义'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Style Detail (custom — full CRUD) ─────────────────────────────────── */
+
+function StyleDetail({
+  style: s,
+  submitting,
+  onActivate,
+  onDeactivate,
+  onEdit,
+  onDelete,
+}: {
+  style: StyleTemplate
+  submitting: string | null
+  onActivate: (id: string) => void
+  onDeactivate: (id: string) => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <>
+      <h2 className="am-detail-name">{s.name}</h2>
+      <div className="am-detail-meta">
+        <span>状态: {s.status === 'active' ? '已启用' : '未启用'}</span>
+        <span>类型: 自定义</span>
+        <span>修订: {s.revision}</span>
+        <span>创建: {new Date(s.created_at).toLocaleDateString()}</span>
+      </div>
+      {s.description && <p className="am-detail-desc">{s.description}</p>}
+      {s.engine && <div className="am-detail-field"><span className="am-detail-label">引擎:</span> {s.engine}</div>}
+      {s.tags.length > 0 && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">标签:</span>
+          {s.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
+        </div>
+      )}
+      {s.prompt_text && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">提示词:</span>
+          <div className="am-detail-prompt">{s.prompt_text}</div>
+        </div>
+      )}
+      {s.negative_prompt && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">反向提示词:</span>
+          <div className="am-detail-prompt">{s.negative_prompt}</div>
+        </div>
+      )}
+
+      <div className="am-detail-actions">
+        <button type="button" className="btn btn-ghost" onClick={onEdit}>编辑</button>
+        {s.status === 'active' ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={submitting !== null}
+            onClick={() => onDeactivate(s.style_id)}
+          >
+            {submitting === s.style_id ? '处理中...' : '停用'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={submitting !== null}
+            onClick={() => onActivate(s.style_id)}
+          >
+            {submitting === s.style_id ? '处理中...' : '启用'}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={submitting !== null}
+          onClick={onDelete}
+        >
+          删除
+        </button>
+      </div>
+    </>
+  )
+}
+
+/* ── Voice Detail ──────────────────────────────────────────────────────── */
+
+function VoiceDetail({
+  voice: v,
+  submitting,
+  onActivate,
+  onDeactivate,
+  onEdit,
+  onDelete,
+}: {
+  voice: VoiceDefinition
+  submitting: string | null
+  onActivate: (id: string) => void
+  onDeactivate: (id: string) => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const audioUrl = getVoiceContentUrl(v.voice_id)
+
+  return (
+    <>
+      <h2 className="am-detail-name">{v.name}</h2>
+      <div className="am-detail-meta">
+        <span>状态: {v.status === 'active' ? '已启用' : '未启用'}</span>
+        <span>修订: {v.duration_ms ? `${(v.duration_ms / 1000).toFixed(1)}s` : '—'}</span>
+        <span>创建: {new Date(v.created_at).toLocaleDateString()}</span>
+      </div>
+      {v.tags.length > 0 && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">标签:</span>
+          {v.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
+        </div>
+      )}
+      <div className="am-detail-field">
+        <span className="am-detail-label">采样率:</span> {v.sample_rate ? `${v.sample_rate} Hz` : '—'}
+      </div>
+      <div className="am-detail-field">
+        <span className="am-detail-label">声道:</span> {v.channels ?? '—'}
+      </div>
+      <div className="am-detail-field">
+        <span className="am-detail-label">格式:</span> {v.format ?? '—'}
+      </div>
+      {v.duration_ms && (
+        <div className="am-detail-field">
+          <span className="am-detail-label">时长:</span> {(v.duration_ms / 1000).toFixed(1)}s
+        </div>
+      )}
+
+      <div className="am-detail-field">
+        <audio controls src={audioUrl} preload="metadata" style={{ width: '100%', marginTop: 8 }}>
+          您的浏览器不支持音频播放
+        </audio>
+      </div>
+
+      <div className="am-detail-actions">
+        <button type="button" className="btn btn-ghost" onClick={onEdit}>编辑</button>
+        {v.status === 'active' ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={submitting !== null}
+            onClick={() => onDeactivate(v.voice_id)}
+          >
+            {submitting === v.voice_id ? '处理中...' : '停用'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={submitting !== null}
+            onClick={() => onActivate(v.voice_id)}
+          >
+            {submitting === v.voice_id ? '处理中...' : '启用'}
+          </button>
+        )}
+        <CopyButton text={audioUrl}>复制链接</CopyButton>
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={submitting !== null}
+          onClick={onDelete}
+        >
+          删除
+        </button>
+      </div>
+    </>
+  )
+}
+
+/* ── Main Page ─────────────────────────────────────────────────────────── */
 
 export function AssetManagementPage() {
   const [activeTab, setActiveTab] = useState('preset')
@@ -187,14 +453,24 @@ export function AssetManagementPage() {
     finally { setSubmitting(null) }
   }
 
+  // Copy preset → custom, then switch to custom tab
   const handleCopy = async (id: string) => {
     setSubmitting(id); setFeedback(null)
     try {
-      await copyStyle(id)
-      setFeedback('已复制为自定义风格')
-      await loadItems()
-    } catch (err) { setError(err instanceof Error ? err.message : '操作失败') }
-    finally { setSubmitting(null) }
+      const copied = await copyStyle(id)
+      setFeedback(`已复制为自定义风格「${copied.name}」`)
+      // Switch to custom tab and select the new item
+      setActiveTab('custom')
+      // After tab switch, loadItems will fire; select the copied item
+      // Use a small delay to let the tab switch and load complete
+      setTimeout(() => {
+        setSelected(copied)
+      }, 100)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '复制失败')
+    } finally {
+      setSubmitting(null)
+    }
   }
 
   const handleDelete = async () => {
@@ -252,7 +528,7 @@ export function AssetManagementPage() {
       <Tabs items={TAB_ITEMS} active={activeTab} onChange={setActiveTab} />
 
       {feedback && <div className="am-feedback">{feedback}</div>}
-      {error && <div className="am-error">{error}</div>}
+      {error && <div className="am-error" role="alert">{error}</div>}
 
       <div className="am-toolbar">
         <input
@@ -264,7 +540,6 @@ export function AssetManagementPage() {
           aria-label="搜索"
         />
 
-        {/* Fix #11: Real filtering */}
         {showFilters && (
           <>
             <select
@@ -325,13 +600,46 @@ export function AssetManagementPage() {
                 key={getId(item)}
                 className={`am-list-item ${selected && getId(selected) === getId(item) ? 'am-list-item--selected' : ''}`}
                 onClick={() => setSelected(item)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(item) }}
               >
-                <div className="am-list-item-name">{item.name}</div>
-                <div className="am-list-item-status">{item.status === 'active' ? '已启用' : '未启用'}</div>
+                {isPreset && !isVoice(item) && (item as StyleTemplate).preview_asset_id ? (
+                  <div className="am-list-thumb">
+                    <img
+                      src={getAssetBlobUrl((item as StyleTemplate).preview_asset_id!)}
+                      alt=""
+                      className="am-list-thumb-img"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                  </div>
+                ) : isPreset && !isVoice(item) ? (
+                  <div className="am-list-thumb am-list-thumb-placeholder">
+                    <span>🎨</span>
+                  </div>
+                ) : null}
+                <div className="am-list-item-main">
+                  <div className="am-list-item-name">{item.name}</div>
+                  {!isVoice(item) && isPreset && (item as StyleTemplate).description && (
+                    <div className="am-list-item-desc">{(item as StyleTemplate).description}</div>
+                  )}
+                  {!isVoice(item) && isPreset && (item as StyleTemplate).tags.length > 0 && (
+                    <div className="am-list-item-tags">
+                      {(item as StyleTemplate).tags.slice(0, 3).map(t => (
+                        <span key={t} className="am-tag am-tag-sm">{t}</span>
+                      ))}
+                      {(item as StyleTemplate).tags.length > 3 && (
+                        <span className="am-tag am-tag-sm am-tag-more">+{(item as StyleTemplate).tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
+                  {(!isPreset || isVoice(item)) && (
+                    <div className="am-list-item-status">{item.status === 'active' ? '已启用' : '未启用'}</div>
+                  )}
+                </div>
               </div>
             ))}
 
-            {/* Fix #11: Load more button for cursor pagination */}
             {hasMore && (
               <button
                 type="button"
@@ -355,14 +663,18 @@ export function AssetManagementPage() {
                   onEdit={() => handleEdit(selected)}
                   onDelete={() => setDeleteTarget(selected)}
                 />
+              ) : isPreset ? (
+                <PresetDetail
+                  style={selected}
+                  submitting={submitting}
+                  onCopy={handleCopy}
+                />
               ) : (
                 <StyleDetail
                   style={selected}
                   submitting={submitting}
-                  isPreset={isPreset}
                   onActivate={handleActivate}
                   onDeactivate={handleDeactivate}
-                  onCopy={handleCopy}
                   onEdit={() => handleEdit(selected)}
                   onDelete={() => setDeleteTarget(selected)}
                 />
@@ -403,195 +715,6 @@ export function AssetManagementPage() {
   )
 }
 
-/* ── Style Detail ──────────────────────────────────────────────────────── */
-
-function StyleDetail({
-  style: s,
-  submitting,
-  isPreset,
-  onActivate,
-  onDeactivate,
-  onCopy,
-  onEdit,
-  onDelete,
-}: {
-  style: StyleTemplate
-  submitting: string | null
-  isPreset: boolean
-  onActivate: (id: string) => void
-  onDeactivate: (id: string) => void
-  onCopy: (id: string) => void
-  onEdit: () => void
-  onDelete: () => void
-}) {
-  return (
-    <>
-      <h2 className="am-detail-name">{s.name}</h2>
-      <div className="am-detail-meta">
-        <span>状态: {s.status === 'active' ? '已启用' : '未启用'}</span>
-        <span>类型: {s.kind === 'preset' ? '预置' : '自定义'}</span>
-        <span>修订: {s.revision}</span>
-        <span>创建: {new Date(s.created_at).toLocaleDateString()}</span>
-      </div>
-      {s.description && <p className="am-detail-desc">{s.description}</p>}
-      {s.engine && <div className="am-detail-field"><span className="am-detail-label">引擎:</span> {s.engine}</div>}
-      {s.tags.length > 0 && (
-        <div className="am-detail-field">
-          <span className="am-detail-label">标签:</span>
-          {s.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
-        </div>
-      )}
-      {s.prompt_text && (
-        <div className="am-detail-field">
-          <span className="am-detail-label">提示词:</span>
-          <div className="am-detail-prompt">{s.prompt_text}</div>
-        </div>
-      )}
-      {s.negative_prompt && (
-        <div className="am-detail-field">
-          <span className="am-detail-label">反向提示词:</span>
-          <div className="am-detail-prompt">{s.negative_prompt}</div>
-        </div>
-      )}
-
-      <div className="am-detail-actions">
-        {isPreset ? (
-          /* Preset: only copy allowed */
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={submitting !== null}
-            onClick={() => onCopy(s.style_id)}
-          >
-            {submitting === s.style_id ? '处理中...' : '复制为自定义'}
-          </button>
-        ) : (
-          /* Custom: full CRUD */
-          <>
-            <button type="button" className="btn btn-ghost" onClick={onEdit}>编辑</button>
-            {s.status === 'active' ? (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={submitting !== null}
-                onClick={() => onDeactivate(s.style_id)}
-              >
-                {submitting === s.style_id ? '处理中...' : '停用'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={submitting !== null}
-                onClick={() => onActivate(s.style_id)}
-              >
-                {submitting === s.style_id ? '处理中...' : '启用'}
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn btn-danger"
-              disabled={submitting !== null}
-              onClick={onDelete}
-            >
-              删除
-            </button>
-          </>
-        )}
-      </div>
-    </>
-  )
-}
-
-/* ── Voice Detail ──────────────────────────────────────────────────────── */
-
-function VoiceDetail({
-  voice: v,
-  submitting,
-  onActivate,
-  onDeactivate,
-  onEdit,
-  onDelete,
-}: {
-  voice: VoiceDefinition
-  submitting: string | null
-  onActivate: (id: string) => void
-  onDeactivate: (id: string) => void
-  onEdit: () => void
-  onDelete: () => void
-}) {
-  const audioUrl = getVoiceContentUrl(v.voice_id)
-
-  return (
-    <>
-      <h2 className="am-detail-name">{v.name}</h2>
-      <div className="am-detail-meta">
-        <span>状态: {v.status === 'active' ? '已启用' : '未启用'}</span>
-        <span>修订: {v.duration_ms ? `${(v.duration_ms / 1000).toFixed(1)}s` : '—'}</span>
-        <span>创建: {new Date(v.created_at).toLocaleDateString()}</span>
-      </div>
-      {v.tags.length > 0 && (
-        <div className="am-detail-field">
-          <span className="am-detail-label">标签:</span>
-          {v.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
-        </div>
-      )}
-      <div className="am-detail-field">
-        <span className="am-detail-label">采样率:</span> {v.sample_rate ? `${v.sample_rate} Hz` : '—'}
-      </div>
-      <div className="am-detail-field">
-        <span className="am-detail-label">声道:</span> {v.channels ?? '—'}
-      </div>
-      <div className="am-detail-field">
-        <span className="am-detail-label">格式:</span> {v.format ?? '—'}
-      </div>
-      {v.duration_ms && (
-        <div className="am-detail-field">
-          <span className="am-detail-label">时长:</span> {(v.duration_ms / 1000).toFixed(1)}s
-        </div>
-      )}
-
-      <div className="am-detail-field">
-        <audio controls src={audioUrl} preload="metadata" style={{ width: '100%', marginTop: 8 }}>
-          您的浏览器不支持音频播放
-        </audio>
-      </div>
-
-      <div className="am-detail-actions">
-        <button type="button" className="btn btn-ghost" onClick={onEdit}>编辑</button>
-        {v.status === 'active' ? (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={submitting !== null}
-            onClick={() => onDeactivate(v.voice_id)}
-          >
-            {submitting === v.voice_id ? '处理中...' : '停用'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={submitting !== null}
-            onClick={() => onActivate(v.voice_id)}
-          >
-            {submitting === v.voice_id ? '处理中...' : '启用'}
-          </button>
-        )}
-        <CopyButton text={audioUrl}>复制链接</CopyButton>
-        <button
-          type="button"
-          className="btn btn-danger"
-          disabled={submitting !== null}
-          onClick={onDelete}
-        >
-          删除
-        </button>
-      </div>
-    </>
-  )
-}
-
 /* ── Style Form Dialog ─────────────────────────────────────────────────── */
 
 function StyleFormDialog({
@@ -616,7 +739,6 @@ function StyleFormDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Fix #10: Upload preview file to /api/v1/assets/uploads first
   const handlePreviewUpload = async () => {
     if (!previewFile) return
     setUploading(true)
@@ -690,7 +812,6 @@ function StyleFormDialog({
             <input id="style-tags" type="text" className="input" value={tags} onChange={e => setTags(e.target.value)} />
           </div>
 
-          {/* Fix #10: Preview file upload */}
           <div className="form-field">
             <label className="form-label" htmlFor="style-preview">预览图片</label>
             <div className="am-preview-upload">

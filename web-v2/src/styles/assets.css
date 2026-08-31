@@ -155,6 +155,192 @@
   padding: 40px 0;
 }
 
+/* ── Preset Detail ─────────────────────────────────────────────────────── */
+
+.am-preset-detail {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+.am-preset-preview {
+  flex: 0 0 280px;
+  border-radius: var(--nt-radius-lg);
+  overflow: hidden;
+  background: var(--nt-surface-raised, #f5f5f0);
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.am-preview-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+  max-height: 400px;
+}
+.am-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--nt-text-muted);
+  width: 100%;
+  min-height: 180px;
+}
+.am-preview-placeholder-icon {
+  font-size: 48px;
+  opacity: .5;
+}
+.am-preview-placeholder-text {
+  font-size: 13px;
+}
+.am-preset-info {
+  flex: 1;
+  min-width: 0;
+}
+.am-preset-description {
+  font-size: 13.5px;
+  color: var(--nt-text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.am-preset-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.am-preset-engine {
+  display: inline-block;
+  background: var(--nt-primary-50);
+  color: var(--nt-primary-700);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--nt-radius-sm);
+}
+.am-preset-kind {
+  display: inline-block;
+  background: var(--nt-surface-raised, #f0f0eb);
+  color: var(--nt-text-muted);
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: var(--nt-radius-sm);
+}
+.am-preset-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* Prompt section */
+.am-prompt-section {
+  margin-bottom: 16px;
+}
+.am-prompt-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nt-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 6px;
+}
+.am-prompt-text {
+  background: var(--nt-surface-raised, #f5f5f0);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 12px 14px;
+  font-family: var(--nt-font-body);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--nt-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+}
+.am-prompt-negative {
+  border-style: dashed;
+  opacity: .85;
+}
+.am-preset-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* ── List Thumbnails ──────────────────────────────────────────────────── */
+
+.am-list-thumb {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--nt-radius-md);
+  overflow: hidden;
+  margin-right: 12px;
+  background: var(--nt-surface-raised, #f5f5f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.am-list-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.am-list-thumb-placeholder {
+  font-size: 20px;
+  opacity: .5;
+}
+/* Update list item to flex row when thumbnails present */
+.am-list-item {
+  display: flex;
+  align-items: flex-start;
+}
+.am-list-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.am-list-item-desc {
+  font-size: 12px;
+  color: var(--nt-text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.am-list-item-tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+/* Tags */
+.am-tag {
+  display: inline-block;
+  background: var(--nt-primary-50);
+  color: var(--nt-primary-700);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--nt-radius-sm);
+  line-height: 1.5;
+}
+.am-tag-sm {
+  font-size: 10px;
+  padding: 0 5px;
+}
+.am-tag-more {
+  background: var(--nt-surface-raised, #f0f0eb);
+  color: var(--nt-text-muted);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .am-layout {
@@ -162,5 +348,12 @@
   }
   .am-list {
     max-height: 300px;
+  }
+  .am-preset-detail {
+    flex-direction: column;
+  }
+  .am-preset-preview {
+    flex: none;
+    width: 100%;
   }
 }
