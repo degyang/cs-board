@@ -1988,6 +1988,72 @@ docs(mountain): report serialized input transaction status
 
 先本地提交，不推送。执行者只报告门禁结果，不得自行宣布审核通过。
 
+## 4I. CCB 同一 Task 真并发验收纠偏
+
+### 4I.1 指令编号与审核结论
+
+```text
+instruction: CCB-TASK-INPUT-CONCURRENCY-13
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 353a773 fix(mountain): serialize and prove input transactions
+reviewed report: 6fbfc3a docs(mountain): report serialized input transaction status
+result: rejected; production direction is correct, required same-Task concurrency behavior was not tested
+```
+
+审核者已复现专项 `22 passed`、全量 `457 passed, 5 skipped`、compileall、禁止项和 clean status。生产 checkpoint、锁内 reference 保留和回滚矩阵方向正确；本轮只补齐缺失的并发行为证据，除非新测试暴露真实缺陷，否则不得修改生产代码。
+
+### 4I.2 拒绝原因
+
+1. `test_same_task_lock_serializes` 只断言两次 `task_lock(task_id)` 返回同一个对象，没有运行 `commit_inputs()`，无法证明事务 A 持锁时事务 B 被阻塞。
+2. `test_concurrent_ref_preservation` 是 A、B 顺序请求，不是并发请求，无法证明 B 等待 A 后读取最新 reference。
+3. 报告称“TestClient 是同步的，无法直接测试真正并发”，但同一文件已用两个线程和 TestClient 验证不同 Task 并行；该理由不成立。
+4. §4H 明确要求使用 Barrier/Event 让 A 停在生产 checkpoint，再启动同一 Task 的 B，并证明 B 在释放前不能进入提交区；当前未交付。
+
+### 4I.3 唯一任务
+
+以现有生产 `_input_txn_checkpoint()` 为同步点，新增或重写同一 Task 真并发测试：
+
+1. 使用共享的生产 Repository 实例和同一个 Task；事务 A、B 在两个真实线程执行生产 `MountainCommands.save_inputs()` 或真实 HTTP `/inputs` 路径。
+2. A 上传新的 reference，并在持有 Task 锁期间停在 `request.after_install`（或更能证明锁覆盖提交区的 checkpoint）。测试 hook 通过 Event/Barrier 通知主线程 A 已进入。
+3. 主线程确认 A 已停住后启动 B；B 不上传 reference，并提交不同 script。必须有确定信号证明 B 已开始调用保存，而非尚未获得调度。
+4. A 未释放时，B 不得到达任何生产 transaction checkpoint，也不得返回成功。使用 Event 的有界 `wait(timeout)` 和线程存活状态证明；不得使用 `sleep` 猜竞态。
+5. 释放 A 后，两线程必须在有界时间内结束且无死锁，两个保存均成功。最终状态按锁获取顺序属于 B：`request.script` 是 B，`task.script_preparation.voice_units` 拼接后等于 B 的规范化 script，`request.reference_audio` 仍指向 A 上传的新 reference，文件 sha256 等于 A 上传内容。
+6. 最终 `.staging`、`.bak`、`.tmp`、`.partial` 和孤儿 reference 为零。
+7. 保留并继续通过不同 Task 真并行测试。该测试与同一 Task 串行测试必须共享生产事务算法，只允许 checkpoint hook 提供同步，不得覆盖 `_install_target()`、commit 或 rollback。
+8. 测试若暴露生产缺陷，做最小修复并补充对应断言；若没有暴露，不要为了形成 diff 修改生产代码。
+
+### 4I.4 门禁、提交和报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_input_transaction_11.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+! rg -n "def _install_target|installed_request|old_request_bak|time\.sleep" tests/test_input_transaction_11.py
+git diff --check
+git status --short
+```
+
+测试/最小修复提交：
+
+```text
+test(mountain): prove same-task input serialization
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-input-concurrency-13-report.md
+```
+
+报告必须说明线程同步时序、A/B checkpoint 证据、A 未释放时 B 的观测、最终 request/task/reference 一致性、垃圾文件扫描、门禁原始摘要、implementation/test commit 和 clean status。报告提交：
+
+```text
+docs(mountain): report same-task concurrency proof
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
