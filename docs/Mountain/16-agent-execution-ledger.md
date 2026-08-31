@@ -929,6 +929,91 @@ docs(mountain): report preset style browser status
 
 先本地提交，不推送。报告列出实际 implementation commit、视觉基准映射、行为测试、门禁和多参考图 API gap；执行者不得自行宣布审核通过。
 
+## 3J. CCF 单一垂直切片：系统工具链只读状态页
+
+### 3J.1 指令编号与已验收基线
+
+```text
+instruction: CCF-TOOLCHAIN-STATUS-06
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: b91d051 feat(mountain-web): complete preset style browsing experience
+accepted report: 862a4e0 docs(mountain): report preset style browser status
+```
+
+审核者已复现 build、contract checker `48/48`、前端全量 `239/239`、fixture checker、禁止项扫描和 clean status；预置风格浏览切片验收通过。
+
+本轮视觉基准必须读取：
+
+```text
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/settings/systemStatus/SystemStatusTabs.tsx
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/settings/systemStatus/types.ts
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/screenshots/settings/03-toolchain-normal.png
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/screenshots/settings/04-toolchain-unavailable.png
+```
+
+### 3J.2 唯一目标
+
+只整改 `/settings/toolchain`，使用现有真实 `GET /api/v1/settings/toolchain` DTO，落实最新原型的信息层级与只读边界。不得修改 Storage、Diagnostics、Voice Alignment、Models、Assets、Task 页面、checker 核心或后端。
+
+要求：
+
+1. 页面标题为“系统工具链”，明确说明这是运行环境探测结果、只读展示，不是可保存配置。
+2. 每个工具以状态卡呈现 component 的用户可读名称、用途说明、可用/不可用状态、可选版本，以及不可用时的 `error_code` 和 `suggestion`。
+3. 名称和用途可以使用纯展示映射（Codex Skills、IndexTTS、Whisper、FFmpeg、FFprobe、白板渲染器等）；未知 component 必须回退显示后端 component，不得被过滤或伪造状态。
+4. 页面不得展示后端可能返回的 `path`、可执行命令、参数、环境变量、绝对目录、API Key 或 Secret。不得为了 UI 方便把这些字段加入 DTO。
+5. 不提供保存、编辑、选择引擎或伪刷新/伪 Probe 按钮。数据只在路由进入时真实请求一次；失败提供明确错误和真实“重新加载”动作时，按钮必须重新调用该 GET，而不是只改本地状态。
+6. loading 使用与卡片同构的骨架；空 tools 显示“未探测到工具链组件”，不能显示“未找到配置”。
+7. 请求失败、组件不可用和页面空状态是三种不同状态；快速卸载/重进时旧请求不得写回新页面。
+8. 不复制原型 fixture，不使用 localStorage/sessionStorage/mock fallback。
+
+### 3J.3 强制行为测试
+
+至少覆盖：
+
+- available 工具显示名称、用途和版本；
+- unavailable 工具显示真实 error_code/suggestion；
+- 未知 component 仍可见且状态来自 DTO；
+- 响应即使含 `path`、command、token 等额外字段，DOM 中也不存在其值；
+- loading 骨架、空列表和 request error 分别渲染；
+- retry 会再次调用真实 API，成功后清除旧错误并显示卡片；
+- unmount 后延迟响应不会产生状态更新警告或污染下一实例；
+- 页面不存在任何保存、编辑、引擎下拉或伪 Probe 控件。
+
+测试必须触发生产组件和 API adapter；禁止复制状态映射算法或只检查源码文本。
+
+### 3J.4 门禁与提交
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+! rg -n "localStorage|sessionStorage|mock|fixture" web-v2/src/pages/ToolchainPage.tsx
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain-web): align toolchain status with readonly design
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-toolchain-status-06-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report readonly toolchain status
+```
+
+先本地提交，不推送。报告列出视觉映射、真实 DTO 字段、敏感字段不渲染测试、门禁、两个 commit hash 和 API gap；执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
