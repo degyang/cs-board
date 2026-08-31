@@ -2,7 +2,7 @@
 
 ## 1. 文档用途
 
-本文档是 Mountain 当前阶段 CCF（WebUI 前端）和 CCB（后端、CLI、服务入口）的唯一执行指令入口与完成回写位置。
+本文档是 Mountain 当前阶段 CCF（WebUI 前端）和 CCB（后端、CLI、服务入口）的唯一执行指令入口。执行结果写入各自代码分支的独立报告文件，避免多个 worktree 并发修改 `main`。
 
 后续不再依赖聊天中的零散上下文。每位工程师开始工作前必须完整阅读：
 
@@ -11,7 +11,7 @@
 3. 自己执行指令引用的架构文档；
 4. 自己上一次审核结论和未关闭问题。
 
-工程师不得修改另一位工程师的指令或回写内容。任务完成后，只能在自己的“完成回写”段落中追加结果，不得覆盖指令正文和历史记录。
+工程师不得修改本文件或另一位工程师的报告。任务完成后，只能在自己分支规定的报告文件中写入结果。
 
 ## 2. 固定位置与共同规则
 
@@ -71,8 +71,8 @@ feat/mountain-assets-settings-backend
 - 不得 reset、清理或覆盖其他工作区。
 - 每轮纠偏形成新的 follow-up commit，不得 squash 历史审核提交。
 - 完成后先本地提交，不推送远端。
-- 完成报告必须写入本文档指定回写段落。
-- 回写文档时只修改自己的回写段落；文档回写本身不与代码提交混合。
+- 完成报告必须写入本指令指定的、位于自己 worktree 内的独立报告文件。
+- 报告与代码放在同一个功能分支、同一个最终提交中；不得跨 worktree 修改 `main` 文档目录。
 
 ## 3. CCF 当前执行指令
 
@@ -270,9 +270,15 @@ git diff --check
 fix(mountain-web): finish service secrets and asset management
 ```
 
-### 3.11 CCF 完成回写
+### 3.11 CCF 完成报告
 
-CCF 完成后必须在本标题下追加，不得修改 3.1—3.10：
+CCF 完成后必须在自己的 worktree 创建或更新：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-asset-settings-03-report.md
+```
+
+报告必须使用以下结构，不得修改本指令台账：
 
 ```markdown
 #### CCF-ASSET-SETTINGS-03 完成报告 — <时间>
@@ -512,9 +518,15 @@ GET  /api/v1/settings/diagnostics
 fix(mountain): close secure runtime and asset integration gaps
 ```
 
-### 4.12 CCB 完成回写
+### 4.12 CCB 完成报告
 
-CCB 完成后必须在本标题下追加，不得修改 4.1—4.11：
+CCB 完成后必须在自己的 worktree 创建或更新：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-backend-integration-04-report.md
+```
+
+报告必须使用以下结构，不得修改本指令台账：
 
 ```markdown
 #### CCB-BACKEND-INTEGRATION-04 完成报告 — <时间>
