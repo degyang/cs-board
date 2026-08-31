@@ -42,7 +42,7 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 ## 4. 新建任务 `/create`
 
-采用单页四区，而不是多页强制向导。
+采用原型已验证的分区/页签结构，而不是多页强制向导。任务创建与资产管理必须使用同一风格/音色 API View，不能以浏览器 fixture 或 localStorage 作为生产真相。
 
 ### 4.1 内容与声音
 
@@ -69,6 +69,8 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 - 字幕开关；
 - 白板模式的重点文字、线条绘制量和笔身文字；
 - 执行策略默认“自动完成”；
+- 手动完成支持“每道工序”或多选需要人工触发的 Stage；未选 Stage 必须连续执行，直至下一个门禁；
+- 当前视觉来源为人工 Codex 时，插画阶段等待外部成果，不能伪称无人值守自动完成；
 - 高级选项不暴露队列并发、采样率和单元最大字符等基础设施参数。
 
 ### 4.5 提交
@@ -121,7 +123,7 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 5. 绘制白板动画或渲染信息图；
 6. 合成音画成片。
 
-总编排不作为第七个进度节点；它体现在 Run 状态和执行策略中。每个 Stage 显示 `pending/running/succeeded/failed/cancelled/stale/skipped`。
+总编排不作为第七个进度节点；它体现在 Run 状态和执行策略中。每个 Stage 显示 `pending/running/succeeded/failed/cancelled/stale/skipped`，以及 `waiting-manual-trigger`（执行门禁）和 `waiting-external-output`（外部素材门禁）；两者均非失败，且必须显示下一动作。
 
 ### 6.3 Voice Unit 与 Visual Item 列表
 
@@ -143,7 +145,7 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 | 文案整理 / 画面锚定重点 | 已保存 Unit、图片/Shot 规则、锚定文字范围与覆盖率 | 重新整理并使下游失效；首版不在运行期编辑 |
 | 配音 | 单元播放器、Whisper/fallback、时长和音频质量 | 重试失败单元、播放母带 |
 | 分镜 | 每个 Visual 的文字、时间、画面意图、overlay 和 prompt | 重跑一个 Unit 或全部规划 |
-| 插画 | Visual 图片网格、revision 和生成摘要 | 只重生成一张 |
+| 插画 | Visual 图片网格、revision、Codex 任务包与候选验收状态 | 查看/复制任务包、导入、验收、只重做一张 |
 | 动画/渲染 | annotation、clip、目标/实际时长 | 重绘一个 Visual 或全部 |
 | 合成 | 字幕、成片、A/V 校验报告 | 修改成片设置后重合成 |
 
@@ -151,7 +153,7 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 ### 6.5 产物侧栏
 
-显示 Artifact 逻辑 key、schema version、revision、创建时间、hash 摘要和下载入口。普通用户不显示物理绝对路径。
+显示 Artifact 逻辑 key、schema version、revision、创建时间、hash 摘要和下载入口。外部制作任务包显示受控相对输入/输出路径；普通用户不显示物理绝对路径。
 
 ### 6.6 活动与诊断面板
 
@@ -164,7 +166,11 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 错误卡固定显示 `error_code`、是否可重试、失败 Stage、相关 Unit/Visual、`trace_id` 和建议动作。UI 不解析中文日志决定按钮。
 
-## 7. 设置 `/settings`
+## 7. 资产管理 `/assets`
+
+原型中的“预置风格 / 自定义风格 / 音色库”是独立资产管理领域。模板创建、参考素材、版本、启停、预览在此完成；新建任务仅选择模板 ID/revision，Run 启动时保存不可变风格快照。Pipeline、设置页和新服务入口不得保存硬编码风格常量。
+
+## 8. 设置 `/settings`
 
 - 文本模型 profile 和图片模型 profile；
 - 语音节点与 Whisper 能力；

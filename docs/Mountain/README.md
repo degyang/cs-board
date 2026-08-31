@@ -55,6 +55,7 @@ Mountain 的目标覆盖：
 | [11-openai-compatible-model-architecture.md](11-openai-compatible-model-architecture.md) | OpenAI API-compatible 文本/图片端口、Profile、能力检测和旧配置迁移 |
 | [12-observability-and-diagnostics.md](12-observability-and-diagnostics.md) | WebUI/Skills共享的结构化事件、trace、日志、审计、脱敏和诊断包 |
 | [14-task-and-script-preparation.md](14-task-and-script-preparation.md) | Task/Run 边界、文案整理、画面锚定重点与迁移准则 |
+| [15-production-control-and-style-assets.md](15-production-control-and-style-assets.md) | 执行门禁、任务队列、外部素材回存、精确失效与风格模板资产 |
 
 ## 统一术语
 

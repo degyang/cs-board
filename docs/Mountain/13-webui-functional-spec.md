@@ -1,6 +1,8 @@
 # WebUI 功能落地规格
 
-状态：实施基线
+状态：实施基线。
+
+> 执行策略、任务队列控制、人工外部素材、资产回存和风格模板以 [15-production-control-and-style-assets.md](15-production-control-and-style-assets.md) 为权威；本文件不得以旧式“逐步执行”或前端 fixture 覆盖这些规则。
 
 ## 目标
 

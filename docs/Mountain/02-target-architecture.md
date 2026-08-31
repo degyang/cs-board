@@ -19,6 +19,7 @@ flowchart TB
         Orchestrator[Pipeline Orchestrator]
         StageRunner[Stage Runner]
         Invalidator[Dependency / Invalidation]
+        AssetSnapshot[Style Snapshot Resolver]
         TraceContext[Command / Trace Context]
     end
 
@@ -56,6 +57,7 @@ flowchart TB
     Skills --> CLI
     CLI --> Commands
     Commands --> TraceContext
+    Commands --> AssetSnapshot
     Commands --> Orchestrator
     Orchestrator --> StageRunner
     StageRunner --> Domain
@@ -218,6 +220,7 @@ class Stage(Protocol):
 | `DiagnosticLogSink` | Provider、媒体、进程和性能诊断日志 |
 | `AuditSink` | 谁从何入口执行了哪个命令及其结果 |
 | `Redactor` | Secret、正文、提示词和外部响应的统一脱敏策略 |
+| `StyleTemplateRepository` | 读取已启用模板、版本与引用素材，并为 Run 生成不可变风格快照 |
 
 三类观测数据共享 `task_id/run_id/trace_id/command_id/span_id`，但职责和存储分离。完整规范见 [12-observability-and-diagnostics.md](12-observability-and-diagnostics.md)。
 

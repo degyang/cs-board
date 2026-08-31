@@ -152,6 +152,26 @@ Provider 密钥、Authorization、Cookie、完整 Prompt、完整原文和媒体
 
 新建任务时以确定性规则完成“文案整理”，保存 Voice Unit 及其原文范围为任务输入。运行时可选 `generate-visual-anchors` 使用 LLM 生成重点、原文范围和画面意图；它不得重新整理或改写旁白。Storyboard 基于 Unit、锚点和 Voice/Whisper 结果决定 Visual Item 数量；对齐失败仍按 Unit 内图片数等分实际 Voice 时长。
 
+### D-026：执行策略采用可选 Stage 门禁
+
+状态：接受。成片设置支持自动完成、全部手动和指定 Stage 多选手动。策略是 Run 不可变快照；编排器在被选 Stage 前等待人工触发，并在其他 Stage 间连续运行。`waiting-manual-trigger` 与失败、外部素材等待严格区分。
+
+### D-027：人工 Codex 出图采用外部素材门禁
+
+状态：接受。当前图片通过 `illustrations.job` 指定项目插画 Skill、Codex `imagegen` Skill、参数与受控路径。图片必须导入校验、人工验收；未验收时为 `waiting-external-output`，下游不能运行。PIL、placeholder、Fake 或 API Provider 不能代替人工 Codex E2E。
+
+### D-028：任务队列是生产控制面
+
+状态：接受。任务队列展示 Task/Run 的工作流、阻塞、成果和告警；工作台提供 Stage/Unit/Visual/Asset 级执行、预览、重做、导入和验收。重做展示可复现参数，并通过精确失效命令影响必要下游。
+
+### D-029：风格模板属于资产管理，不属于工作流内核
+
+状态：接受。预置风格、自定义风格、参考图和角色组以版本化资产模板维护。新建任务只引用模板 ID/revision；Run 保存 style snapshot。新服务、Pipeline 和 Stage 不得保留旧 `server.py` 风格常量或提示词字典。
+
+### D-030：新产品使用独立 Mountain 服务入口
+
+状态：接受。`webapp.mountain_server:app` 是新产品唯一启动入口，只装配 Mountain v1 API、共享内核和新版 SPA。旧 `webapp/server.py`、LegacyJobBridge、旧 Job API 与旧 Mountain routes 不参与新产品启动或测试。
+
 ## 2. 暂缓决策
 
 ### P-001：允许用户编辑 Voice Unit 或 Visual Item 边界

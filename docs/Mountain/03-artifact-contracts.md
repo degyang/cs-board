@@ -23,6 +23,9 @@ Artifact 是 WebUI、Skills、CLI、桌面端和各 Stage 之间唯一可持久�
 | `timeline.json` | `timing.timeline` |
 | `storyboard.json` | `planning.storyboard` |
 | `illustration-manifest.json` | `illustrations.manifest` |
+| `illustration-job.json` | `illustrations.job` |
+| `illustration-candidates.json` | `illustrations.candidates` |
+| `style-snapshot.json` | `style.snapshot` |
 | `render-manifest.json` | `render.manifest` |
 | `final-manifest.json` | `output.final-manifest` |
 
@@ -32,6 +35,7 @@ Artifact 是 WebUI、Skills、CLI、桌面端和各 Stage 之间唯一可持久�
 tasks/<task_id>/
 ├── task.json
 ├── inputs/
+│   ├── input-manifest.json
 │   ├── source-script.txt
 │   ├── script-preparation.json
 │   ├── reference-audio.*
@@ -44,6 +48,9 @@ tasks/<task_id>/
 │   │   ├── timeline.json
 │   │   ├── storyboard.json
 │   │   ├── illustration-manifest.json
+│   │   ├── illustration-job.json
+│   │   ├── illustration-candidates.json
+│   │   ├── style-snapshot.json
 │   │   ├── render-manifest.json
 │   │   └── final-manifest.json
 │   ├── media/
@@ -51,6 +58,7 @@ tasks/<task_id>/
 │   │   ├── images/
 │   │   ├── clips/
 │   │   └── final/
+│   ├── manual/illustrations/outputs/  # 外部候选文件，验收前不是正式资产
 │   ├── observability/
 │   │   ├── events.jsonl
 │   │   ├── logs.jsonl
@@ -111,6 +119,10 @@ tasks/<task_id>/
 ```
 
 Run 被其他入口重试或恢复时追加 `command_ids`，但不更换 `trace_id`。
+
+### 3.3 执行策略与等待
+
+Run 记录不可变 `execution_policy` 快照，含 `mode`、`manual_stages` 和版本。`waiting-manual-trigger` 与 `waiting-external-output` 是非失败状态；完整定义见 [15-production-control-and-style-assets.md](15-production-control-and-style-assets.md)。
 
 ## 4. 文案整理与画面锚点
 
