@@ -23,7 +23,7 @@ export const STAGE_KEYS: StageKey[] = [
 ]
 
 export const STAGE_NAMES: Record<StageKey, string> = {
-  'generate-visual-anchors': '生成画面锚定重点',
+  'generate-visual-anchors': '文案整理与画面锚定重点',
   'clone-voice': '克隆配音',
   'plan-storyboard': '拆分分镜',
   'generate-illustrations': '生成插画',
@@ -413,4 +413,178 @@ export interface ApiError {
     error_code?: string
     suggestion?: string
   }>
+}
+
+// ==========================================================================
+// NEW TYPES FOR ASSETS, SERVICES, AND SETTINGS
+// ==========================================================================
+
+// ---------------------------------------------------------------------------
+// Services (dynamic — replaces fixed Provider concept)
+// ---------------------------------------------------------------------------
+
+export type ServiceCapability =
+  | 'text_generation'
+  | 'image_generation'
+  | 'voice_generation'
+  | 'video_generation'
+  | 'music_generation'
+  | 'file_storage'
+  | 'object_storage'
+
+export type AdapterType = 'openai_compatible' | 'replicate' | 'minio' | 'custom'
+
+export type ServiceConfigStatus = 'configured' | 'missing_credentials' | 'pending'
+
+export type AvailabilityStatus = 'available' | 'unavailable' | 'not_tested'
+
+export type SecretStatus = 'configured' | 'not_set' | 'invalid'
+
+export interface ServiceEntry {
+  service_id: string
+  display_name: string
+  capability: ServiceCapability
+  adapter_type: AdapterType
+  endpoint?: string
+  model?: string
+  enabled: boolean
+  priority: number
+  is_default: boolean
+  config_status: ServiceConfigStatus
+  availability: AvailabilityStatus
+  secret_status: SecretStatus
+}
+
+export interface ServiceDetail extends ServiceEntry {
+  config: Record<string, unknown>
+  available_models?: string[]
+}
+
+export interface ServiceSecret {
+  key: string
+  configured: boolean
+  masked_value?: string
+}
+
+export interface SetServiceSecretRequest {
+  key: string
+  value: string
+}
+
+export interface ServiceListResponse {
+  items: ServiceEntry[]
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+
+export type StyleCategory = 'realistic' | 'anime' | 'watercolor' | 'sketch' | 'oil_painting' | 'flat' | 'other'
+
+export interface PresetStyle {
+  style_id: string
+  name: string
+  description: string
+  category: StyleCategory
+  preview_url?: string
+  config: Record<string, unknown>
+}
+
+export interface CustomStyle {
+  style_id: string
+  name: string
+  description: string
+  category: StyleCategory
+  preview_url?: string
+  config: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCustomStyleRequest {
+  name: string
+  description?: string
+  category: StyleCategory
+  reference_images: File[]
+}
+
+export interface VoiceAsset {
+  asset_id: string
+  name: string
+  description: string
+  preview_url?: string
+  duration_seconds: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateVoiceAssetRequest {
+  name: string
+  description?: string
+  audio_file: File
+}
+
+export interface PresetStyleListResponse {
+  items: PresetStyle[]
+}
+
+export interface CustomStyleListResponse {
+  items: CustomStyle[]
+}
+
+export interface VoiceAssetListResponse {
+  items: VoiceAsset[]
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export interface RuntimeSettings {
+  task_runner: {
+    enabled: boolean
+    max_concurrent_tasks: number
+  }
+  global_defaults: Record<string, unknown>
+}
+
+export interface VoiceAlignmentSettings {
+  available: boolean
+  status: 'ready' | 'pending' | 'not_configured'
+  config?: Record<string, unknown>
+}
+
+export interface ToolchainSettings {
+  tools: Array<{
+    name: string
+    status: 'installed' | 'missing' | 'outdated'
+    version?: string
+    required_version?: string
+  }>
+}
+
+export interface StorageSettings {
+  backend: string
+  config: Record<string, unknown>
+  usage?: {
+    total_bytes: number
+    used_bytes: number
+  }
+}
+
+export interface DiagnosticsSettings {
+  checks: Array<{
+    name: string
+    status: 'pass' | 'fail' | 'warn'
+    message?: string
+    details?: Record<string, unknown>
+  }>
+}
+
+// ---------------------------------------------------------------------------
+// Common Response Wrappers (new)
+// ---------------------------------------------------------------------------
+
+export interface ListResponse<T> {
+  items: T[]
 }
