@@ -635,6 +635,94 @@ CCB 完成后必须在自己的 worktree 创建或更新：
 
 未完成时不得写“完成”；应明确写“执行中”及剩余问题。
 
+## 4A. CCB 审核纠偏指令
+
+### 4A.1 指令编号与起点
+
+```text
+instruction: CCB-BACKEND-INTEGRATION-05
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed commit: 70c9d5f fix(mountain): close secure runtime and asset integration gaps
+result: rejected
+```
+
+本轮只能在上述 worktree 和分支形成 follow-up commit，不得 amend、squash、reset 或删除 `70c9d5f`。
+
+### 4A.2 已验证基线
+
+- Python 门禁：`403 passed, 10 skipped, 4 warnings, 3 subtests passed`；通过不等于功能验收通过。
+- `compileall` 和 `git diff --check` 通过。
+- TestClient 可以启动路由，但默认环境的 `/api/v1/health` 实测返回 `secret_store.encrypted=false`，违反默认加密和 fail-closed 要求。
+- 完成报告仍标记真实 HTTP 和 CCF contract checker 为“执行中”，不能宣布完成；报告记录的 commit `520a139` 与实际 HEAD `70c9d5f` 不一致。
+
+### 4A.3 必须关闭的阻断项
+
+1. 修复 SecretStore fail closed：`create_secret_store(encrypted=True)` 不得捕获加密依赖错误后静默降级明文。只有显式 `CSBOARD_ALLOW_PLAINTEXT_SECRETS=1` 才能构造 PlaintextSecretStore；默认无法加密时服务启动必须失败。增加默认失败、显式明文、加密成功三个行为测试。
+2. 真正建立唯一组合根：`create_app()` 只创建一次 Repository、ArtifactStore、Telemetry、SecretStore、ServiceRegistry、ServiceResolver、ProviderFactory 和 MountainCommands/Application service，并显式作为参数注入 Router。禁止通过给 `APIRouter` 动态挂 `state_set_dependencies` 属性注入，禁止 Router 内重新创建 MountainCommands 或基础设施。
+3. 收口 `mountain_task_api.py`：Router 不得遍历 `tasks/*/task.json`，不得直接读写 `task.json`、`request.json`，不得直接改变 RunStatus/StageStatus，不能直接写 Telemetry 或拼接 `final.mp4`。这些行为必须移动到 Application Commands/Query Service 和 Repository/ArtifactStore 正式接口。
+4. Task 列表必须在 Application 层执行 `filter -> priority sort -> cursor -> limit`，修复当前先 cursor 后 sort/filter 的错误顺序；分页必须在过滤结果上稳定、无重复、无漏项。
+5. Task 输入保存必须使用 Application command 和 Repository 的原子 input-manifest 接口；更新未上传 reference 时必须保留原有相对路径，禁止把 `reference_audio` 覆盖为 null；失败不得留下 partial、半写 request 或 task 状态。
+6. Pipeline 生产路径必须 fail closed：ServiceResolver 缺失时不得回退到 `create_text_model/create_tts/create_image_model/...` 固定 Provider 路径。CLI 与 Web 都必须显式注入 Resolver 和 Factory，并通过 `ServiceDefinition -> create_adapter()`。
+7. ProviderFactory 动态生产入口不得自行创建 SecretStore，不得依赖 `PROVIDER_PROFILES` 或 `.profiles`。旧 Provider 兼容代码必须隔离到 legacy 模块，不能从新 Mountain composition root、CLI 或 Pipeline 可达。
+8. Settings DTO 与 §3/§3A 的前端契约统一：voice-alignment 必须返回 `speech_synthesis`、`speech_alignment`、`indextts`、`whisper`；每个服务包含 service_id/display_name/capability/adapter_type/endpoint/model/timeout/availability。Toolchain 顶层字段、Storage cleanup_policy、Diagnostics 结构须与共享 fixture 完全一致。
+9. Diagnostics 不能通过截断日志 message 假装脱敏。必须复用 Redactor，对 message、details 和嵌套字段进行结构化脱敏；增加包含 API key、Bearer token、service secret 原文的日志测试，确认响应与磁盘诊断包均不存在原文。
+10. Service availability 不得在每次 list/detail 时执行可能昂贵的实时 probe。Probe 只由显式 endpoint 或受控缓存刷新；list/detail 返回最近一次 ProbeResult。无历史结果时返回结构化 unknown/unavailable 状态。
+11. Service 创建/更新必须校验未知字段、service_id 路径安全、revision conflict、required/optional secret key；不得让 Secret 混入 config。所有错误统一返回 `body.error`，不得混用 FastAPI 字符串 `detail`。
+12. Voice multipart 与通用 upload 必须以行为测试证明：分块写入且有上限、MIME/扩展名/文件签名一致、临时文件必清、FFprobe 元数据真实、sha256 正确、HEAD/206/416 正确、不泄漏 storage_path/绝对路径。不得只检查函数存在。
+13. 修正完成报告：实际 HEAD、干净状态、真实 HTTP 命令和结果必须一致；CCF contract checker 尚未能运行时明确写 blocked，不能写“完成”。
+
+### 4A.4 强制生产行为测试
+
+至少新增或重写测试证明：
+
+- 默认加密不可用时 create_app 失败，而显式明文开关才允许降级；
+- 四类 Router 使用同一组注入实例；
+- Task Router 源层面不再承担文件和状态机职责，并通过 HTTP 行为验证 Application 调用；
+- Web 和 CLI 执行同一 Stage 时解析同一个默认 Service，切换默认服务后下一次构造的 Adapter 改变；
+- 任何生产执行入口缺少 Resolver/Factory 都返回结构化 `CAPABILITY_NOT_AVAILABLE`；
+- Task 列表过滤、排序、cursor、limit 顺序正确；
+- input-manifest 更新保留 reference，相对路径且原子；
+- Settings 所有 DTO 与共享 fixtures 对齐；
+- Secret/Token 在 API、日志、事件、diagnostics 和磁盘扫描中均为零明文；
+- 真实 WAV 上传、FFprobe、Range 全链路。
+
+禁止使用 `hasattr`、`inspect.getsource`、`expect status != 400` 或只断言 mock 被调用来代替最终行为验证。必要的架构边界可使用依赖身份断言，但必须同时有 HTTP/CLI/Pipeline 行为测试。
+
+### 4A.5 门禁、真实启动与提交
+
+```bash
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+git diff --check
+```
+
+必须使用临时 data dir 启动真实 `uvicorn webapp.mountain_server:app`，逐项验证 §4.11 中的端点，并保存状态码与安全裁剪后的响应摘要。随后运行 CCF 的：
+
+```bash
+MOUNTAIN_API_BASE=http://127.0.0.1:<port>/api/v1 node <CCF-worktree>/web-v2/scripts/check-api-contract.mjs
+```
+
+若 CCF checker 尚未完成，只能将本项标记 blocked，其他工作继续完成。
+
+形成新的提交：
+
+```text
+fix(mountain): close CCB runtime integration review gaps
+```
+
+先本地提交，不推送远端。
+
+### 4A.6 完成报告
+
+只在 CCB worktree 创建或更新：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-backend-integration-05-report.md
+```
+
+报告逐项列出 4A.3 的 13 项处理结果、生产文件和行为证据，并包含实际 commit、git status、pytest、compileall、真实 uvicorn/HTTP、CCF checker、Secret 明文扫描、已知 gap 和未完成事项。未全部完成时只能写“执行中”。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
