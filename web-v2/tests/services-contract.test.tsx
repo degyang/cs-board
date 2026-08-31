@@ -595,7 +595,7 @@ describe('StoragePage (production route)', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getAllByText('存储').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('运行时存储状态')).toBeInTheDocument()
     })
   })
 })
@@ -696,7 +696,7 @@ describe('Production route tree verification', () => {
       renderWithRouter(<StoragePage />, '/settings/storage')
     })
     await waitFor(() => {
-      expect(screen.getAllByText('存储').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('运行时存储状态')).toBeInTheDocument()
     })
   })
 
