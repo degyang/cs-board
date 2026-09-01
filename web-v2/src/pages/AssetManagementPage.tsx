@@ -37,9 +37,8 @@ const STATUS_OPTIONS = [
 
 const ENGINE_OPTIONS = [
   { value: '', label: '全部引擎' },
-  { value: 'sdxl', label: 'SDXL' },
-  { value: 'dalle3', label: 'DALL·E 3' },
-  { value: 'midjourney', label: 'Midjourney' },
+  { value: 'whiteboard', label: '白板动画' },
+  { value: 'infographic-remotion', label: '动态信息图' },
 ]
 
 /* ── Preview Image with error placeholder ──────────────────────────────── */

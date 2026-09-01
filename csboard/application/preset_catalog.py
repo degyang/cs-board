@@ -1,15 +1,15 @@
-"""Seed Style Presets — 从 server.py STYLE_PRESETS 迁移到资产目录。
+"""Mountain 内置预置风格目录及幂等安装器。
 
-一次性迁移脚本，将硬编码的风格预设写入 assets/styles/templates.json。
+预置风格属于新产品资产，不依赖 Legacy server 或 WebUI 原型运行时。
 """
 
 from __future__ import annotations
 
 import json
-import sys
+import hashlib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 # 预设风格数据（从 webapp/server.py STYLE_PRESETS 提取）
 STYLE_PRESETS = {
@@ -86,11 +86,39 @@ STYLE_PRESETS = {
 }
 
 
-def seed(data_dir: Path) -> dict:
-    """将 STYLE_PRESETS 写入 assets/styles/templates.json。"""
+STYLE_META = {
+    "极简粗线简笔白板风": ("ps-cs-1", "previews/minimal-whiteboard.webp", ["白板", "粗线", "马克笔", "知识科普"]),
+    "极简商务涂鸦风": ("ps-cs-2", "previews/business-doodle.webp", ["商务", "蓝绿", "图表", "科技"]),
+    "暖米黄素描白板风": ("ps-cs-3", "previews/warm-pencil.webp", ["素描", "铅笔", "米黄", "手账"]),
+    "粗线扁平国风卡通": ("ps-cs-4", "previews/guofeng-flat.webp", ["国风", "卡通", "朱红", "平涂"]),
+    "爆款高热吸睛风": ("ps-cs-5", "previews/viral-pop.webp", ["短视频", "高饱和", "冲击", "热门"]),
+    "黑金科技发布会风": ("ps-cs-6", "previews/black-gold-tech.webp", ["黑金", "科技", "高端", "发布"]),
+    "清新治愈手账风": ("ps-cs-7", "previews/healing-journal.webp", ["水彩", "治愈", "手账", "温暖"]),
+    "复古报纸拼贴风": ("ps-cs-8", "previews/retro-collage.webp", ["复古", "报纸", "拼贴", "半色调"]),
+    "纸感隐喻拼贴风": ("ps-cs-9", "previews/paper-metaphor.png", ["剪纸", "隐喻", "因果", "矩阵"]),
+    "漫画墨线解释风": ("ps-cs-10", "previews/oil-visual.png", ["漫画", "墨线", "半调", "机制"]),
+    "3D黏土趣味风": ("ps-cs-11", "previews/clay-3d.webp", ["3D", "黏土", "玩具", "温暖"]),
+    "赛博霓虹漫画风": ("ps-cs-12", "previews/cyber-neon.webp", ["赛博", "霓虹", "未来", "漫画"]),
+    "国风动态信息图": ("ps-cs-13", "", ["国风", "信息图", "宣纸", "知识"]),
+}
+
+
+def _install_preview(data_dir: Path, source: Path) -> str:
+    content = source.read_bytes()
+    asset_id = hashlib.sha256(content).hexdigest()
+    destination = data_dir / "assets" / "blobs" / asset_id[:2] / asset_id
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.exists():
+        destination.write_bytes(content)
+    return asset_id
+
+
+def seed(data_dir: Path, catalog_root: Path | None = None) -> dict:
+    """将内置 preset 幂等安装到正式 Asset Repository 数据结构。"""
     styles_dir = data_dir / "assets" / "styles"
     styles_dir.mkdir(parents=True, exist_ok=True)
-    templates_path = styles_dir / "templates.json"
+    templates_path = styles_dir / "styles.json"
+    catalog_root = catalog_root or ROOT / "assets" / "preset-styles"
 
     # 读取现有模板
     existing = []
@@ -101,25 +129,32 @@ def seed(data_dir: Path) -> dict:
             existing = []
 
     # 检查是否已有 seed 数据
-    existing_ids = {t.get("template_id") for t in existing}
-    seed_ids = {f"seed-{i:03d}" for i in range(len(STYLE_PRESETS))}
-    if existing_ids & seed_ids:
-        return {"ok": True, "message": "seed 数据已存在，跳过", "count": 0}
+    existing_ids = {t.get("style_id") for t in existing}
 
     # 生成 seed 模板
     now = "2026-08-31T00:00:00Z"
     templates = []
-    for i, (name, prompt) in enumerate(STYLE_PRESETS.items()):
+    for name, prompt in STYLE_PRESETS.items():
+        style_id, preview_path, tags = STYLE_META[name]
+        if style_id in existing_ids:
+            continue
+        preview_asset_id = ""
+        if preview_path:
+            source = catalog_root / preview_path
+            if source.is_file():
+                preview_asset_id = _install_preview(data_dir, source)
         templates.append({
-            "template_id": f"seed-{i:03d}",
+            "style_id": style_id,
             "revision": 1,
             "name": name,
             "kind": "preset",
             "prompt_text": prompt,
             "negative_prompt": "",
-            "reference_images": [],
-            "tags": [],
-            "is_active": True,
+            "description": " · ".join(tags),
+            "engine": "infographic-remotion" if name == "国风动态信息图" else "whiteboard",
+            "tags": tags,
+            "preview_asset_id": preview_asset_id,
+            "status": "active",
             "created_at": now,
             "updated_at": now,
         })
@@ -131,17 +166,4 @@ def seed(data_dir: Path) -> dict:
         encoding="utf-8",
     )
 
-    return {"ok": True, "message": "seed 完成", "count": len(templates)}
-
-
-def main() -> int:
-    data_dir = ROOT / ".webapp"
-    if len(sys.argv) > 1:
-        data_dir = Path(sys.argv[1])
-    result = seed(data_dir)
-    print(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return {"ok": True, "message": "preset 安装完成", "count": len(templates)}

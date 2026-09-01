@@ -59,6 +59,8 @@ def create_app(
     )
 
     # ── 唯一组合根：创建所有共享组件 ──────────────────────────
+    from csboard.application.default_services import seed as seed_default_services
+    from csboard.application.preset_catalog import seed as seed_preset_styles
     from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
     from csboard.adapters.secrets import create_secret_store
     from csboard.application.service_resolver import ServiceResolver
@@ -72,6 +74,10 @@ def create_app(
     secret_store, is_encrypted = create_secret_store(
         effective_data_dir, encrypted=not allow_plaintext
     )
+
+    # 新数据目录首次启动即具备真实可配置服务和预置风格；不覆盖用户数据。
+    seed_default_services(effective_data_dir)
+    seed_preset_styles(effective_data_dir)
 
     # 共享组件：所有 Router 使用同一实例
     service_registry = FilesystemServiceRegistry(effective_data_dir, secret_store)

@@ -35,7 +35,12 @@ def mountain_service_router(
         base = _reg.to_public_dict(service)
 
         # config_status
-        required_fields = {"endpoint", "model"}
+        if service.adapter_type == "openai_compatible":
+            required_fields = {"endpoint", "model"}
+        elif service.adapter_type == "indextts":
+            required_fields = {"endpoint"}
+        else:
+            required_fields = set()
         configured_fields = set()
         missing_fields = []
         for f in required_fields:
@@ -92,11 +97,20 @@ def mountain_service_router(
     def list_services(
         capability: str | None = None,
         enabled: bool | None = None,
+        q: str | None = None,
         limit: int = 50,
         cursor: str | None = None,
     ):
         # 获取全量后计算 filtered total
         all_filtered = _reg.list_services(capability=capability, enabled=enabled)
+        if q:
+            needle = q.casefold()
+            all_filtered = [
+                service for service in all_filtered
+                if needle in service.display_name.casefold()
+                or needle in service.service_id.casefold()
+                or needle in service.model.casefold()
+            ]
         total = len(all_filtered)
         # 分页
         if cursor:

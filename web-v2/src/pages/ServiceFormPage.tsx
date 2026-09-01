@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BackButton } from '../components/ui/BackButton'
 import { MountainApiError } from '../lib/api/http'
-import { createService, fetchService, updateService } from '../lib/api/services'
+import { createService, fetchService, updateService, setServiceSecret } from '../lib/api/services'
 import { KNOWN_CAPABILITIES, KNOWN_ADAPTERS } from '../lib/api/types'
 
 export function ServiceFormPage() {
@@ -28,6 +28,7 @@ export function ServiceFormPage() {
   const [requiredSecrets, setRequiredSecrets] = useState('')
   const [optionalSecrets, setOptionalSecrets] = useState('')
   const [configJson, setConfigJson] = useState('{}')
+  const [apiKey, setApiKey] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,7 +91,10 @@ export function ServiceFormPage() {
           config,
         })
       } else {
-        await createService({
+        const effectiveRequiredSecrets = adapterType === 'openai_compatible'
+          ? Array.from(new Set([...parsedRequiredSecrets, 'api_key']))
+          : parsedRequiredSecrets
+        const created = await createService({
           service_id: serviceIdInput,
           display_name: displayName,
           capability,
@@ -99,10 +103,14 @@ export function ServiceFormPage() {
           model: model || undefined,
           priority: Number(priority),
           enabled,
-          required_secrets: parsedRequiredSecrets.length > 0 ? parsedRequiredSecrets : undefined,
+          required_secrets: effectiveRequiredSecrets.length > 0 ? effectiveRequiredSecrets : undefined,
           optional_secrets: parsedOptionalSecrets.length > 0 ? parsedOptionalSecrets : undefined,
           config,
         })
+        if (apiKey) {
+          await setServiceSecret(created.service_id, { key: 'api_key', value: apiKey })
+          setApiKey('')
+        }
       }
       navigate('/settings/models')
     } catch (err) {
@@ -195,13 +203,30 @@ export function ServiceFormPage() {
 
         <div className="form-field">
           <label className="form-label" htmlFor="svc-endpoint">端点</label>
-          <input id="svc-endpoint" type="text" className="input" placeholder="https://..." value={endpoint} onChange={e => setEndpoint(e.target.value)} />
+          <input id="svc-endpoint" type="url" className="input" placeholder="https://api.example.com/v1" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
+          <div className="form-help">填写供应商提供的 OpenAI-compatible API Base URL。</div>
         </div>
 
         <div className="form-field">
-          <label className="form-label" htmlFor="svc-model">模型</label>
-          <input id="svc-model" type="text" className="input" placeholder="gpt-4" value={model} onChange={e => setModel(e.target.value)} />
+          <label className="form-label" htmlFor="svc-model">模型 ID</label>
+          <input id="svc-model" type="text" className="input" placeholder="例如 gpt-4o-mini" value={model} onChange={e => setModel(e.target.value)} />
         </div>
+
+        {!isEdit && adapterType === 'openai_compatible' && (
+          <div className="form-field">
+            <label className="form-label" htmlFor="svc-api-key">API Key</label>
+            <input
+              id="svc-api-key"
+              type="password"
+              className="input"
+              autoComplete="new-password"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              placeholder="只写入加密 SecretStore"
+            />
+            <div className="form-help">密钥不会写入服务 JSON、日志或 API 响应。</div>
+          </div>
+        )}
 
         <div className="form-field">
           <label className="form-label" htmlFor="svc-priority">优先级</label>
@@ -215,8 +240,9 @@ export function ServiceFormPage() {
           </label>
         </div>
 
-        {/* Fix #1: required_secrets and optional_secrets */}
-        <div className="form-field">
+        <details className="card" style={{ marginBottom: 16 }}>
+          <summary className="card-title" style={{ cursor: 'pointer' }}>高级配置</summary>
+        <div className="form-field" style={{ marginTop: 16 }}>
           <label className="form-label" htmlFor="svc-required-secrets">必填 Secret（逗号分隔）</label>
           <input
             id="svc-required-secrets"
@@ -244,6 +270,7 @@ export function ServiceFormPage() {
           <label className="form-label" htmlFor="svc-config">Config (JSON)</label>
           <textarea id="svc-config" className="input mono" rows={4} value={configJson} onChange={e => setConfigJson(e.target.value)} />
         </div>
+        </details>
 
         <div className="form-actions">
           <button type="button" className="btn btn-ghost" onClick={() => navigate('/settings/models')}>取消</button>

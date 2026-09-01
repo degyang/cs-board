@@ -1,46 +1,41 @@
-"""Seed Services — 从 PROVIDER_PROFILES 迁移到 ServiceDefinition。
+"""Mountain 新产品默认服务目录。
 
-幂等迁移：不覆盖用户已有服务。
-不复制 Secret 明文。
+首次启动幂等安装，不覆盖用户服务，也不写入任何 Secret。
 """
 
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-
-# 旧 PROVIDER_PROFILES 映射
-LEGACY_PROFILES = [
+DEFAULT_SERVICES = [
     {
-        "service_id": "text_model",
-        "display_name": "Text Model (OpenAI-compatible)",
+        "service_id": "openai-compatible-text",
+        "display_name": "OpenAI 兼容文本模型",
         "capability": "text_generation",
         "adapter_type": "openai_compatible",
         "endpoint": "https://api.openai.com/v1",
-        "model": "gpt-4o",
-        "config": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o", "api_mode": "chat-completions"},
+        "model": "gpt-4o-mini",
+        "config": {"api_mode": "chat-completions"},
         "required_secrets": ["api_key"],
         "optional_secrets": [],
         "priority": 100,
     },
     {
-        "service_id": "image_model",
-        "display_name": "Image Model (OpenAI-compatible)",
+        "service_id": "openai-compatible-image",
+        "display_name": "OpenAI 兼容图片模型",
         "capability": "image_generation",
         "adapter_type": "openai_compatible",
         "endpoint": "https://api.openai.com/v1",
         "model": "gpt-image-1",
-        "config": {"base_url": "https://api.openai.com/v1", "model": "gpt-image-1"},
+        "config": {},
         "required_secrets": ["api_key"],
         "optional_secrets": [],
         "priority": 100,
     },
     {
-        "service_id": "tts",
-        "display_name": "Text-to-Speech (IndexTTS)",
+        "service_id": "local-indextts",
+        "display_name": "本地 IndexTTS",
         "capability": "speech_synthesis",
         "adapter_type": "indextts",
         "endpoint": "http://127.0.0.1:7860",
@@ -51,8 +46,8 @@ LEGACY_PROFILES = [
         "priority": 100,
     },
     {
-        "service_id": "alignment",
-        "display_name": "Alignment (Whisper)",
+        "service_id": "local-whisper",
+        "display_name": "本地 Whisper 对齐",
         "capability": "speech_alignment",
         "adapter_type": "whisper",
         "endpoint": "",
@@ -63,8 +58,8 @@ LEGACY_PROFILES = [
         "priority": 100,
     },
     {
-        "service_id": "renderer",
-        "display_name": "Renderer (Whiteboard)",
+        "service_id": "whiteboard-renderer",
+        "display_name": "白板动画渲染器",
         "capability": "rendering",
         "adapter_type": "local_process",
         "endpoint": "",
@@ -75,8 +70,8 @@ LEGACY_PROFILES = [
         "priority": 100,
     },
     {
-        "service_id": "media",
-        "display_name": "Media (FFmpeg)",
+        "service_id": "local-ffmpeg",
+        "display_name": "本地 FFmpeg",
         "capability": "media",
         "adapter_type": "ffmpeg",
         "endpoint": "",
@@ -99,7 +94,7 @@ def seed(data_dir: Path) -> dict:
         existing_ids.add(path.stem)
 
     created = 0
-    for profile in LEGACY_PROFILES:
+    for profile in DEFAULT_SERVICES:
         sid = profile["service_id"]
         if sid in existing_ids:
             continue
@@ -125,17 +120,4 @@ def seed(data_dir: Path) -> dict:
         path.write_text(json.dumps(service, ensure_ascii=False, indent=2), encoding="utf-8")
         created += 1
 
-    return {"ok": True, "message": "seed 完成", "created": created, "skipped": len(LEGACY_PROFILES) - created}
-
-
-def main() -> int:
-    data_dir = ROOT / ".webapp"
-    if len(sys.argv) > 1:
-        data_dir = Path(sys.argv[1])
-    result = seed(data_dir)
-    print(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return {"ok": True, "message": "默认服务安装完成", "created": created, "skipped": len(DEFAULT_SERVICES) - created}
