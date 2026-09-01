@@ -1303,6 +1303,83 @@ docs(mountain): report real task queue
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 3O. CCF 任务队列生产导航与分页纠偏
+
+### 3O.1 指令编号与审核结论
+
+```text
+instruction: CCF-TASK-QUEUE-11
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed implementation: ba2fc19 feat(mountain-web): establish real task queue
+reviewed report: 29ad93a docs(mountain): report real task queue
+result: rejected; tests pass but final action targets a test-only SPA route
+```
+
+审核者已复现 build 和前端全量 `327 passed`。拒绝原因是生产行为错误而非门禁失败：
+
+1. `TasksPage` 将“成片”实现为 React Router `Link` 到 `/tasks/:taskId/runs/:runId/final`，但生产 `src/app/router.tsx` 没有该路由；点击进入 404。
+2. `task-queue.test.tsx` 自行注册了该虚假 Route，因此测试证明的是测试路由，不是生产 Router。
+3. “进入工作台”使用 `navigate(`/tasks/${t.task_id}`)`，没有编码 Task ID；同一页面其他操作却编码了 ID。
+4. 加载更多期间没有独立 pending 状态或禁用按钮；连续点击会发出相同 cursor 的并发请求，两个响应都可 append，造成重复任务。
+5. 当前报告的 DTO 映射遗漏了 `active_run.status/retryable/final_available` 的实际表现，未完整对应 §3N。
+
+### 3O.2 唯一修复目标
+
+只纠正任务队列生产导航、运行摘要和 cursor 分页行为；不修改后端、DTO、创建任务、任务工作台或 Pipeline。
+
+1. “成片”必须使用生产 `getFinalUrl(task_id, run_id)` 指向后端媒体 endpoint，以普通 `<a>` 打开/下载；不得创建没有页面语义的 SPA `/final` 路由。
+2. “进入工作台”和“运行诊断”的 Task/Run 参数全部编码。优先用小型集中 URL helper，避免各按钮各自拼接不一致。
+3. 测试必须挂载生产 `router` 或复用生产 route definition 验证导航；不得在测试中注册生产不存在的 `/final` 页面来让断言通过。
+4. active run 存在时显示真实运行状态；`retryable=true` 只显示“可重试”提示，不增加重试按钮；`final_available` 由成片入口的显示条件表达。未知 run 状态安全显示原值。
+5. 将首次/筛选加载与“加载更多”状态分离。分页请求 pending 时按钮禁用且文案明确；同一 cursor 不得并发请求或重复 append。
+6. 每次网络请求拥有唯一 generation/request token。筛选改变、重试、分页之间后发请求胜出；过期分页响应不得追加到新筛选结果。
+7. 分页失败保留已经显示的 items 和 cursor，显示局部错误并允许重试该页；不得把整个队列替换成全页错误。
+8. append 时按 `task_id` 防御性去重，同时保持服务端返回顺序；不得用客户端重新排序改变后端队列语义。
+
+### 3O.3 强制生产行为测试
+
+- 使用真实 `getFinalUrl`，断言成片是 API `<a href>`，不是 Router Link；生产 Router 下点击不进入 404。
+- 工作台、诊断 URL 对包含 `/ + 空格` 的 Task/Run ID 正确编码。
+- 双击/连续点击加载更多只发出一个该 cursor 请求，按钮 pending 时 disabled。
+- 可控 Promise：旧筛选分页挂起后切换筛选，新响应先完成、旧分页后完成，旧 items 不得进入新列表。
+- 分页失败保留第一页，点击局部重试仍使用原 cursor，成功后只追加一次。
+- 后端跨页重复 task_id 时页面只出现一次且顺序稳定。
+- active run 的 known/unknown status、retryable true/false 和 final_available true/false 均有 DOM 行为断言。
+- 删除测试专用 `/final` Route；不得以源码字符串或只断言 mock 次数代替生产导航行为。
+
+### 3O.4 门禁、提交和报告
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+npm --prefix web-v2 run test:contract-checker
+! rg -n "path=.?[\"']?/tasks/:taskId/runs/:runId/final|<Route.*final" web-v2/src web-v2/tests
+! rg -n "localStorage|sessionStorage|Math\.random" web-v2/src/pages/TasksPage.tsx web-v2/tests/task-queue.test.tsx
+git diff --check
+git status --short
+```
+
+纠偏提交：
+
+```text
+fix(mountain-web): correct task queue navigation and paging
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-task-queue-11-report.md
+```
+
+报告列出生产 Router 验证、成片 API URL、编码案例、分页状态机、旧响应隔离、去重行为、运行摘要映射、门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report corrected task queue behavior
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
