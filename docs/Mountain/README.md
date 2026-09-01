@@ -56,6 +56,7 @@ Mountain 的目标覆盖：
 | [12-observability-and-diagnostics.md](12-observability-and-diagnostics.md) | WebUI/Skills共享的结构化事件、trace、日志、审计、脱敏和诊断包 |
 | [14-task-and-script-preparation.md](14-task-and-script-preparation.md) | Task/Run 边界、文案整理、画面锚定重点与迁移准则 |
 | [15-production-control-and-style-assets.md](15-production-control-and-style-assets.md) | 执行门禁、任务队列、外部素材回存、精确失效与风格模板资产 |
+| [17-project-consolidation-preview-and-archive-plan.md](17-project-consolidation-preview-and-archive-plan.md) | 进入下一阶段前的目录收口、Legacy 强隔离、PR 合并与预览计划 |
 
 ## 统一术语
 
