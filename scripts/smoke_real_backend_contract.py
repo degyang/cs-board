@@ -146,8 +146,8 @@ def main() -> int:
         # ── 2. 通过正式启动脚本拉起后端 ──────────────────────────────────
         env = os.environ.copy()
         env.pop("CSBOARD_ALLOW_PLAINTEXT_SECRETS", None)
+        env.pop("PYTHONPATH", None)
         env["CSBOARD_DATA_DIR"] = str(data_dir)
-        env["PYTHONPATH"] = str(PROJECT_ROOT)
 
         launch_script = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
         uvicorn_cmd = [
