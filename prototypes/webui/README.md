@@ -1,6 +1,8 @@
 # Mountain WebUI v2（山野小读）
 
-基于 `docs/Mountain/` 设计文档（04-webui-redesign、13-webui-functional-spec）落地的 React + Vite 工程。
+> 本目录是可持续编辑的产品原型源，不是生产 WebUI。第三方设计工具只能修改本目录；正式实现位于 `web-v2/`。原型中的 mock、fixture、localStorage 和旧 Project 术语仅用于交互演示，不得复制到生产代码。
+
+基于 `docs/Mountain/` 设计文档（04-webui-redesign、13-webui-functional-spec）维护的 React + Vite 原型工程。
 视觉遵循山野小读 NovaTech 品牌规范（苔绿主色 / 落日橙 / 远山蓝 / 宣纸中性色，见 `src/styles/tokens.css`）。
 
 ## 运行
@@ -61,4 +63,3 @@ src/
 | 未钉住 | 倾斜 45° | 收窄为 64px 图标栏（文字隐藏、图标居中），悬停临时展开为浮层（阴影盖在内容上方，不挤压内容），移开自动收起 |
 
 窄屏（≤1100px）为顶部横条布局，图钉按钮隐藏。实现位于 `components/layout/AppShell.tsx`（状态）+ `Sidebar.tsx`（按钮）+ `styles/app.css`（`.is-rail` 模式）。
-

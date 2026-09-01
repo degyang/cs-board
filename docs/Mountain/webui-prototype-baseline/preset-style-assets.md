@@ -4,9 +4,9 @@
 
 本快照从 `/mnt/d/Workstation/SynologyDrive/workbuddy/Workshop/mountain` 同步，覆盖原型资产管理中的 13 个预置风格及其图片、提示词和路由参数。
 
-- 参数权威快照：`source/src/features/asset-management/assetStore.ts`
-- 图片根目录：`source/public/styles/`
-- 图片校验：`source/public/styles/SHA256SUMS`
+- 参数权威快照：`prototypes/webui/src/features/asset-management/assetStore.ts`
+- 图片根目录：`prototypes/webui/public/styles/`
+- 图片校验：`prototypes/webui/public/styles/SHA256SUMS`
 - 原始参数来源：旧 `webapp/server.py` 的 `STYLE_PRESETS` 与 `INFOGRAPHIC_STYLE`
 - 深度参考图来源：项目 `assets/style-references/paper-metaphor` 和 `assets/style-references/oil-visual`
 - `oil-visual` 的来源与 MIT 许可随图片保存在同目录的 `SOURCE.md` 和 `LICENSE`

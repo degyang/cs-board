@@ -1,19 +1,19 @@
 # WebUI 原型设计基准
 
-> 术语说明：`source/` 是外部原型的原样镜像，可能保留旧的 Project/项目命名或历史交互；它不是现行产品术语权威。现行产品统一使用 Task/任务、任务队列和任务工作台，规则见 [`../14-task-and-script-preparation.md`](../14-task-and-script-preparation.md)。
+> 术语说明：可编辑原型源已迁移到仓库根目录 [`prototypes/webui/`](../../../prototypes/webui/)，可能保留旧的 Project/项目命名或历史交互；它不是现行产品术语权威。现行产品统一使用 Task/任务、任务队列和任务工作台，规则见 [`../14-task-and-script-preparation.md`](../14-task-and-script-preparation.md)。
 
 ## 已同步的增量原型
 
 - 语音与对齐：`VoiceAlignmentPage`、共享 `SettingsSubnav`、两张服务状态卡和加载/不可用 fixture 已从 workbuddy 同步；基准中的任务文案与链接已按当前 Task 术语校正。
 - 此页仅定义展示模型与交互边界：运行时应由真实 capability/provider 数据替代 fixture，不得复制 mock、localStorage 或密钥逻辑进 `web-v2`。
 
-本目录是 Mountain 新 WebUI 的**唯一视觉、页面结构与交互层级基准**。
+本目录只保存 Mountain 新 WebUI 已确认版本的**冻结截图、资产清单和验收说明**。持续设计在 `prototypes/webui/` 完成，生产实现位于 `web-v2/`。
 
 ## 来源与快照
 
 - 原始原型（只读）：`/mnt/d/Workstation/SynologyDrive/workbuddy/Workshop/mountain`
 - 建立日期：2026-08-30
-- 已镜像来源：`source/` 下的 `src/`、`README.md` 与 `package.json`
+- 可编辑镜像：仓库根目录 `prototypes/webui/`
 - 未镜像：`node_modules/`、`dist/`、缓存文件与 lockfile；它们不是设计基准。
 
 关键来源校验值：
@@ -29,8 +29,8 @@
 
 ## 使用规则
 
-1. `web-v2/` 必须以这里的页面、组件、视觉 token、布局和状态样式为实现基线。
-2. `source/lib/api/mock.ts`、`source/lib/api/client.ts` 和 `source/lib/api/queries.ts` 仅保留为原型资料；**不得**被新工程导入或复制其 mock/回退逻辑。
+1. `web-v2/` 必须以本目录冻结的截图/验收矩阵和 `prototypes/webui/` 对应确认版本为实现基线。
+2. `prototypes/webui/src/lib/api/mock.ts`、`client.ts` 和 `queries.ts` 仅为原型资料；**不得**被新工程导入或复制其 mock/回退逻辑。
 3. 新工程业务数据只能使用 cs-board 的 `/api/v1`；不得使用 `/api/mountain`、旧 `/api/config`、Fake 数据或原型的 mock 数据。
 4. 原型不等于后端契约。遇到字段、命令或交互不匹配时，先记录 API gap，不得在前端伪造业务状态。
 5. 每个 WebUI PR 都必须在 `docs/Mountain/` 增加“原型文件 → web-v2 文件/API”的映射，并在审查中逐项核对。
@@ -39,16 +39,16 @@
 
 本次再次从来源目录同步了配置与资产相关设计。当前快照包含：
 
-- `source/src/features/settings/ModelsTab.tsx`
-- `source/src/features/settings/modelsRegistry/`
-- `source/src/features/settings/SettingsPage.tsx`
-- `source/src/features/settings/systemStatus/`
-- `source/src/pages/VoiceAlignmentPage.tsx`
-- `source/src/features/voice-alignment/`
-- `source/src/features/asset-management/`
-- `source/src/styles/app.css` 中的 `.mp-*` 样式
+- `prototypes/webui/src/features/settings/ModelsTab.tsx`
+- `prototypes/webui/src/features/settings/modelsRegistry/`
+- `prototypes/webui/src/features/settings/SettingsPage.tsx`
+- `prototypes/webui/src/features/settings/systemStatus/`
+- `prototypes/webui/src/pages/VoiceAlignmentPage.tsx`
+- `prototypes/webui/src/features/voice-alignment/`
+- `prototypes/webui/src/features/asset-management/`
+- `prototypes/webui/src/styles/app.css` 中的 `.mp-*` 样式
 - `screenshots/settings/` 中的六张配置页验收截图
-- `source/public/styles/` 中的 27 张预置风格图片，以及 [`preset-style-assets.md`](preset-style-assets.md) 中的参数与迁移清单
+- `prototypes/webui/public/styles/` 中的 27 张预置风格图片，以及 [`preset-style-assets.md`](preset-style-assets.md) 中的参数与迁移清单
 
 当前原型将模型服务展示为只读注册表，将工具链、任务存储状态和系统诊断定义为只读运行状态；语音与对齐页明确不上传任务级文案或参考音频，也不伪造刷新/探测按钮。这些页面定义的是**视觉、信息层级和产品边界基准**，其中 fixture 仅用于展示状态。
 
@@ -66,9 +66,9 @@
 
 ## 重点页面
 
-- `source/src/pages/ProjectsPage.tsx`：项目入口与过滤。
-- `source/src/pages/CreateProjectPage.tsx`：创建项目。
-- `source/src/pages/ProjectWorkbenchPage.tsx`：标准制作工作台。
-- `source/src/pages/RunDiagnosticsPage.tsx`：运行诊断。
-- `source/src/features/*`：阶段时间线、Voice Unit、产物、活动面板、工作区。
-- `source/src/components/*` 与 `source/src/styles/*`：共享布局、UI 和设计 token。
+- `prototypes/webui/src/pages/ProjectsPage.tsx`：历史原型入口与过滤。
+- `prototypes/webui/src/pages/CreateProjectPage.tsx`：历史创建页。
+- `prototypes/webui/src/pages/ProjectWorkbenchPage.tsx`：工作台原型。
+- `prototypes/webui/src/pages/RunDiagnosticsPage.tsx`：运行诊断原型。
+- `prototypes/webui/src/features/*`：阶段时间线、Voice Unit、产物、活动面板、工作区。
+- `prototypes/webui/src/components/*` 与 `prototypes/webui/src/styles/*`：共享布局、UI 和设计 token。
