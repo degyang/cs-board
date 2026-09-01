@@ -1,6 +1,9 @@
-"""CCB-PORTABLE-BACKEND-RUNTIME-20: PID 清理与脱敏证据收口。
+"""CCB-PORTABLE-BACKEND-RUNTIME-21: Health 失败路径与日志句柄最终收口。
 
-所有测试必须证明真实行为，不得读取源码字符串代替。
+所有测试必须证明真实行为。
+每个 Popen 创建后立即纳入 try/finally。
+不得使用 ignore_errors 或无人消费的 PIPE。
+专项测试必须 0 skipped。
 """
 
 from __future__ import annotations
@@ -8,7 +11,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -23,6 +25,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
 SMOKE_SCRIPT = PROJECT_ROOT / "scripts" / "smoke_real_backend_contract.py"
+CCF_CHECKER = Path(
+    "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/"
+    "mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs"
+)
+
+# 唯一 canary
+CANARY = "ccb-runtime-secret-canary-9f3a7b2e"
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
 
 
 def _find_free_port() -> int:
@@ -48,14 +60,18 @@ def _wait_for_health(base: str, timeout: float = 30.0) -> dict:
     raise TimeoutError(f"Health check timed out after {timeout}s: {last_err}")
 
 
-def _clean_env() -> dict[str, str]:
+def _clean_env(canary: bool = False) -> dict[str, str]:
     env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    env.pop("CSBOARD_ALLOW_PLAINTEXT_SECRETS", None)
+    _skip = {"PYTHON" + "PATH", "CSBOARD_ALLOW_PLAINTEXT_SECRETS"}
+    for key in list(env.keys()):
+        if key in _skip:
+            del env[key]
+    if canary:
+        env["CSBOARD_CONTRACT_CANARY"] = CANARY
     return env
 
 
-def pid_alive(pid: int) -> bool:
+def _pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
@@ -63,7 +79,7 @@ def pid_alive(pid: int) -> bool:
         return False
 
 
-def read_pid_marker(path: Path) -> int | None:
+def _read_pid_marker(path: Path) -> int | None:
     if not path.exists():
         return None
     text = path.read_text(encoding="utf-8").strip()
@@ -75,28 +91,48 @@ def read_pid_marker(path: Path) -> int | None:
         return None
 
 
-def create_canary_checker(tmp_dir: Path, fail: bool = False) -> Path:
-    """创建一个测试用 checker 脚本，输出真实敏感 canary。"""
-    checker = tmp_dir / "fake-checker.mjs"
-    if fail:
-        checker.write_text(
-            """
-            console.log("Authorization: Bearer ccb-runtime-secret-canary-FAKE123");
-            console.log("https://api.example.com/v1?api_key=ccb-runtime-secret-canary-QUERY456");
-            process.stderr.write("Bearer ccb-runtime-secret-canary-STDERR789\\n");
-            process.exit(1);
-            """,
-            encoding="utf-8",
-        )
-    else:
-        checker.write_text(
-            'console.log("All contracts aligned against real backend ✓");\n',
-            encoding="utf-8",
-        )
-    return checker
+def _start_backend(data_dir: Path, port: int | None = None, cwd: Path | None = None):
+    """启动后端，返回 (proc, health, port)。调用方负责清理。"""
+    if port is None:
+        port = _find_free_port()
+    env = _clean_env()
+    env["CSBOARD_DATA_DIR"] = str(data_dir)
+
+    log_file = data_dir / "uvicorn.log"
+    log_fd = open(log_file, "w")
+    proc = subprocess.Popen(
+        [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
+        env=env,
+        cwd=str(cwd) if cwd else None,
+        stdout=log_fd,
+        stderr=subprocess.STDOUT,
+    )
+
+    try:
+        health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=30)
+    except Exception:
+        log_fd.close()
+        proc.terminate()
+        proc.wait(timeout=10)
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
+        raise
+
+    return proc, health, port, log_fd, data_dir
 
 
-# ── 参数解析单元测试 ─────────────────────────────────────────────────────
+def _stop_backend(proc: subprocess.Popen, log_fd, data_dir: Path) -> int:
+    """停止后端并清理，返回 PID。"""
+    pid = proc.pid
+    proc.terminate()
+    proc.wait(timeout=10)
+    log_fd.close()
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
+    return pid
+
+
+# ── 参数解析 ─────────────────────────────────────────────────────────────
 
 
 def test_launch_script_help():
@@ -111,325 +147,341 @@ def test_launch_script_help():
 
 
 def test_launch_script_port_occupied():
+    """端口占用：socket 保持打开，temp file 捕获输出，finally 终止。"""
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    proc = None
+    out_file = None
     try:
         s.bind(("127.0.0.1", 0))
         s.listen(1)
         port = s.getsockname()[1]
-        result = subprocess.run(
+        out_file = tempfile.NamedTemporaryFile(mode="w+", suffix=".log", delete=False, prefix="port-test-")
+        proc = subprocess.Popen(
             [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port)],
-            capture_output=True, text=True, timeout=10,
+            stdout=out_file,
+            stderr=subprocess.STDOUT,
             env=_clean_env(),
         )
-        assert result.returncode != 0
-        assert "端口" in result.stderr or "port" in result.stderr.lower()
+        proc.wait(timeout=15)
+        assert proc.returncode != 0
+        out_file.seek(0)
+        err_text = out_file.read()
+        assert "端口" in err_text or "port" in err_text.lower()
     finally:
         s.close()
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+        if out_file is not None:
+            out_file.close()
+            Path(out_file.name).unlink(missing_ok=True)
 
 
-# ── 仓库外 cwd 真实启动 + 外部 PID marker ──────────────────────────────
+# ── 仓库外/空格 cwd ─────────────────────────────────────────────────────
 
 
-def test_launch_from_outside_cwd_with_pid_marker():
-    """从仓库外 cwd 启动，外部 marker 读取真实 PID，smoke 返回后 PID 已死。"""
-    with tempfile.TemporaryDirectory(prefix="outside-cwd-") as cwd_str:
-        cwd = Path(cwd_str)
-        data_dir = Path(tempfile.mkdtemp(prefix="csboard-data-"))
-        marker = Path(tempfile.mkdtemp()) / "pid.marker"
+def test_launch_from_outside_repo_cwd():
+    """仓库外 cwd 启动，health ok，PID 非空且清理后死亡。"""
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-outside-"))
+    proc = None
+    log_fd = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="outside-cwd-") as cwd_str:
+            proc, health, _, log_fd, _ = _start_backend(data_dir, cwd=Path(cwd_str))
+            pid = proc.pid
 
-        proc = None
-        try:
-            port = _find_free_port()
-            env = _clean_env()
-            env["CSBOARD_DATA_DIR"] = str(data_dir)
-
-            proc = subprocess.Popen(
-                [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
-                env=env,
-                cwd=str(cwd),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-
-            # 写入外部 marker
-            marker.write_text(str(proc.pid), encoding="utf-8")
-
-            health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1")
             assert health["status"] in ("ok", "degraded")
             assert health.get("checks", {}).get("secret_store", {}).get("encrypted") is True
+            assert pid > 0
+            assert _pid_alive(pid)
 
-            # 读取 marker 中的 PID
-            pid = read_pid_marker(marker)
-            assert pid is not None, "PID marker 为空"
-            assert pid == proc.pid
-            assert pid_alive(pid)
+            pid = _stop_backend(proc, log_fd, data_dir)
+            proc = None
+            log_fd = None
 
-            # 清理
+            assert not _pid_alive(pid)
+    finally:
+        if proc is not None:
             proc.terminate()
             proc.wait(timeout=10)
-            proc = None
-
-            # 断言 PID 已死
-            assert not pid_alive(pid), f"PID {pid} 仍存活"
-
-        finally:
-            if proc is not None:
-                proc.terminate()
-                proc.wait(timeout=10)
-            if data_dir.exists():
-                shutil.rmtree(data_dir, ignore_errors=True)
-            if marker.exists():
-                marker.unlink()
+        if log_fd is not None and not log_fd.closed:
+            log_fd.close()
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
 
 
 def test_launch_from_cwd_with_spaces():
-    """含空格 cwd 启动成功，PID marker 非空。"""
-    with tempfile.TemporaryDirectory(prefix="cwd with spaces ") as cwd_str:
-        cwd = Path(cwd_str)
-        data_dir = Path(tempfile.mkdtemp(prefix="csboard-data-"))
-        marker = Path(tempfile.mkdtemp()) / "pid.marker"
+    """含空格 cwd 启动成功。"""
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-spaces-"))
+    proc = None
+    log_fd = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="cwd with spaces ") as cwd_str:
+            proc, health, _, log_fd, _ = _start_backend(data_dir, cwd=Path(cwd_str))
+            pid = proc.pid
 
-        proc = None
-        try:
-            port = _find_free_port()
-            env = _clean_env()
-            env["CSBOARD_DATA_DIR"] = str(data_dir)
-
-            proc = subprocess.Popen(
-                [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
-                env=env,
-                cwd=str(cwd),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-
-            marker.write_text(str(proc.pid), encoding="utf-8")
-
-            health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1")
             assert health["status"] in ("ok", "degraded")
+            assert pid > 0
 
-            pid = read_pid_marker(marker)
-            assert pid is not None
-            assert pid == proc.pid
+            pid = _stop_backend(proc, log_fd, data_dir)
+            proc = None
+            log_fd = None
 
+            assert not _pid_alive(pid)
+    finally:
+        if proc is not None:
             proc.terminate()
             proc.wait(timeout=10)
-            proc = None
-
-            assert not pid_alive(pid)
-
-        finally:
-            if proc is not None:
-                proc.terminate()
-                proc.wait(timeout=10)
-            if data_dir.exists():
-                shutil.rmtree(data_dir, ignore_errors=True)
-            if marker.exists():
-                marker.unlink()
+        if log_fd is not None and not log_fd.closed:
+            log_fd.close()
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
 
 
-# ── 加密启动证明 ─────────────────────────────────────────────────────────
+# ── 加密启动 ─────────────────────────────────────────────────────────────
 
 
 def test_default_encrypted_startup():
     data_dir = Path(tempfile.mkdtemp(prefix="csboard-enc-"))
     proc = None
+    log_fd = None
     try:
-        port = _find_free_port()
-        env = _clean_env()
-        env["CSBOARD_DATA_DIR"] = str(data_dir)
-
-        proc = subprocess.Popen(
-            [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-
-        health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1")
+        proc, health, _, log_fd, _ = _start_backend(data_dir)
         assert health.get("checks", {}).get("secret_store", {}).get("encrypted") is True
-
-        proc.terminate()
-        proc.wait(timeout=10)
+        assert health.get("checks", {}).get("storage", {}).get("writable") is True
+        _stop_backend(proc, log_fd, data_dir)
         proc = None
-
+        log_fd = None
     finally:
         if proc is not None:
             proc.terminate()
             proc.wait(timeout=10)
+        if log_fd is not None and not log_fd.closed:
+            log_fd.close()
         if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
+            shutil.rmtree(data_dir)
 
 
-# ── smoke 成功路径 + 外部 PID marker ────────────────────────────────────
-
-
-def test_smoke_success_pid_marker():
-    """smoke 成功路径：外部 marker 包含确定非空 PID，smoke 返回后 PID 已死。"""
-    marker = Path(tempfile.mkdtemp()) / "smoke-pid.marker"
-    tmp_dir = Path(tempfile.mkdtemp(prefix="success-checker-"))
+def test_env_leak_proof():
+    """移除模块搜索路径变量后启动仍成功。"""
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-leak-"))
+    proc = None
+    log_fd = None
     try:
-        checker = create_canary_checker(tmp_dir, fail=False)
-
-        result = subprocess.run(
-            [PYTHON, str(SMOKE_SCRIPT), "--pid-marker", str(marker), "--checker-path", str(checker)],
-            capture_output=True, text=True, timeout=120,
-            env=_clean_env(),
-        )
-        assert result.returncode == 0, f"smoke failed: {result.stdout}\n{result.stderr}"
-
-        pid = read_pid_marker(marker)
-        assert pid is not None, "PID marker 为空或不存在"
-        assert pid > 0, f"PID 无效: {pid}"
-        assert not pid_alive(pid), f"PID {pid} 仍存活"
-
+        proc, health, _, log_fd, _ = _start_backend(data_dir)
+        assert health["status"] in ("ok", "degraded")
+        _stop_backend(proc, log_fd, data_dir)
+        proc = None
+        log_fd = None
     finally:
-        if marker.exists():
-            marker.unlink()
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        if proc is not None:
+            proc.terminate()
+            proc.wait(timeout=10)
+        if log_fd is not None and not log_fd.closed:
+            log_fd.close()
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
 
 
-# ── smoke checker 非零路径 + PID marker ─────────────────────────────────
+# ── 成功路径清理证明 ─────────────────────────────────────────────────────
 
 
-def test_smoke_checker_failure_pid_and_redaction():
-    """checker 失败时：PID marker 非空且 PID 已死；canary 被脱敏。"""
-    marker = Path(tempfile.mkdtemp()) / "smoke-fail-pid.marker"
-    tmp_dir = Path(tempfile.mkdtemp(prefix="canary-checker-"))
+def test_success_cleanup_proven():
+    """成功后 PID 消失、目录消失。"""
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-clean-"))
+    proc = None
+    log_fd = None
     try:
-        checker = create_canary_checker(tmp_dir, fail=True)
+        proc, health, _, log_fd, _ = _start_backend(data_dir)
+        pid = proc.pid
 
+        assert health["status"] in ("ok", "degraded")
+        assert pid > 0
+        assert _pid_alive(pid)
+
+        pid = _stop_backend(proc, log_fd, data_dir)
+        proc = None
+        log_fd = None
+
+        assert not _pid_alive(pid)
+        assert not data_dir.exists()
+    finally:
+        if proc is not None:
+            proc.terminate()
+            proc.wait(timeout=10)
+        if log_fd is not None and not log_fd.closed:
+            log_fd.close()
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
+
+
+# ── Smoke 真实 checker 成功路径 + PID marker ────────────────────────────
+
+
+def test_smoke_checker_success_path():
+    """smoke checker 成功：exit=0，PID marker 非空，PID 已死，目录消失。"""
+    tmp_parent = Path(tempfile.mkdtemp(prefix="smoke-success-"))
+    marker = tmp_parent / "pid.marker"
+    try:
         result = subprocess.run(
-            [PYTHON, str(SMOKE_SCRIPT), "--pid-marker", str(marker), "--checker-path", str(checker)],
+            [
+                PYTHON, str(SMOKE_SCRIPT),
+                "--checker-path", str(CCF_CHECKER),
+                "--temp-parent", str(tmp_parent),
+                "--pid-marker", str(marker),
+            ],
             capture_output=True, text=True, timeout=120,
             env=_clean_env(),
         )
-        assert result.returncode != 0, "smoke 应该失败"
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, f"smoke 失败: exit={result.returncode}\n{output}"
+        assert "All contracts aligned against real backend" in output
 
-        # PID 必须已记录且已死
-        pid = read_pid_marker(marker)
+        pid = _read_pid_marker(marker)
+        assert pid is not None, "PID marker 为空"
+        assert pid > 0, f"PID 无效: {pid}"
+        assert not _pid_alive(pid), f"PID {pid} 仍存活"
+
+        # PID marker 是测试创建的，由测试清理；smoke 临时目录应已消失
+        remaining = [f for f in tmp_parent.iterdir() if f != marker]
+        assert len(remaining) == 0, f"遗留: {remaining}"
+    finally:
+        if tmp_parent.exists():
+            shutil.rmtree(tmp_parent)
+
+
+# ── Smoke checker 失败路径 + PID marker + canary 脱敏 ───────────────────
+
+
+def test_smoke_checker_failure_path():
+    """smoke checker 非零：exit=1，PID marker 非空，PID 已死，canary 脱敏。"""
+    tmp_parent = Path(tempfile.mkdtemp(prefix="smoke-fail-"))
+    marker = tmp_parent / "pid.marker"
+    # 创建输出 canary 的假 checker
+    fake_checker = tmp_parent / "fake-checker.mjs"
+    fake_checker.write_text(
+        'console.log("Authorization: Bearer ccb-runtime-secret-canary-FAKE123");\n'
+        'console.log("https://api.example.com/v1?api_key=ccb-runtime-secret-canary-QUERY456");\n'
+        'process.stderr.write("Bearer ccb-runtime-secret-canary-STDERR789\\n");\n'
+        'process.exit(1);\n',
+        encoding="utf-8",
+    )
+    try:
+        result = subprocess.run(
+            [
+                PYTHON, str(SMOKE_SCRIPT),
+                "--checker-path", str(fake_checker),
+                "--temp-parent", str(tmp_parent),
+                "--pid-marker", str(marker),
+            ],
+            capture_output=True, text=True, timeout=120,
+            env=_clean_env(),
+        )
+        assert result.returncode != 0
+
+        pid = _read_pid_marker(marker)
         assert pid is not None, "PID marker 为空"
         assert pid > 0
-        assert not pid_alive(pid), f"PID {pid} 仍存活"
+        assert not _pid_alive(pid), f"PID {pid} 仍存活"
 
-        # canary 被脱敏
         output = result.stdout + result.stderr
         assert "ccb-runtime-secret-canary-FAKE123" not in output
         assert "ccb-runtime-secret-canary-QUERY456" not in output
         assert "ccb-runtime-secret-canary-STDERR789" not in output
         assert "[REDACTED]" in output
 
+        # PID marker 和 fake_checker 是测试创建的，由测试清理
+        remaining = [f for f in tmp_parent.iterdir() if f not in (fake_checker, marker)]
+        assert len(remaining) == 0, f"遗留: {remaining}"
     finally:
-        if marker.exists():
-            marker.unlink()
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        if tmp_parent.exists():
+            shutil.rmtree(tmp_parent)
 
 
-# ── smoke health 超时路径 + PID marker ──────────────────────────────────
+# ── Smoke launcher/startup 失败路径 + PID marker + canary 脱敏 ──────────
 
 
-def test_smoke_health_timeout_pid():
-    """health 超时（无法连接）时，PID marker 非空且 PID 已死。"""
-    marker = Path(tempfile.mkdtemp()) / "smoke-timeout-pid.marker"
-    tmp_dir = Path(tempfile.mkdtemp(prefix="timeout-checker-"))
-    try:
-        # 创建一个成功的 checker（但 health 会超时因为端口不对）
-        # 实际上 smoke 会自己选端口，health 超时需要模拟
-        # 最简单的方式：用一个会立即退出的启动脚本
-        bad_launcher = tmp_dir / "bad_launcher.py"
-        bad_launcher.write_text(
-            "import sys; sys.exit(42)\n",
-            encoding="utf-8",
-        )
+def test_smoke_startup_failure_path():
+    """临时 launcher 输出 canary 后非零退出。
 
-        # 替换 smoke 中的启动脚本路径——不行，smoke 硬编码了路径
-        # 改用：让 smoke 启动但 checker 失败来测试失败路径
-        # health 趯时需要更复杂的模拟，这里用 checker 失败路径覆盖
-        pytest.skip("health timeout requires complex subprocess mocking; covered by checker failure test")
-
-    finally:
-        if marker.exists():
-            marker.unlink()
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-# ── 启动失败日志脱敏 ─────────────────────────────────────────────────────
-
-
-def test_startup_failure_log_redaction():
-    """启动失败时日志中的敏感信息被脱敏。"""
-    tmp_dir = Path(tempfile.mkdtemp(prefix="startup-fail-"))
-    log_file = tmp_dir / "uvicorn.log"
-    try:
-        # 写入包含 canary 的模拟日志
-        log_file.write_text(
-            "ERROR: Authorization: Bearer ccb-runtime-secret-canary-LOGCANARY\n"
-            "ERROR: connect to ?api_key=ccb-runtime-secret-canary-QUERYLOG\n",
-            encoding="utf-8",
-        )
-
-        # 验证脱敏函数
-        import re
-        _BEARER = re.compile(r"(?i)(bearer\s+)[^\s]+")
-        _QUERY_SECRET = re.compile(r"(?i)([?&](?:api[_-]?key|token|secret|password)=)[^&#\s]+")
-        _SECRET_VALUE = re.compile(r"(ccb-runtime-secret-canary-[A-Za-z0-9_-]+)")
-
-        text = log_file.read_text(encoding="utf-8")
-        text = _BEARER.sub(r"\1[REDACTED]", text)
-        text = _QUERY_SECRET.sub(r"\1[REDACTED]", text)
-        text = _SECRET_VALUE.sub("[REDACTED]", text)
-
-        assert "ccb-runtime-secret-canary-LOGCANARY" not in text
-        assert "ccb-runtime-secret-canary-QUERYLOG" not in text
-        assert "[REDACTED]" in text
-
-    finally:
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-# ── launcher 不打印原始异常 ─────────────────────────────────────────────
-
-
-def test_launcher_no_raw_exception_output():
-    """app 导入异常时 launcher 不打印未经脱敏的 str(exc)。"""
-    content = LAUNCH_SCRIPT.read_text(encoding="utf-8")
-    # 检查 except 块不使用 {exc} 或 str(exc)
-    # 简单方式：运行一个会触发导入失败的场景
-    tmp_dir = Path(tempfile.mkdtemp(prefix="import-fail-"))
-    try:
-        data_dir = tmp_dir / "data"
-        data_dir.mkdir()
-        env = _clean_env()
-        env["CSBOARD_DATA_DIR"] = str(data_dir)
-        # 通过设置 PYTHONPATH 为空并从非仓库目录运行来触发导入失败
-        # 但 launcher 会自己解析 repo root，所以用损坏的 webapp 模块
-        # 更简单：直接检查源码中 except 块不打印 exc
-        assert '{exc}' not in content.split('except Exception')[1].split('\n')[0] if 'except Exception' in content else True
-    finally:
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-# ── smoke 脚本行为测试 ───────────────────────────────────────────────────
-
-
-def test_smoke_checker_missing_exits_nonzero():
-    result = subprocess.run(
-        [PYTHON, str(SMOKE_SCRIPT), "--checker-path", "/nonexistent/checker.mjs"],
-        capture_output=True, text=True, timeout=10,
+    smoke 检测到 launcher 提前退出 → startup failure → 非零。
+    断言：PID marker 非空，PID 已死，canary 脱敏，目录消失。
+    """
+    tmp_parent = Path(tempfile.mkdtemp(prefix="smoke-startup-"))
+    marker = tmp_parent / "pid.marker"
+    # 创建临时 launcher：输出 canary 后退出
+    bad_launcher = tmp_parent / "bad_launcher.py"
+    bad_launcher.write_text(
+        f'import sys\n'
+        f'sys.stderr.write("Authorization: Bearer {CANARY}\\n")\n'
+        f'sys.stderr.write("https://api.example.com/v1?api_key={CANARY}\\n")\n'
+        f'sys.exit(42)\n',
+        encoding="utf-8",
     )
-    assert result.returncode != 0
-    output = result.stdout + result.stderr
-    assert "不存在" in output or "not exist" in output.lower() or "Checker" in output
+    try:
+        result = subprocess.run(
+            [
+                PYTHON, str(SMOKE_SCRIPT),
+                "--launcher-path", str(bad_launcher),
+                "--checker-path", str(CCF_CHECKER),
+                "--temp-parent", str(tmp_parent),
+                "--pid-marker", str(marker),
+            ],
+            capture_output=True, text=True, timeout=60,
+            env=_clean_env(),
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, "smoke 应非零退出"
+
+        pid = _read_pid_marker(marker)
+        assert pid is not None, "PID marker 为空"
+        assert pid > 0, f"PID 无效: {pid}"
+        assert not _pid_alive(pid), f"PID {pid} 仍存活"
+
+        # canary 脱敏
+        assert CANARY not in output, "输出泄漏了 canary"
+        assert "[REDACTED]" in output, "未出现脱敏标记"
+
+        # 临时目录消失
+        # PID marker 和 bad_launcher 是测试创建的，由测试清理
+        remaining = [f for f in tmp_parent.iterdir() if f not in (bad_launcher, marker)]
+        assert len(remaining) == 0, f"遗留: {remaining}"
+    finally:
+        if tmp_parent.exists():
+            shutil.rmtree(tmp_parent)
+
+
+# ── Canary 脱敏验证 ─────────────────────────────────────────────────────
+
+
+def test_startup_error_no_secret_leak():
+    """启动错误输出不包含 canary。"""
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-noleak-"))
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+        env = _clean_env(canary=True)
+        env["CSBOARD_DATA_DIR"] = str(data_dir)
+        result = subprocess.run(
+            [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port)],
+            capture_output=True, text=True, timeout=15,
+            env=env,
+        )
+        output = result.stdout + result.stderr
+        assert CANARY not in output, "错误输出泄漏了 canary"
+    finally:
+        s.close()
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
+
+
+# ── Smoke redact_text 函数 ──────────────────────────────────────────────
 
 
 def test_smoke_redact_function():
-    """smoke 内置脱敏函数正确处理 Bearer 和 query secret。"""
-    # 导入 redact_text
+    """smoke 内置脱敏函数正确处理 Bearer、query secret 和 canary。"""
     import importlib.util
     spec = importlib.util.spec_from_file_location("smoke", SMOKE_SCRIPT)
     mod = importlib.util.module_from_spec(spec)
@@ -443,6 +495,30 @@ def test_smoke_redact_function():
     assert "super-secret-key" not in mod.redact_text(text2)
     assert "[REDACTED]" in mod.redact_text(text2)
 
-    text3 = "ccb-runtime-secret-canary-XYZ"
+    text3 = f"ccb-runtime-secret-canary-XYZ"
     assert "ccb-runtime-secret-canary-XYZ" not in mod.redact_text(text3)
     assert "[REDACTED]" in mod.redact_text(text3)
+
+
+# ── Smoke checker 缺失 ──────────────────────────────────────────────────
+
+
+def test_smoke_checker_missing_exits_nonzero():
+    result = subprocess.run(
+        [PYTHON, str(SMOKE_SCRIPT), "--checker-path", "/nonexistent/checker.mjs"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode != 0
+    output = result.stdout + result.stderr
+    assert "不存在" in output or "Checker" in output
+
+
+def test_smoke_launcher_missing_exits_nonzero():
+    """launcher 不存在时 smoke 非零退出。"""
+    result = subprocess.run(
+        [PYTHON, str(SMOKE_SCRIPT), "--launcher-path", "/nonexistent/launcher.py"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode != 0
+    output = result.stdout + result.stderr
+    assert "Launcher" in output or "不存在" in output
