@@ -575,3 +575,14 @@ a { color: var(--nt-primary-700); }
   .page { padding: 16px 14px 48px; }
   .topbar { padding: 10px 14px; }
 }
+
+/* ==========================================================================
+   Create Task page
+   ========================================================================== */
+.chars-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chip-label { font-family: var(--nt-font-display); font-size: 12.5px; font-weight: 600; color: var(--nt-text-secondary); margin: 0; }
+.input-sm { width: 88px; padding: 6px 10px; font-size: 13px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--nt-text-secondary); font-weight: 600; cursor: pointer; }
+.checkbox-row input { width: 16px; height: 16px; cursor: pointer; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.hint.error { color: var(--nt-danger); font-weight: 600; }
