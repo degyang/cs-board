@@ -43,9 +43,9 @@ const shots = [
   ['/assets', 'assets/preset.png'],
   ['/assets', 'assets/custom.png', '自定义风格'],
   ['/assets', 'assets/voices.png', '音色库'],
-  ['/tasks', 'tasks/queue-mixed.png'],
-  ['/tasks', 'tasks/queue-filtered.png', '失败'],
-  ['/tasks', 'tasks/queue-empty.png', '待执行'],
+  ['/', 'tasks/queue-mixed.png'],
+  ['/', 'tasks/queue-filtered.png', '失败'],
+  ['/', 'tasks/queue-empty.png', '待执行'],
 ]
 await fs.mkdir(path.join(evidence, 'settings'), { recursive: true })
 await fs.mkdir(path.join(evidence, 'assets'), { recursive: true })
@@ -59,6 +59,9 @@ async function assertShell() {
 }
 
 async function assertReady(route) {
+  const initialTaskResponse = route === '/'
+    ? page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/tasks', { timeout: 8_000 })
+    : null
   await page.goto(web + route, { waitUntil: 'domcontentloaded' })
   await assertShell()
   if (route.startsWith('/settings/')) {
@@ -67,10 +70,11 @@ async function assertReady(route) {
     if (await page.locator('.loading:visible, .spinner:visible').count()) fail(`loading remains visible on ${route}`)
     if (!await page.locator('h1').first().isVisible()) fail(`page title missing on ${route}`)
   }
-  if (route.startsWith('/tasks')) {
-    // Wait for task list to load (skeleton disappears or empty state appears)
-    await page.locator('.task-list, .empty-state, .error-card').first().waitFor({ timeout: 8_000 }).catch(() => {})
-    await page.waitForTimeout(200)
+  if (route === '/') {
+    // The queue is mounted at /; a /tasks navigation is a workbench route/404.
+    await page.locator('.task-list, .empty-state, .error-card').first().waitFor({ timeout: 8_000 })
+    if (!(await initialTaskResponse).ok()) fail(`initial task list returned ${(await initialTaskResponse).status()}`)
+    if (await page.locator('.loading:visible, .spinner:visible').count()) fail('task queue loading remains visible')
   }
 }
 
@@ -80,7 +84,19 @@ for (const [route, file, tab, scrollTo] of shots) {
   if (tab) {
     const tabButton = page.locator('[role="tab"]').filter({ hasText: tab }).first()
     if (await tabButton.count() !== 1) fail(`asset tab missing: ${tab}`)
+    const expectedStatus = file === 'tasks/queue-filtered.png' ? 'failed' : file === 'tasks/queue-empty.png' ? 'pending' : null
+    const taskResponse = expectedStatus
+      ? page.waitForResponse((response) => {
+          const url = new URL(response.url())
+          return url.pathname === '/api/v1/tasks' && url.searchParams.get('status') === expectedStatus
+        }, { timeout: 8_000 })
+      : null
     await tabButton.evaluate((element) => (element).click())
+    if (taskResponse) {
+      const response = await taskResponse
+      if (!response.ok()) fail(`task filter ${expectedStatus} returned ${response.status()}`)
+      if (!await tabButton.evaluate((element) => element.getAttribute('aria-selected') === 'true')) fail(`task filter ${expectedStatus} is not active`)
+    }
     await page.locator('.loading, .spinner').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {})
   }
   // Scroll to a specific section heading if requested (e.g. "Secret 管理")
@@ -106,11 +122,17 @@ for (const [route, file, tab, scrollTo] of shots) {
     if (!await page.getByText('Secret 管理', { exact: true }).isVisible()) fail('Secret section not visible in secret screenshot')
     const secretInputs = page.locator('input[type="password"]')
     if (await secretInputs.count() === 0) fail('no password inputs found in Secret section')
+    for (let index = 0; index < await secretInputs.count(); index += 1) {
+      if (await secretInputs.nth(index).inputValue() !== '') fail('Secret password input is not empty')
+    }
+    if (/(sk-[A-Za-z0-9]|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9])/i.test(await page.locator('body').innerText())) fail('Secret screenshot contains a key-like plaintext value')
   }
   if (file === 'settings/models-edit.png' && !await page.getByText('编辑服务', { exact: true }).isVisible()) fail('edit form title missing')
   if (file === 'tasks/queue-mixed.png') {
-    if (!await page.getByText('任务队列', { exact: true }).isVisible()) fail('task queue title missing')
+    if (!await page.getByRole('heading', { name: '任务队列', exact: true }).isVisible()) fail('task queue title missing')
+    if (!await page.getByText('暂无任务', { exact: true }).isVisible() && !await page.locator('.task-card').first().isVisible()) fail('task queue has no terminal list state')
   }
+  if (file === 'tasks/queue-filtered.png' && !await page.getByRole('tab', { name: '失败', exact: true }).evaluate((element) => element.getAttribute('aria-selected') === 'true')) fail('failed tab is not active')
   if (file === 'tasks/queue-empty.png') {
     const emptyMsg = page.getByText('暂无任务')
     const filteredMsg = page.getByText('当前筛选下没有任务')

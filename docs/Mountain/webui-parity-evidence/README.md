@@ -20,4 +20,10 @@
 | `tasks/queue-filtered.png` | `ProjectsPage.tsx` 的状态过滤 | `web-v2/src/pages/TasksPage.tsx` | `GET /api/v1/tasks?status=failed` | filtered success、filtered empty | 点击"失败"Tab 截图；如无失败任务则显示 filtered-empty。 |
 | `tasks/queue-empty.png` | `ProjectsPage.tsx` 的空状态 | `web-v2/src/pages/TasksPage.tsx` | `GET /api/v1/tasks?status=pending` | filtered-empty、清除筛选 | 点击"待执行"Tab 截图；真实后端通常无 pending 任务。 |
 
+### 任务队列真实证据（2026-09-02）
+
+截图前通过公开 API 请求 `GET /api/v1/tasks?limit=100` 读取当前后端：**0 个任务**，状态计数为 `running=0`、`failed=0`、`succeeded=0`、`pending=0`、`cancelled=0`。因此 `queue-mixed.png` 如实显示全量空状态；`queue-filtered.png` 对应真实 `GET /api/v1/tasks?limit=20&status=failed` 的筛选空状态；`queue-empty.png` 对应真实 `GET /api/v1/tasks?limit=20&status=pending` 的筛选空状态。脚本在筛选图前断言 API 响应成功、status query 正确且 Tab active，未写入任何 Task 数据。
+
+本轮新增的 `settings/models-secret.png` 固定使用 `openai-compatible-text`，将“Secret 管理”滚动至视口中央；脚本断言 password 输入为空并拒绝 key-like 明文。
+
 加载、空、错误和提交态由页面代码及现有 Vitest 覆盖；截图记录的是真实后端的正常可达状态。没有 fixture、mock 或 fallback 数据参与截图。
