@@ -156,3 +156,56 @@ rg -n "Project|project_id|/projects" web-v2/src
 - 三张截图需在有真实后端的环境中运行截图脚本生成，当前仅完成了入口代码。
 - `check-api-contract.mjs` 需要运行中的后端，未在本次 dry-run 中执行。
 - "待执行" Tab 的 API 行为（是否有 pending 任务）取决于后端实际数据。
+
+## 7. 主审核者结论与继续执行指令
+
+审核状态：**未完成，不通过。继续当前任务，不进入新建任务页。**
+
+原因均可机械复现：
+
+1. `docs/Mountain/webui-parity-evidence/tasks/` 只有 `.gitkeep`，三张要求的 Task Queue 截图全部不存在。
+2. 前置要求的 `settings/models-secret.png` 不存在。
+3. 报告明确写明真实 contract checker 未运行。
+4. 报告 Commit 写“待提交”，实际实现 commit 是 `4358f7b`，报告没有在提交后收口。
+5. 截图脚本使用 `/tasks`，但当前队列真实路由是 `/`；`/tasks` 会落入 404 页面。脚本若实际运行，`queue-mixed` 的“任务队列”断言必然失败。这进一步证明截图门禁没有执行。
+6. 截图脚本只是为 filtered/empty 点击 Tab，没有断言 active Tab、请求 query、响应完成及目标页面状态；不得用错误路由或旧页面生成证据。
+
+CCF 只完成下面动作：
+
+### 7.1 修正并真实执行截图
+
+- 将三条 Task Queue 截图路由从 `/tasks` 改为 `/`。
+- 截图前等待 Task API 响应和 loading 消失。
+- `queue-filtered` 点击“失败”后，断言 active Tab 为失败，并断言本次浏览器请求包含 `status=failed`。
+- `queue-empty` 点击真实可为空的状态后，断言 active Tab 和空状态同时可见。
+- `models-secret` 截图前滚动“Secret 管理”到视口中央；断言 password input value 为空，页面文本不匹配常见明文 Key 前缀。
+- 使用当前分支 Vite 和真实 8000 后端实际执行 evidence 命令；不得只运行 `node -c`。
+
+### 7.2 补齐真实交付物
+
+提交至少包含：
+
+```text
+A docs/Mountain/webui-parity-evidence/settings/models-secret.png
+A docs/Mountain/webui-parity-evidence/tasks/queue-mixed.png
+A docs/Mountain/webui-parity-evidence/tasks/queue-filtered.png
+A docs/Mountain/webui-parity-evidence/tasks/queue-empty.png
+M docs/Mountain/webui-parity-evidence/README.md
+M web-v2/scripts/capture-parity-evidence.mjs
+```
+
+若真实后端没有 mixed 状态，`queue-mixed.png` 可以只展示当前真实任务，但 README 必须如实写明状态构成；禁止修改磁盘 JSON 伪造。
+
+### 7.3 重跑门禁并收口报告
+
+必须实际运行：
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+WEBUI_BASE=http://127.0.0.1:<当前分支端口> MOUNTAIN_API_BASE=http://127.0.0.1:8000 npm --prefix web-v2 run evidence
+git diff --check
+```
+
+报告更新为实际 commit，并列出新增四张截图的 SHA-256、截图中真实 Task 数量/状态、真实 checker 输出。只要报告仍出现“待运行”“需后续生成”“dry-run”，即视为未完成，不得再次提交完成声明。
