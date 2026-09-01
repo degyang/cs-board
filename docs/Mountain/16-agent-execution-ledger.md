@@ -1093,6 +1093,62 @@ docs(mountain): report runtime storage status
 
 先本地提交，不推送。执行者只报告门禁结果，不得自行宣布审核通过。
 
+## 3L. CCF Storage 行为证据与语义收口
+
+### 3L.1 指令编号与审核结论
+
+```text
+instruction: CCF-STORAGE-STATUS-08
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed implementation: 1539e95 feat(mountain-web): align runtime storage readonly status
+reviewed report: c8e274d docs(mountain): report runtime storage status
+result: rejected narrowly; UI direction is correct, race test is inert and test output has act warnings
+```
+
+审核者复现 build、contract checker `48/48`、全量 `270/270` 和 fixture checker；但全量输出含两条 `The current testing environment is not configured to support act(...)` warning。生产页面仅做窄语义修正，不扩大其他设置页。
+
+### 3L.2 唯一任务
+
+1. 将三类逻辑存储卡文案从“存储目录正常，可读写”改为与 DTO 一致的中性语义，例如“逻辑存储已就绪”；`*_available=false` 表达“尚不可用”。三类 boolean 不证明单目录可读写，且不能与整体 `writable=false` 矛盾。不得展示“请检查运行环境”等后端未返回的修复建议。
+2. 重写名为 `second request wins when first arrives after second` 的测试。当前测试只 unmount 第一实例，未发起第二请求、未 resolve 第二 Promise，也未断言新页面，必须删除这种假覆盖。
+3. 新竞态测试必须真实产生两个页面生命周期或两个请求：第一实例请求悬挂后卸载/路由重进，第二实例发起并完成请求，页面先显示第二响应；随后解析第一响应，断言 DOM 仍保持第二响应且不出现第一响应的 cleanup policy/error/state。两个 Promise 都必须实际 resolve，两个 API 调用都必须断言。
+4. 修复 retry 测试的两条 act warning。使用 Testing Library 的用户交互与 `waitFor` 正确等待，不得嵌套不必要的 `act`，不得屏蔽 `console.error` 或 warning。
+5. 增加测试保证当 `writable=false` 而三类 available=true 时，三类只显示“已就绪/可用”类中性状态，不出现“可读写”；整体卡单独显示不可用和后端错误。
+6. 不修改 API DTO、checker、其他页面或后端，不降低既有 270 个测试覆盖。
+
+### 3L.3 门禁、提交和报告
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+! rg -n "localStorage|sessionStorage|mock|fixture" web-v2/src/pages/StoragePage.tsx
+git diff --check
+git status --short
+```
+
+要求全量输出 0 act warning、0 Router warning、0 unhandled rejection。实现提交：
+
+```text
+fix(mountain-web): close storage status behavior evidence
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-storage-status-08-report.md
+```
+
+报告列出真实双请求时序、两个 Promise 的解析顺序与 DOM 断言、act warning 原始结果、语义修正、门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report storage status correction
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
