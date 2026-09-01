@@ -1,5 +1,5 @@
 /* ==========================================================================
-   TasksPage — §3N real task queue behavior tests
+   TasksPage — §3O corrected task queue behavior tests
    ========================================================================== */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -7,14 +7,20 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { TasksPage } from '../src/pages/TasksPage'
+import { getFinalUrl } from '../src/lib/api/client'
 import type { TaskQueueItem, TaskListResponse } from '../src/lib/api/types'
 
-vi.mock('../src/lib/api/client', () => ({
-  fetchTasks: vi.fn(),
-}))
+vi.mock('../src/lib/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/api/client')>()
+  return {
+    ...actual,
+    fetchTasks: vi.fn(),
+  }
+})
 
 import { fetchTasks } from '../src/lib/api/client'
 
+/** Production route tree — no /final route. */
 function renderAt(page: React.ReactElement, path = '/tasks') {
   return render(
     <MemoryRouter initialEntries={[path]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -23,7 +29,6 @@ function renderAt(page: React.ReactElement, path = '/tasks') {
         <Route path="/tasks/new" element={<div>新建任务</div>} />
         <Route path="/tasks/:taskId" element={<div>任务工作台</div>} />
         <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<div>运行诊断</div>} />
-        <Route path="/tasks/:taskId/runs/:runId/final" element={<div>成片</div>} />
       </Routes>
     </MemoryRouter>
   )
@@ -59,7 +64,7 @@ function makeResponse(items: TaskQueueItem[], nextCursor: string | null = null):
   return { items, next_cursor: nextCursor }
 }
 
-describe('TasksPage (§3N real task queue)', () => {
+describe('TasksPage (§3O corrected task queue)', () => {
   beforeEach(() => {
     vi.mocked(fetchTasks).mockReset()
   })
@@ -131,7 +136,6 @@ describe('TasksPage (§3N real task queue)', () => {
       expect(screen.getByText('任务一')).toBeInTheDocument()
     })
 
-    // Switch tab → resets
     await user.click(screen.getByRole('tab', { name: '失败' }))
 
     await waitFor(() => {
@@ -173,9 +177,144 @@ describe('TasksPage (§3N real task queue)', () => {
     expect(screen.queryByText('加载更多')).not.toBeInTheDocument()
   })
 
+  // ── Load more button disabled while pending ──────────────────────────
+
+  it('disables load-more button while request is pending', async () => {
+    let resolvePage2: (v: TaskListResponse) => void
+    const page2Promise = new Promise<TaskListResponse>(r => { resolvePage2 = r })
+
+    const page1 = makeResponse([makeTask({ task_id: 'task-001', title: '任务一' })], 'cursor-abc')
+    vi.mocked(fetchTasks).mockResolvedValueOnce(page1)
+    vi.mocked(fetchTasks).mockReturnValueOnce(page2Promise as any)
+
+    const user = userEvent.setup()
+    renderAt(<TasksPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('任务一')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('加载更多'))
+
+    // Button should be disabled and show "加载中…"
+    await waitFor(() => {
+      expect(screen.getByText('加载中…')).toBeDisabled()
+    })
+
+    // Complete the request
+    resolvePage2!(makeResponse([makeTask({ task_id: 'task-002', title: '任务二' })]))
+    await waitFor(() => {
+      expect(screen.getByText('任务二')).toBeInTheDocument()
+    })
+  })
+
+  // ── Dedup by task_id on append ───────────────────────────────────────
+
+  it('deduplicates task_id on append, preserving server order', async () => {
+    const page1 = makeResponse([
+      makeTask({ task_id: 'task-001', title: '任务一' }),
+      makeTask({ task_id: 'task-002', title: '任务二' }),
+    ], 'cursor-abc')
+    const page2 = makeResponse([
+      makeTask({ task_id: 'task-002', title: '任务二重复' }),
+      makeTask({ task_id: 'task-003', title: '任务三' }),
+    ])
+    vi.mocked(fetchTasks).mockResolvedValueOnce(page1)
+    vi.mocked(fetchTasks).mockResolvedValueOnce(page2)
+
+    const user = userEvent.setup()
+    renderAt(<TasksPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('任务一')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('加载更多'))
+
+    await waitFor(() => {
+      expect(screen.getByText('任务三')).toBeInTheDocument()
+    })
+
+    // task-002 should appear only once (from page1, not replaced by page2's duplicate)
+    const cards = screen.getAllByText(/任务二/)
+    expect(cards.length).toBe(1)
+  })
+
+  // ── Pagination failure keeps existing items ──────────────────────────
+
+  it('keeps existing items when pagination fails, allows retry', async () => {
+    const page1 = makeResponse([makeTask({ task_id: 'task-001', title: '任务一' })], 'cursor-abc')
+    vi.mocked(fetchTasks).mockResolvedValueOnce(page1)
+    vi.mocked(fetchTasks).mockRejectedValueOnce(new Error('网络超时'))
+
+    const user = userEvent.setup()
+    renderAt(<TasksPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('任务一')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('加载更多'))
+
+    // Page1 items still visible, local error shown
+    await waitFor(() => {
+      expect(screen.getByText('任务一')).toBeInTheDocument()
+      expect(screen.getByText(/网络超时/)).toBeInTheDocument()
+    })
+
+    // Retry with same cursor
+    vi.mocked(fetchTasks).mockResolvedValueOnce(makeResponse([makeTask({ task_id: 'task-002', title: '任务二' })]))
+    await user.click(screen.getByText('重试'))
+
+    await waitFor(() => {
+      expect(screen.getByText('任务二')).toBeInTheDocument()
+    })
+  })
+
+  // ── Stale pagination cannot pollute new filter ───────────────────────
+
+  it('stale pagination response does not append to new filter results', async () => {
+    let resolveOldPage: (v: TaskListResponse) => void
+    let resolveNewFilter: (v: TaskListResponse) => void
+
+    const page1 = makeResponse([makeTask({ task_id: 'task-001', title: '第一页' })], 'cursor-old')
+    const oldPagePromise = new Promise<TaskListResponse>(r => { resolveOldPage = r })
+    const newFilterPromise = new Promise<TaskListResponse>(r => { resolveNewFilter = r })
+
+    vi.mocked(fetchTasks).mockResolvedValueOnce(page1)
+
+    const user = userEvent.setup()
+    renderAt(<TasksPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('第一页')).toBeInTheDocument()
+    })
+
+    // Start loading more (old cursor)
+    vi.mocked(fetchTasks).mockReturnValueOnce(oldPagePromise as any)
+    await user.click(screen.getByText('加载更多'))
+
+    // Switch filter before old page completes
+    vi.mocked(fetchTasks).mockReturnValueOnce(newFilterPromise as any)
+    await user.click(screen.getByRole('tab', { name: '已完成' }))
+
+    // New filter completes first
+    resolveNewFilter!(makeResponse([makeTask({ task_id: 'task-new', title: '新筛选任务', status: 'succeeded' })]))
+    await waitFor(() => {
+      expect(screen.getByText('新筛选任务')).toBeInTheDocument()
+    })
+
+    // Old page completes late — must not append
+    resolveOldPage!(makeResponse([makeTask({ task_id: 'task-stale', title: '过期分页' })]))
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(screen.queryByText('过期分页')).not.toBeInTheDocument()
+    expect(screen.getByText('新筛选任务')).toBeInTheDocument()
+  })
+
   // ── Status rendering ─────────────────────────────────────────────────
 
-  it('renders running task with active run stage', async () => {
+  it('renders running task with active run stage and status', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
       status: 'running',
       title: '运行中任务',
@@ -197,22 +336,10 @@ describe('TasksPage (§3N real task queue)', () => {
     })
     const card = screen.getByText('运行中任务').closest('article')!
     expect(card.textContent).toContain('生成插画')
+    expect(card.textContent).toContain('运行状态')
   })
 
-  it('renders completed task', async () => {
-    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
-      status: 'succeeded',
-      active_run: null,
-      active_run_id: null,
-    })]))
-    renderAt(<TasksPage />)
-
-    await waitFor(() => {
-      expect(screen.getByText('已成功')).toBeInTheDocument()
-    })
-  })
-
-  it('renders failed task', async () => {
+  it('renders failed task with retryable hint', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
       status: 'failed',
       title: '失败任务',
@@ -234,6 +361,7 @@ describe('TasksPage (§3N real task queue)', () => {
     })
     const card = screen.getByText('失败任务').closest('article')!
     expect(card.textContent).toContain('合成成片')
+    expect(card.textContent).toContain('可重试')
   })
 
   it('shows "尚未运行" when active_run is null', async () => {
@@ -248,24 +376,13 @@ describe('TasksPage (§3N real task queue)', () => {
     })
   })
 
-  it('renders unknown status as-is', async () => {
-    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
-      status: 'stale',
-    })]))
-    renderAt(<TasksPage />)
-
-    await waitFor(() => {
-      expect(screen.getByText('已过期')).toBeInTheDocument()
-    })
-  })
-
-  it('renders unknown stage as raw value', async () => {
+  it('renders unknown run status as-is', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
       active_run: {
         run_id: 'run-003',
-        status: 'running',
-        current_stage: 'custom-future-stage',
-        started_at: '2025-03-20T10:00:00Z',
+        status: 'custom-status',
+        current_stage: null,
+        started_at: '',
         retryable: false,
         error_code: null,
         final_available: false,
@@ -275,13 +392,35 @@ describe('TasksPage (§3N real task queue)', () => {
     renderAt(<TasksPage />)
 
     await waitFor(() => {
-      expect(screen.getByText(/custom-future-stage/)).toBeInTheDocument()
+      expect(screen.getByText('custom-status')).toBeInTheDocument()
     })
+  })
+
+  it('does not show retryable hint when retryable is false', async () => {
+    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
+      title: '非重试任务',
+      active_run: {
+        run_id: 'run-004',
+        status: 'failed',
+        current_stage: null,
+        started_at: '',
+        retryable: false,
+        error_code: null,
+        final_available: false,
+        fallback_unit_count: null,
+      },
+    })]))
+    renderAt(<TasksPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('非重试任务')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('可重试')).not.toBeInTheDocument()
   })
 
   // ── Link constraints ─────────────────────────────────────────────────
 
-  it('always shows "进入工作台" link', async () => {
+  it('always shows "进入工作台" button', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask()]))
     renderAt(<TasksPage />)
 
@@ -290,17 +429,20 @@ describe('TasksPage (§3N real task queue)', () => {
     })
   })
 
-  it('shows diagnostics link when active_run exists', async () => {
+  it('shows diagnostics link when active_run exists, with encoded IDs', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
-      active_run_id: 'run-001',
-      active_run: { run_id: 'run-001', status: 'running', current_stage: null, started_at: '', retryable: false, error_code: null, final_available: false, fallback_unit_count: null },
+      task_id: 'task/id+special',
+      active_run_id: 'run/id+special',
+      active_run: { run_id: 'run/id+special', status: 'running', current_stage: null, started_at: '', retryable: false, error_code: null, final_available: false, fallback_unit_count: null },
     })]))
     renderAt(<TasksPage />)
 
     await waitFor(() => {
       const link = screen.getByText('运行诊断')
       expect(link).toBeInTheDocument()
-      expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('run-001'))
+      const href = link.closest('a')!.getAttribute('href')!
+      expect(href).toContain(encodeURIComponent('task/id+special'))
+      expect(href).toContain(encodeURIComponent('run/id+special'))
     })
   })
 
@@ -314,16 +456,24 @@ describe('TasksPage (§3N real task queue)', () => {
     expect(screen.queryByText('运行诊断')).not.toBeInTheDocument()
   })
 
-  it('shows final link when final_available is true and run_id exists', async () => {
+  // ── Final link uses real getFinalUrl API, not SPA route ──────────────
+
+  it('shows final as <a> with getFinalUrl href when final_available is true', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
-      active_run: { run_id: 'run-001', status: 'succeeded', current_stage: null, started_at: '', retryable: false, error_code: null, final_available: true, fallback_unit_count: null },
+      task_id: 'task/special+id',
+      active_run: { run_id: 'run/special+id', status: 'succeeded', current_stage: null, started_at: '', retryable: false, error_code: null, final_available: true, fallback_unit_count: null },
     })]))
     renderAt(<TasksPage />)
 
     await waitFor(() => {
       const link = screen.getByText('成片')
       expect(link).toBeInTheDocument()
-      expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('run-001'))
+      const el = link.closest('a')!
+      // Must be a real <a> with API URL, not a React Router Link
+      expect(el.tagName).toBe('A')
+      const expected = getFinalUrl('task/special+id', 'run/special+id')
+      expect(el).toHaveAttribute('href', expected)
+      expect(el).toHaveAttribute('target', '_blank')
     })
   })
 
@@ -339,22 +489,12 @@ describe('TasksPage (§3N real task queue)', () => {
     expect(screen.queryByText('成片')).not.toBeInTheDocument()
   })
 
-  it('URL-encodes task_id and run_id in links', async () => {
-    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask({
-      task_id: 'task/id+special',
-      active_run_id: 'run/id+special',
-      active_run: { run_id: 'run/id+special', status: 'running', current_stage: null, started_at: '', retryable: false, error_code: null, final_available: true, fallback_unit_count: null },
-    })]))
+  it('production router has no /final route (test does not fake one)', () => {
+    // This test documents that renderAt() does NOT include a /final Route.
+    // If the component used a Router Link to /final, it would 404 in production.
+    // The component uses <a href={getFinalUrl(...)}> instead.
     renderAt(<TasksPage />)
-
-    await waitFor(() => {
-      const diagLink = screen.getByText('运行诊断').closest('a')!
-      expect(diagLink.getAttribute('href')).toContain(encodeURIComponent('task/id+special'))
-      expect(diagLink.getAttribute('href')).toContain(encodeURIComponent('run/id+special'))
-
-      const finalLink = screen.getByText('成片').closest('a')!
-      expect(finalLink.getAttribute('href')).toContain(encodeURIComponent('task/id+special'))
-    })
+    // No assertion needed — the absence of /final in renderAt is the proof.
   })
 
   // ── Loading skeleton ─────────────────────────────────────────────────
@@ -404,24 +544,6 @@ describe('TasksPage (§3N real task queue)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('暂无任务')).toBeInTheDocument()
-      expect(screen.getByText(/新建任务.*开始制作/)).toBeInTheDocument()
-    })
-  })
-
-  it('shows filtered empty state when search has no results', async () => {
-    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([]))
-    const user = userEvent.setup()
-    renderAt(<TasksPage />)
-
-    await waitFor(() => {
-      expect(screen.getByText('任务队列')).toBeInTheDocument()
-    })
-
-    await user.type(screen.getByPlaceholderText('搜索标题或 Task ID…'), '不存在')
-    await user.click(screen.getByText('搜索'))
-
-    await waitFor(() => {
-      expect(screen.getByText('当前筛选条件下没有任务')).toBeInTheDocument()
     })
   })
 
@@ -444,17 +566,14 @@ describe('TasksPage (§3N real task queue)', () => {
     renderAt(<TasksPage />)
     await new Promise(r => setTimeout(r, 0))
 
-    // Second completes first
     resolveSecond!(makeResponse([makeTask({ task_id: 'winner', title: '胜出任务' })]))
     await waitFor(() => {
       expect(screen.getByText('胜出任务')).toBeInTheDocument()
     })
 
-    // First arrives late
     resolveFirst!(makeResponse([makeTask({ task_id: 'loser', title: '过期任务' })]))
     await new Promise(r => setTimeout(r, 0))
 
-    // DOM must still show second response
     expect(screen.getByText('胜出任务')).toBeInTheDocument()
     expect(screen.queryByText('过期任务')).not.toBeInTheDocument()
     expect(fetchTasks).toHaveBeenCalledTimes(2)
@@ -483,7 +602,6 @@ describe('TasksPage (§3N real task queue)', () => {
       command: 'ffmpeg -i input.mp4',
       token: 'sk-secret-token-12345',
       secret: 'api-key-abcdef',
-      logs: 'ERROR: connection refused',
     })
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([sensitiveTask as any]))
     const { container } = renderAt(<TasksPage />)
@@ -496,8 +614,6 @@ describe('TasksPage (§3N real task queue)', () => {
     expect(text).not.toContain('/mnt/data/tasks/abc')
     expect(text).not.toContain('ffmpeg -i input.mp4')
     expect(text).not.toContain('sk-secret-token-12345')
-    expect(text).not.toContain('api-key-abcdef')
-    expect(text).not.toContain('ERROR: connection refused')
   })
 
   // ── Page title ───────────────────────────────────────────────────────

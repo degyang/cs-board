@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { fetchTasks } from '../lib/api/client'
+import { fetchTasks, getFinalUrl } from '../lib/api/client'
 import { formatTime, shortId } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { STAGE_NAMES } from '../lib/api/types'
@@ -21,6 +21,30 @@ const STATUS_TABS = [
 function stageLabel(stage: string | null | undefined): string {
   if (!stage) return ''
   return STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage
+}
+
+function runStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    running: '运行中',
+    succeeded: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+    pending: '待执行',
+  }
+  return map[status] ?? status
+}
+
+/** Encode task/run IDs for URL path segments. */
+function encodeId(id: string): string {
+  return encodeURIComponent(id)
+}
+
+function taskWorkbenchPath(taskId: string): string {
+  return `/tasks/${encodeId(taskId)}`
+}
+
+function runDiagnosticsPath(taskId: string, runId: string): string {
+  return `/tasks/${encodeId(taskId)}/runs/${encodeId(runId)}/diagnostics`
 }
 
 function TasksSkeleton() {
@@ -44,30 +68,65 @@ export function TasksPage() {
   const [items, setItems] = useState<TaskQueueItem[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pageError, setPageError] = useState<string | null>(null)
   const mounted = useRef(false)
-  const requestId = useRef(0)
+  const generation = useRef(0)
+  const pendingCursor = useRef<string | null>(null)
 
   const load = useCallback(async (cursor?: string, append = false) => {
-    const currentRequest = requestId.current
-    if (!append) setLoading(true)
-    setError(null)
+    // Prevent duplicate cursor requests
+    if (append && cursor && pendingCursor.current === cursor) return
+    if (append) pendingCursor.current = cursor ?? null
+
+    const gen = generation.current
+    if (append) {
+      setLoadingMore(true)
+      setPageError(null)
+    } else {
+      setLoading(true)
+      setError(null)
+      setPageError(null)
+    }
     try {
       const params: Record<string, string | number> = { limit: 20 }
       if (status !== 'all') params.status = status
       if (appliedSearch) params.q = appliedSearch
       if (cursor) params.cursor = cursor
       const data: TaskListResponse = await fetchTasks(params as any)
-      if (mounted.current && currentRequest === requestId.current) {
-        setItems(prev => append ? [...prev, ...data.items] : data.items)
+      if (mounted.current && gen === generation.current) {
+        if (append) {
+          // Dedup by task_id, preserve server order
+          setItems(prev => {
+            const seen = new Set(prev.map(t => t.task_id))
+            const newItems = data.items.filter(t => !seen.has(t.task_id))
+            return [...prev, ...newItems]
+          })
+        } else {
+          setItems(data.items)
+        }
         setNextCursor(data.next_cursor)
       }
     } catch (cause) {
-      if (mounted.current && currentRequest === requestId.current) {
-        setError(cause instanceof Error ? cause.message : '加载任务列表失败')
+      if (mounted.current && gen === generation.current) {
+        const msg = cause instanceof Error ? cause.message : '加载任务列表失败'
+        if (append) {
+          // Pagination failure: keep existing items, show local error
+          setPageError(msg)
+        } else {
+          setError(msg)
+        }
       }
     } finally {
-      if (mounted.current && currentRequest === requestId.current) setLoading(false)
+      if (mounted.current && gen === generation.current) {
+        if (append) {
+          setLoadingMore(false)
+          pendingCursor.current = null
+        } else {
+          setLoading(false)
+        }
+      }
     }
   }, [status, appliedSearch])
 
@@ -78,9 +137,10 @@ export function TasksPage() {
       isInitialMount.current = false
       return
     }
-    requestId.current += 1
+    generation.current += 1
     setItems([])
     setNextCursor(null)
+    pendingCursor.current = null
     void load()
   }, [load])
 
@@ -90,7 +150,7 @@ export function TasksPage() {
     void load()
     return () => {
       mounted.current = false
-      requestId.current += 1
+      generation.current += 1
     }
   }, [])
 
@@ -100,7 +160,7 @@ export function TasksPage() {
   }
 
   const handleLoadMore = () => {
-    if (nextCursor) void load(nextCursor, true)
+    if (nextCursor && !loadingMore) void load(nextCursor, true)
   }
 
   return (
@@ -164,12 +224,29 @@ export function TasksPage() {
       {!loading && !error && items.length > 0 && (
         <div className="task-list">
           {items.map(t => (
-            <TaskCard key={t.task_id} task={t} onOpen={() => navigate(`/tasks/${t.task_id}`)} />
+            <TaskCard
+              key={t.task_id}
+              task={t}
+              onOpen={() => navigate(taskWorkbenchPath(t.task_id))}
+            />
           ))}
           {nextCursor && (
-            <button className="btn btn-secondary" onClick={handleLoadMore} style={{ marginTop: 12 }}>
-              加载更多
-            </button>
+            <div className="load-more-row">
+              <button
+                className="btn btn-secondary"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                style={{ marginTop: 12 }}
+              >
+                {loadingMore ? '加载中…' : '加载更多'}
+              </button>
+              {pageError && (
+                <p className="page-error" role="alert">
+                  加载下一页失败：{pageError}
+                  <button className="btn btn-link" onClick={handleLoadMore}>重试</button>
+                </p>
+              )}
+            </div>
           )}
           {!nextCursor && items.length > 0 && (
             <p className="list-end">已显示全部任务</p>
@@ -183,7 +260,9 @@ export function TasksPage() {
 function TaskCard({ task: t, onOpen }: { task: TaskQueueItem; onOpen: () => void }) {
   const hasRun = !!t.active_run
   const runId = t.active_run?.run_id
+  const runStatus = t.active_run?.status
   const currentStage = t.active_run?.current_stage
+  const retryable = t.active_run?.retryable ?? false
   const finalAvailable = t.active_run?.final_available ?? false
 
   return (
@@ -195,8 +274,16 @@ function TaskCard({ task: t, onOpen }: { task: TaskQueueItem; onOpen: () => void
       </div>
       <div className="task-meta">
         <span className="m">ID: {shortId(t.task_id)}</span>
+        {hasRun && runStatus && (
+          <span className="m">
+            运行状态：<StatusBadge status={runStatus} label={runStatusLabel(runStatus)} />
+          </span>
+        )}
         {hasRun && currentStage && (
           <span className="m">当前阶段：{stageLabel(currentStage)}</span>
+        )}
+        {hasRun && retryable && (
+          <span className="m task-meta--hint">可重试</span>
         )}
         {!hasRun && <span className="m task-meta--muted">尚未运行</span>}
       </div>
@@ -206,19 +293,21 @@ function TaskCard({ task: t, onOpen }: { task: TaskQueueItem; onOpen: () => void
         </button>
         {hasRun && runId && (
           <Link
-            to={`/tasks/${encodeURIComponent(t.task_id)}/runs/${encodeURIComponent(runId)}/diagnostics`}
+            to={runDiagnosticsPath(t.task_id, runId)}
             className="btn btn-ghost btn-sm"
           >
             运行诊断
           </Link>
         )}
         {finalAvailable && runId && (
-          <Link
-            to={`/tasks/${encodeURIComponent(t.task_id)}/runs/${encodeURIComponent(runId)}/final`}
+          <a
+            href={getFinalUrl(t.task_id, runId)}
             className="btn btn-ghost btn-sm"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             成片
-          </Link>
+          </a>
         )}
       </div>
     </article>
