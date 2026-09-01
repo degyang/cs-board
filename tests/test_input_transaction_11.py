@@ -597,7 +597,8 @@ def test_same_task_lock_serializes(tmp_path: Path):
     t_b.start()
 
     assert b_started.wait(timeout=15), "B 未在超时内开始真实 POST"
-    assert not b_entered.is_set(), "B 在 A 持有锁期间进入了 checkpoint，串行化失败"
+    # 有界观察：等待 1 秒确认 B 被锁阻塞（不得用 is_set() 代替等待窗口）
+    assert not b_entered.wait(timeout=1.0), "B 在 A 持有锁期间进入了 checkpoint，串行化失败"
 
     # 释放 A
     a_release.set()
@@ -695,7 +696,8 @@ def test_concurrent_ref_preservation(tmp_path: Path):
     t_b.start()
 
     assert b_started.wait(timeout=15), "B 未在超时内开始真实 POST"
-    assert not b_entered.is_set(), "B 在 A 持有锁期间进入了 checkpoint"
+    # 有界观察：等待 1 秒确认 B 被锁阻塞（不得用 is_set() 代替等待窗口）
+    assert not b_entered.wait(timeout=1.0), "B 在 A 持有锁期间进入了 checkpoint"
 
     # 释放 A
     a_release.set()
