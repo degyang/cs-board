@@ -123,8 +123,8 @@ def mountain_settings_router(
             "capability": svc.capability,
             "adapter_type": svc.adapter_type or "",
             "endpoint": svc.endpoint,
-            "model": (svc.metadata or {}).get("model"),
-            "timeout": svc.timeout,
+            "model": svc.model or None,
+            "timeout": svc.config.get("timeout"),
             "availability": {
                 "available": probe.get("available", False),
                 "checked_at": probe.get("checked_at"),
