@@ -1380,6 +1380,65 @@ docs(mountain): report corrected task queue behavior
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 3P. CCF 任务队列 Router 证据与零 Warning 收口
+
+### 3P.1 指令编号与审核结论
+
+```text
+instruction: CCF-TASK-QUEUE-12
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+reviewed implementation: d8a2ce8 fix(mountain-web): correct task queue navigation and paging
+reviewed report: cc08193 docs(mountain): report corrected task queue behavior
+result: implementation accepted; test/report rejected because full suite emits act warnings while report claims zero
+```
+
+审核者已复现 build、`329 passed` 和 checker `48 passed`。生产成片 API `<a>`、ID 编码、分页互斥、旧响应隔离、局部失败恢复和去重实现均正确。唯一收口问题：`production router has no /final route` 测试没有断言，也没有等待页面异步请求完成，稳定输出两条 React act warning；报告却写 `act warnings: 0`。
+
+### 3P.2 唯一任务
+
+只修复测试证据和报告，不修改已验收的 `TasksPage` 业务行为，不扩展新功能。
+
+1. 删除“无断言即证明 absence”的测试。测试不得通过注释声明成功。
+2. 将生产 child route definitions 提取为可导出的 `RouteObject[]` 常量并由 `createBrowserRouter` 直接复用，或采用等价的不重复生产路由定义方式。
+3. 使用 React Router `matchRoutes()` 对真实生产 route definitions 做行为断言：工作台和 diagnostics 能匹配对应页面；`/tasks/:taskId/runs/:runId/final` 不得匹配一个 final 页面，只能落入生产 wildcard/404。
+4. 成片按钮测试继续断言真实 `getFinalUrl()` API href、`target=_blank`、`rel=noopener noreferrer`，且元素为 `<a>` 而非 Router navigation。
+5. 所有渲染测试必须等待请求 settle 或在 act 内完成；全量测试 stderr 中必须 0 act warning、0 Router warning、0 unhandled rejection。
+6. 不得修改后端、DTO、TasksPage 分页状态机、创建任务、工作台或 Pipeline。
+7. 新建纠偏报告，明确上一报告的 warning 声明错误以及本轮真实结果；不得改写旧报告掩盖审计历史。
+
+### 3P.3 门禁、提交和报告
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run 2>&1 | tee /tmp/ccf-task-queue-12-test.log
+! rg -n "not wrapped in act|React Router Future Flag|Unhandled|unhandled rejection" /tmp/ccf-task-queue-12-test.log
+npm --prefix web-v2 run test:contract-checker
+! rg -n "No assertion needed|absence.*proof|it\([^)]*production router[^)]*,\s*\(\)\s*=>\s*\{\s*\}\)" web-v2/tests
+git diff --check
+git status --short
+```
+
+纠偏提交：
+
+```text
+test(mountain-web): prove production task routes without warnings
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-task-queue-12-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report warning-free task route evidence
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
