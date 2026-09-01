@@ -2502,6 +2502,83 @@ docs(mountain): report portable backend runtime
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4N. CCB 可移植启动入口真实行为纠偏
+
+### 4N.1 指令编号与审核结论
+
+```text
+instruction: CCB-PORTABLE-BACKEND-RUNTIME-18
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: efe746c feat(mountain): add portable backend runtime entry
+reviewed report: 58c98ab docs(mountain): report portable backend runtime
+result: rejected; launcher fails outside repository cwd and tests do not prove the promised behavior
+```
+
+审核者已复现专项 `18 passed`、原有仓库 cwd smoke 与真实 CCF checker 成功；但从 `/tmp` 执行绝对脚本：
+
+```bash
+cd /tmp
+python /absolute/repo/scripts/run_mountain_backend.py --port <free-port> --data-dir <temp-dir>
+```
+
+进程立即退出并返回 `ModuleNotFoundError: No module named 'webapp'`。原因是启动器把字符串 `webapp.mountain_server:app` 交给 uvicorn，却没有把 repository root 加入实际 import path。smoke 通过是因为它额外注入了 `PYTHONPATH=PROJECT_ROOT`，因此没有测试独立启动器的真实行为。
+
+此外，现有 18 个测试中多项只读取源码搜索字符串；`test_temp_dir_cleanup_proven` 只测试 Python 自带 `shutil.rmtree()`，没有执行 smoke 的清理路径。报告中的“可移植”和“清理证明”因此证据不足。
+
+### 4N.2 唯一修复目标
+
+只纠正正式启动入口和 smoke 的真实行为证据，不修改业务 API、DTO、前端、Pipeline 或 SecretStore 语义。
+
+1. `run_mountain_backend.py` 必须能从任意 cwd 通过绝对脚本路径启动。由脚本自身解析 repository root，并显式建立可靠 import 条件；不得依赖调用者 cwd、外部 `PYTHONPATH` 或安装 editable package。
+2. `--data-dir` 必须在导入/创建 `webapp.mountain_server` app 之前写入环境，避免 import-time 默认目录先被冻结。实际导入 app 并验证非 None；导入失败输出简洁可操作错误并非零退出，不打印完整内部路径 traceback。
+3. smoke 启动正式入口时移除 `PYTHONPATH=PROJECT_ROOT` 注入，确保它不再掩盖启动器缺陷。
+4. 所有路径都关闭 uvicorn 日志文件句柄后再删除临时目录，包含 health 超时、Node 缺失、checker 非零、API smoke 失败和异常路径；兼容 Windows 打开文件不能删除的语义。
+5. 成功与失败路径都必须证明子进程已停止、临时目录已消失。finally 清理失败必须导致最终非零并给出目标类别，不得吞异常或无条件打印成功。
+6. 保留动态端口，不得 kill 无关进程；错误输出和最后日志不得包含 Secret。
+
+### 4N.3 强制真实行为测试
+
+- 在 pytest 临时 cwd（不在仓库内）用绝对脚本路径、动态端口和临时 data dir 启动正式入口；轮询真实 `/api/v1/health`，断言 `status=ok`、加密 SecretStore、响应 data dir 对应本次目录，然后终止并证明 PID 消失。
+- 调用环境显式移除 `PYTHONPATH` 和 `CSBOARD_ALLOW_PLAINTEXT_SECRETS`，证明成功不是测试环境泄漏。
+- 用包含空格的临时 cwd/data-dir 重复至少一次启动验证。
+- smoke 成功路径运行真实 checker，并由测试掌握 temp root/PID，返回后断言无残留目录和进程。
+- 构造 checker 非零退出的失败路径，断言 smoke 非零，同时无残留目录、进程和未关闭日志句柄。
+- 构造 health/startup 失败路径，断言错误可操作、无 traceback/Secret，并完成相同清理证明。
+- 参数默认值等纯解析可做单元测试；“可启动、加密、失败清理、跨 cwd”不得再用 `read_text()`/`inspect.getsource()`/字符串存在性代替行为测试。
+
+### 4N.4 门禁、提交和报告
+
+```bash
+env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_backend_runtime_17.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/smoke_real_backend_contract.py --checker-path /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+! rg -n "/mnt/d/|mise/installs|webapp\.server|CSBOARD_ALLOW_PLAINTEXT_SECRETS.*1|PYTHONPATH" scripts/run_mountain_backend.py scripts/smoke_real_backend_contract.py
+git diff --check
+git status --short
+```
+
+纠偏提交：
+
+```text
+fix(mountain): prove portable backend launch behavior
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-portable-runtime-18-report.md
+```
+
+报告必须列出仓库外 cwd 与含空格 cwd 的真实启动命令摘要、health 加密结果、成功/失败清理证据、移除的伪行为测试、全部门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report proven portable backend runtime
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
