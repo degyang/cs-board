@@ -72,7 +72,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
               <path d="M3 12l3-3 2 2 4-4 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <span>素材管理</span>
+          <span>资产管理</span>
         </NavLink>
 
         <p className="nav-group-label">系统</p>

@@ -9,21 +9,27 @@ const api = process.env.MOUNTAIN_API_BASE ?? 'http://127.0.0.1:8000'
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
 const consoleIssues = []
 const requestIssues = []
+const fail = (message) => { throw new Error(`Evidence assertion failed: ${message}`) }
+
 const browser = await chromium.launch({ headless: true, executablePath })
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
+// The first navigation must prove the app default, never reuse a developer's rail preference.
+await context.addInitScript(() => localStorage.clear())
+const page = await context.newPage()
 page.on('console', message => { if (['error', 'warning'].includes(message.type())) consoleIssues.push(`${message.type()}: ${message.text()}`) })
 page.on('pageerror', error => consoleIssues.push(`exception: ${error.message}`))
 page.on('requestfailed', request => requestIssues.push(`${request.method()} ${request.url()} — ${request.failure()?.errorText ?? 'failed'}`))
-// Detect API responses — both direct (url starts with api) and proxied (url contains /api/v1/)
 page.on('response', response => {
-  const url = response.url()
-  const isApi = url.startsWith(api) || url.includes('/api/v1/')
-  if (isApi && response.status() >= 400) requestIssues.push(`${response.status()} ${response.request().method()} ${url}`)
+  const url = new URL(response.url())
+  if (url.pathname.startsWith('/api/') && response.status() >= 400) requestIssues.push(`${response.status()} ${response.request().method()} ${response.url()}`)
 })
 
-const services = await (await fetch(`${api}/api/v1/services?limit=1`)).json()
-const serviceId = services.items[0]?.service_id
-if (!serviceId) throw new Error('Real backend returned no model service for detail evidence')
+const response = await fetch(`${api}/api/v1/services?limit=100`)
+if (!response.ok) fail(`service list returned ${response.status}`)
+const services = await response.json()
+const serviceId = services.items.find((service) => service.service_id === 'openai-compatible-text')?.service_id
+if (!serviceId) fail('real backend does not contain openai-compatible-text')
+
 const shots = [
   ['/settings/models', 'settings/models-list.png'],
   ['/settings/models/new', 'settings/models-create.png'],
@@ -39,20 +45,61 @@ const shots = [
 ]
 await fs.mkdir(path.join(evidence, 'settings'), { recursive: true })
 await fs.mkdir(path.join(evidence, 'assets'), { recursive: true })
-for (const [route, file, tab] of shots) {
-  await page.goto(web + route, { waitUntil: 'networkidle' })
-  if (tab) await page.getByRole('tab', { name: tab }).click()
-  await page.waitForLoadState('networkidle')
-  // For asset pages, click the first list item to show detail panel
-  if (file.startsWith('assets/')) {
-    const firstItem = page.locator('.am-item').first()
-    if (await firstItem.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await firstItem.click()
-      await page.waitForTimeout(300)
-    }
+
+async function assertShell() {
+  if (await page.locator('.app-shell.is-pinned').count() !== 1) fail('default shell is not pinned')
+  for (const label of ['山野小读', '任务队列', '新建任务', '资产管理', '设置', '帮助']) {
+    if (!await page.locator('.sidebar').getByText(label, { exact: true }).isVisible()) fail(`full sidebar text missing: ${label}`)
   }
+}
+
+async function assertReady(route) {
+  await page.goto(web + route, { waitUntil: 'domcontentloaded' })
+  await assertShell()
+  if (route.startsWith('/settings/')) {
+    if (!await page.getByRole('link', { name: '模型服务', exact: true }).isVisible()) fail('settings secondary navigation missing')
+    await page.waitForTimeout(300)
+    if (await page.locator('.loading:visible, .spinner:visible').count()) fail(`loading remains visible on ${route}`)
+    if (!await page.locator('h1').first().isVisible()) fail(`page title missing on ${route}`)
+  }
+}
+
+for (const [route, file, tab] of shots) {
+  console.log(`Capturing ${file}`)
+  await assertReady(route)
+  if (tab) {
+    const tabButton = page.locator('[role="tab"]').filter({ hasText: tab }).first()
+    if (await tabButton.count() !== 1) fail(`asset tab missing: ${tab}`)
+    await tabButton.evaluate((element) => (element).click())
+    await page.locator('.loading, .spinner').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {})
+  }
+  if (file === 'settings/models-list.png') {
+    const cards = page.locator('.mp-card')
+    if (await cards.count() < 6) fail('models list has fewer than six service cards')
+    const columns = await page.locator('.mp-list').evaluate((el) => getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length)
+    if (columns !== 2) fail(`models grid has ${columns} columns, expected 2`)
+  }
+  if (file === 'settings/models-detail.png') {
+    if (await page.getByText('openai-compatible-text', { exact: true }).count() === 0) fail('detail is not openai-compatible-text')
+    if (!await page.getByText('Secret 管理', { exact: true }).isVisible()) fail('detail Secret region missing')
+  }
+  if (file === 'settings/models-edit.png' && !await page.getByText('编辑服务', { exact: true }).isVisible()) fail('edit form title missing')
+  if (file === 'assets/preset.png') {
+    if (await page.getByRole('tab').count() !== 3) fail('asset tabs are not all visible')
+    const first = page.locator('.am-item').first()
+    if (await page.locator('.am-item').count() < 13) fail('preset list has fewer than 13 items')
+    await first.click()
+    if (!await first.evaluate((el) => el.classList.contains('on'))) fail('first preset was not selected')
+    const detail = page.locator('.am-detail-name').first()
+    if (!await detail.isVisible() || await detail.textContent() === '暂无数据') fail('preset detail is empty')
+  } else if (file.startsWith('assets/')) {
+    const first = page.locator('.am-item').first()
+    if (await page.locator('.am-item').count() > 0) await first.click()
+  }
+  if (await page.locator('.loading:visible, .spinner:visible').count()) fail(`loading remains before screenshot ${file}`)
   await page.screenshot({ path: path.join(evidence, file), fullPage: false })
 }
+await context.close()
 await browser.close()
 if (consoleIssues.length || requestIssues.length) {
   console.error(JSON.stringify({ consoleIssues, requestIssues }, null, 2))

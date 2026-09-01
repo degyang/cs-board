@@ -7,9 +7,11 @@ const PIN_KEY = 'mountain.ui.sidebarPinned'
 export function AppShell() {
   const [pinned, setPinned] = useState(() => {
     try {
-      return localStorage.getItem(PIN_KEY) === '1'
+      // Full sidebar is the product default. Only an explicit user choice of
+      // "0" switches to the compact rail.
+      return localStorage.getItem(PIN_KEY) !== '0'
     } catch {
-      return false
+      return true
     }
   })
 
