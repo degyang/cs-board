@@ -130,7 +130,55 @@ git diff --check
 
 ## 5. CCF 完成报告
 
-待填写。
+**执行者**: Claude (CCF)
+**日期**: 2026-09-01
+**分支**: `feat/mountain-webui-surface-parity`
+**Commit**: `7b617c1`
+
+### 变更页
+
+| # | 页面 | 生产文件 | 原型设计源 | 变更摘要 |
+|---|------|---------|-----------|---------|
+| 1 | `/settings/models` | `ModelServicesPage.tsx` | `ModelsTab.tsx` | 卡片层级重构：head(name+capability badge) → purpose(model) → caps(adapter+model chips) → meta-row(config+avail+enabled+default) → base URL → error block → CRUD actions；grid 布局 |
+| 2 | `/settings/voice-alignment` | `VoiceAlignmentPage.tsx` | （无原型设计源） | 保持现有 `.va-*` 类系统，无原型对齐目标 |
+| 3 | `/settings/toolchain` | `ToolchainPage.tsx` | `ToolchainStatusTab.tsx` | 外层 `.card` + `.card-title`/`.card-sub`；内容区 `.ss-grid` → `.ss-card` with `.ss-card-head`/`.ss-card-purpose`/`.ss-error` |
+| 4 | `/settings/storage` | `StoragePage.tsx` | `TaskStorageStatusTab.tsx` | 外层 `.ss-section` → `.card`；逻辑存储 `.ss-grid` → `.ss-card`；可写状态/容量统计 `.ss-grid` → `.ss-card`；清理策略 `.settings-row` |
+| 5 | `/settings/diagnostics` | `DiagnosticsPage.tsx` | `SystemDiagnosticsTab.tsx` | 外层 `.ss-section` → `.card`；6 类诊断 `.ss-grid` → `article.ss-card`；状态用 `.badge st-*`；脱敏说明 `.ss-hint` |
+| 6-8 | `/assets` (3 tabs) | `AssetManagementPage.tsx` | `AssetManagementPage.tsx` (prototype) | 页面外层 `.page`/`.page-head`；列表项 `.am-item`/`.am-item-main`/`.am-item-name`/`.am-item-sub`；详情区 `.am-detail.card`；空状态 `.am-empty-state`；反馈/错误 `.notice`/`.error-card` |
+
+### CSS 变更
+
+- `app.css`: `.mp-card` 从 `var(--nt-surface)` 改为 `var(--nt-bg)`，`border-radius` 改为 `var(--nt-radius-md)`，添加 `display:flex; flex-direction:column; gap:10px`
+- `.mp-card-head` 改为 `justify-content: space-between`
+- 新增 `.mp-purpose`、`.mp-caps`、`.mp-meta-row`、`.mp-error`/`.mp-error-head`/`.mp-error-code`/`.mp-error-suggestion`
+- `.mp-list` 改为 `grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))`
+- `.set-models .mp-list` 同步改为 grid
+
+### 测试变更
+
+- `tests/preset-browser.test.tsx`: 选择器 `.am-list-item` → `.am-item`，`.am-tag-sm` → `.am-tag`（匹配新的 CSS 类名）
+
+### 门禁结果
+
+| 检查项 | 结果 |
+|-------|------|
+| `tsc --noEmit` | ✅ 通过 |
+| `vite build` | ✅ 通过 |
+| `vitest run` (14 files, 343 tests) | ✅ 全部通过 |
+| `check-api-contract.mjs` | ⚠️ fixture 模式通过（无真实后端） |
+| `git diff --check` | ✅ 无 whitespace 错误 |
+| `rg "VITE_USE_MOCK\|mock View\|fallback mock\|mountain.assets"` | ✅ 0 匹配 |
+| 浏览器控制台 error/warning | ⚠️ 未验证（无 Playwright） |
+
+### 契约缺口
+
+- 暂无。所有页面使用现有 `/api/v1` 端点，未发现阻塞表面对齐的契约问题。
+
+### 未完成项
+
+1. **视觉证据截图**: 无 Playwright/Puppeteer，无法生成 1440×900 截图。需在有浏览器环境的 CI 中补充。
+2. **真实后端 API 契约检查**: `check-api-contract.mjs` 以 fixture 模式运行，需启动真实后端验证。
+3. **浏览器控制台 error/warning**: 需 Playwright 验证生产页面无运行时错误。
 
 ## 6. CCB 完成报告
 
