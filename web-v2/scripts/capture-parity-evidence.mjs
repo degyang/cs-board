@@ -34,6 +34,7 @@ const shots = [
   ['/settings/models', 'settings/models-list.png'],
   ['/settings/models/new', 'settings/models-create.png'],
   [`/settings/models/${serviceId}`, 'settings/models-detail.png'],
+  [`/settings/models/${serviceId}`, 'settings/models-secret.png', null, 'Secret 管理'],
   [`/settings/models/${serviceId}/edit`, 'settings/models-edit.png'],
   ['/settings/voice-alignment', 'settings/voice-alignment.png'],
   ['/settings/toolchain', 'settings/toolchain.png'],
@@ -42,9 +43,13 @@ const shots = [
   ['/assets', 'assets/preset.png'],
   ['/assets', 'assets/custom.png', '自定义风格'],
   ['/assets', 'assets/voices.png', '音色库'],
+  ['/tasks', 'tasks/queue-mixed.png'],
+  ['/tasks', 'tasks/queue-filtered.png', '失败'],
+  ['/tasks', 'tasks/queue-empty.png', '待执行'],
 ]
 await fs.mkdir(path.join(evidence, 'settings'), { recursive: true })
 await fs.mkdir(path.join(evidence, 'assets'), { recursive: true })
+await fs.mkdir(path.join(evidence, 'tasks'), { recursive: true })
 
 async function assertShell() {
   if (await page.locator('.app-shell.is-pinned').count() !== 1) fail('default shell is not pinned')
@@ -62,9 +67,14 @@ async function assertReady(route) {
     if (await page.locator('.loading:visible, .spinner:visible').count()) fail(`loading remains visible on ${route}`)
     if (!await page.locator('h1').first().isVisible()) fail(`page title missing on ${route}`)
   }
+  if (route.startsWith('/tasks')) {
+    // Wait for task list to load (skeleton disappears or empty state appears)
+    await page.locator('.task-list, .empty-state, .error-card').first().waitFor({ timeout: 8_000 }).catch(() => {})
+    await page.waitForTimeout(200)
+  }
 }
 
-for (const [route, file, tab] of shots) {
+for (const [route, file, tab, scrollTo] of shots) {
   console.log(`Capturing ${file}`)
   await assertReady(route)
   if (tab) {
@@ -72,6 +82,14 @@ for (const [route, file, tab] of shots) {
     if (await tabButton.count() !== 1) fail(`asset tab missing: ${tab}`)
     await tabButton.evaluate((element) => (element).click())
     await page.locator('.loading, .spinner').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {})
+  }
+  // Scroll to a specific section heading if requested (e.g. "Secret 管理")
+  if (scrollTo) {
+    const heading = page.locator(`text=${scrollTo}`).first()
+    if (await heading.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await heading.scrollIntoViewIfNeeded()
+      await page.waitForTimeout(200)
+    }
   }
   if (file === 'settings/models-list.png') {
     const cards = page.locator('.mp-card')
@@ -83,7 +101,21 @@ for (const [route, file, tab] of shots) {
     if (await page.getByText('openai-compatible-text', { exact: true }).count() === 0) fail('detail is not openai-compatible-text')
     if (!await page.getByText('Secret 管理', { exact: true }).isVisible()) fail('detail Secret region missing')
   }
+  if (file === 'settings/models-secret.png') {
+    // Must show masked secret values or empty password input; must NOT show real API keys
+    if (!await page.getByText('Secret 管理', { exact: true }).isVisible()) fail('Secret section not visible in secret screenshot')
+    const secretInputs = page.locator('input[type="password"]')
+    if (await secretInputs.count() === 0) fail('no password inputs found in Secret section')
+  }
   if (file === 'settings/models-edit.png' && !await page.getByText('编辑服务', { exact: true }).isVisible()) fail('edit form title missing')
+  if (file === 'tasks/queue-mixed.png') {
+    if (!await page.getByText('任务队列', { exact: true }).isVisible()) fail('task queue title missing')
+  }
+  if (file === 'tasks/queue-empty.png') {
+    const emptyMsg = page.getByText('暂无任务')
+    const filteredMsg = page.getByText('当前筛选下没有任务')
+    if (!await emptyMsg.isVisible({ timeout: 3000 }).catch(() => false) && !await filteredMsg.isVisible({ timeout: 1000 }).catch(() => false)) fail('empty state not visible on queue-empty shot')
+  }
   if (file === 'assets/preset.png') {
     if (await page.getByRole('tab').count() !== 3) fail('asset tabs are not all visible')
     const first = page.locator('.am-item').first()

@@ -169,7 +169,7 @@ describe('TasksPage (§3P production route evidence)', () => {
       expect(screen.getByText('任务队列')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('tab', { name: '运行中' }))
+    await user.click(screen.getByRole('tab', { name: '进行中' }))
 
     await waitFor(() => {
       expect(fetchTasks).toHaveBeenCalledWith(expect.objectContaining({ status: 'running' }))
@@ -178,7 +178,7 @@ describe('TasksPage (§3P production route evidence)', () => {
 
   // ── Search sends q param to server ───────────────────────────────────
 
-  it('sends q param when search is submitted', async () => {
+  it('sends q param when Enter is pressed in search', async () => {
     vi.mocked(fetchTasks).mockResolvedValue(makeResponse([]))
     const user = userEvent.setup()
     renderAt(<TasksPage />)
@@ -187,8 +187,7 @@ describe('TasksPage (§3P production route evidence)', () => {
       expect(screen.getByText('任务队列')).toBeInTheDocument()
     })
 
-    await user.type(screen.getByPlaceholderText('搜索标题或 Task ID…'), '测试')
-    await user.click(screen.getByText('搜索'))
+    await user.type(screen.getByPlaceholderText('搜索任务名…'), '测试{Enter}')
 
     await waitFor(() => {
       expect(fetchTasks).toHaveBeenCalledWith(expect.objectContaining({ q: '测试' }))
@@ -532,6 +531,34 @@ describe('TasksPage (§3P production route evidence)', () => {
     })
   })
 
+  it('shows filtered-empty with clear button when filter yields nothing', async () => {
+    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([]))
+    const user = userEvent.setup()
+    renderAt(<TasksPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('暂无任务')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: '已完成' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('当前筛选下没有任务')).toBeInTheDocument()
+    })
+
+    const clearBtn = screen.getByText('清除筛选')
+    expect(clearBtn).toBeInTheDocument()
+
+    vi.mocked(fetchTasks).mockResolvedValue(makeResponse([makeTask()]))
+    await user.click(clearBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('测试任务')).toBeInTheDocument()
+    })
+    expect(fetchTasks).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 20 }))
+    expect(fetchTasks).not.toHaveBeenLastCalledWith(expect.objectContaining({ status: expect.anything() }))
+  })
+
   // ── Race protection ──────────────────────────────────────────────────
 
   it('second request wins when first arrives after second', async () => {
@@ -592,7 +619,7 @@ describe('TasksPage (§3P production route evidence)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('任务队列')).toBeInTheDocument()
-      expect(screen.getByText(/所有视频制作任务/)).toBeInTheDocument()
+      expect(screen.getByText(/查看制作任务/)).toBeInTheDocument()
     })
   })
 })

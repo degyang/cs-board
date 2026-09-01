@@ -89,3 +89,70 @@ rg -n "Project|project_id|/projects" web-v2/src
 - 契约缺口和未完成项。
 
 提交并推送原分支，不要自行合入 `integration/mountain-v2`。
+
+---
+
+## 交付报告
+
+### Commit
+
+待提交（当前 diff 为106 行新增 /35 行删除，5 文件）。
+
+### 修改文件
+
+| 文件 | 改动类型 |
+|---|---|
+| `web-v2/src/pages/TasksPage.tsx` | 表面对齐：Tabs 组件、搜索、页描述、empty 文案 |
+| `web-v2/tests/task-queue.test.tsx` | 测试更新：33 tests（+1 filtered-empty）、Tab 标签、搜索 Enter |
+| `web-v2/tests/app-shell.test.tsx` | 前置 #1：MemoryRouter future flags |
+| `web-v2/scripts/capture-parity-evidence.mjs` | 前置 #3 + 任务队列三张截图入口 |
+| `docs/Mountain/webui-parity-evidence/README.md` | 前置 #2 + 任务队列证据行 |
+
+### 三项前置收尾证据
+
+1. `app-shell.test.tsx`：`<MemoryRouter>` 添加 `future={{ v7_startTransition: true, v7_relativeSplatPath: true }}`。Vitest stderr future warning 归零。
+2. `README.md`：前端基线 `d579358` → `3757cb6`；`settings/models-secret.png` 行已添加。
+3. 截图脚本：`settings/models-secret.png` 入口已添加，`assertReady` + password input 断言。
+
+### Task Queue 状态覆盖
+
+| 状态 | 覆盖方式 |
+|---|---|
+| running | 测试：`renders running task with active run stage and status` |
+| failed | 测试：`renders failed task with retryable hint` |
+| succeeded | 测试：`shows final as <a>` + `stale pagination` |
+| pending | Tab 存在于 STATUS_TABS；测试通过 `fetchTasks` mock 验证 |
+| cancelled | Tab 存在于 STATUS_TABS |
+| empty | 测试：`shows empty state when no tasks` |
+| filtered-empty | 测试：`shows filtered-empty with clear button when filter yields nothing` |
+| error | 测试：`displays error when request fails` + `retry button re-calls` |
+| loading | 测试：`shows loading skeleton initially` |
+| sensitive | 测试：`does not render sensitive extra fields` |
+
+### 截图
+
+截图需使用真实后端运行 `node web-v2/scripts/capture-parity-evidence.mjs` 生成，SHA-256 在运行后补充。入口已就绪：
+
+- `tasks/queue-mixed.png` — 默认"全部"Tab
+- `tasks/queue-filtered.png` — "失败"Tab
+- `tasks/queue-empty.png` — "待执行"Tab（真实后端通常无 pending 任务）
+
+### 真实 API 请求摘要
+
+- `GET /api/v1/tasks` — 分页参数 `limit=20`、可选 `status`、`q`、`cursor`
+- 不写入 URL、localStorage、console 或页面诊断数据
+- 不通过屏蔽 console.error/warning 掩盖问题
+
+### 全部门禁原始结果
+
+- `npm run build`：tsc --noEmit + vite build ✓
+- `npx vitest run`：345 passed (15 files)，stderr 0 warnings
+- `git diff --check`：clean
+- `rg -n "Project|project_id|/projects" web-v2/src`：0 matches
+- `node -c scripts/capture-parity-evidence.mjs`：syntax OK
+
+### 契约缺口和未完成项
+
+- 三张截图需在有真实后端的环境中运行截图脚本生成，当前仅完成了入口代码。
+- `check-api-contract.mjs` 需要运行中的后端，未在本次 dry-run 中执行。
+- "待执行" Tab 的 API 行为（是否有 pending 任务）取决于后端实际数据。

@@ -7,15 +7,17 @@ import { Link, useNavigate } from 'react-router-dom'
 import { fetchTasks, getFinalUrl } from '../lib/api/client'
 import { formatTime, shortId } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
+import { Tabs } from '../components/ui/Tabs'
 import { STAGE_NAMES } from '../lib/api/types'
 import type { TaskQueueItem, TaskListResponse } from '../lib/api/types'
 
 const STATUS_TABS = [
   { key: 'all', label: '全部' },
-  { key: 'running', label: '运行中' },
+  { key: 'running', label: '进行中' },
   { key: 'succeeded', label: '已完成' },
   { key: 'failed', label: '失败' },
   { key: 'cancelled', label: '已取消' },
+  { key: 'pending', label: '待执行' },
 ]
 
 function stageLabel(stage: string | null | undefined): string {
@@ -154,9 +156,22 @@ export function TasksPage() {
     }
   }, [])
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setAppliedSearch(search.trim())
+  // Debounced search: 300ms delay after typing stops
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const applySearch = useCallback((value: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setAppliedSearch(value.trim())
+    }, 300)
+  }, [])
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      setAppliedSearch(search.trim())
+    }
   }
 
   const handleLoadMore = () => {
@@ -167,35 +182,23 @@ export function TasksPage() {
     <section className="page" aria-labelledby="tasks-title">
       <div className="page-head">
         <h1 className="page-title" id="tasks-title">任务队列</h1>
-        <p className="page-desc">所有视频制作任务，按状态筛选和搜索。</p>
+        <p className="page-desc">查看制作任务、当前工序、状态和最终成果。</p>
       </div>
 
       <div className="filter-row">
-        <div className="status-tabs" role="tablist">
-          {STATUS_TABS.map(t => (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={status === t.key}
-              className={`tab-btn ${status === t.key ? 'tab-btn--active' : ''}`}
-              onClick={() => setStatus(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <form className="search-form" onSubmit={handleSearchSubmit}>
+        <div className="search">
           <input
             className="input"
-            type="text"
-            placeholder="搜索标题或 Task ID…"
+            style={{ borderRadius: 'var(--nt-radius-full)', paddingLeft: 16 }}
+            placeholder="搜索任务名…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); applySearch(e.target.value) }}
+            onKeyDown={handleSearchKeyDown}
           />
-          <button className="btn btn-secondary" type="submit">搜索</button>
-        </form>
-        <Link to="/tasks/new" className="btn btn-primary">+ 新建任务</Link>
+        </div>
       </div>
+
+      <Tabs items={STATUS_TABS} active={status} onChange={setStatus} />
 
       {loading && <TasksSkeleton />}
       {!loading && error && (
@@ -210,8 +213,8 @@ export function TasksPage() {
           <div className="empty-title">暂无任务</div>
           <div className="empty-sub">
             {status === 'all' && !appliedSearch
-              ? '点击"新建任务"开始制作第一个视频'
-              : '当前筛选条件下没有任务'}
+              ? '还没有制作任务'
+              : '当前筛选下没有任务'}
           </div>
           {(status !== 'all' || appliedSearch) && (
             <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={() => { setStatus('all'); setSearch(''); setAppliedSearch('') }}>
