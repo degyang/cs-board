@@ -420,7 +420,7 @@ describe('StoragePage (§3K runtime storage readonly status)', () => {
     vi.mocked(fetchStorageSettings).mockRejectedValueOnce(new Error('临时错误'))
 
     const user = userEvent.setup()
-    await act(async () => { renderAt(<StoragePage />) })
+    renderAt(<StoragePage />)
 
     await waitFor(() => {
       expect(screen.getByText(/临时错误/)).toBeInTheDocument()
@@ -433,9 +433,7 @@ describe('StoragePage (§3K runtime storage readonly status)', () => {
       temp_available: true,
     }))
 
-    await act(async () => {
-      await user.click(screen.getByText('重新加载'))
-    })
+    await user.click(screen.getByText('重新加载'))
 
     await waitFor(() => {
       expect(screen.getByText('运行时存储状态')).toBeInTheDocument()
@@ -470,15 +468,79 @@ describe('StoragePage (§3K runtime storage readonly status)', () => {
     const secondRequest = new Promise(r => { resolveSecond = r })
 
     vi.mocked(fetchStorageSettings).mockReturnValueOnce(firstRequest as any)
-    vi.mocked(fetchStorageSettings).mockReturnValueOnce(secondRequest as any)
 
     const { unmount } = renderAt(<StoragePage />)
     await flush()
 
+    // Unmount first instance (simulates navigation away)
     unmount()
-    // First request arrives late
-    resolveFirst!(makeSettings({ writable: false, cleanup_policy: 'stale' }))
+
+    // Re-mount second instance (simulates navigation back)
+    vi.mocked(fetchStorageSettings).mockReturnValueOnce(secondRequest as any)
+    renderAt(<StoragePage />)
     await flush()
+
+    // Second request completes first
+    resolveSecond!(makeSettings({
+      writable: true,
+      assets_available: true,
+      tasks_available: true,
+      temp_available: true,
+      cleanup_policy: 'fresh',
+    }))
+    await flush()
+
+    await waitFor(() => {
+      expect(screen.getByText('素材存储')).toBeInTheDocument()
+      expect(screen.getByText('fresh')).toBeInTheDocument()
+    })
+
+    // First request arrives late
+    resolveFirst!(makeSettings({
+      writable: false,
+      assets_available: false,
+      tasks_available: false,
+      temp_available: false,
+      cleanup_policy: 'stale',
+      error_code: 'OLD_ERROR',
+    }))
+    await flush()
+
+    // DOM must still show second response, not first
+    expect(screen.getByText('素材存储')).toBeInTheDocument()
+    expect(screen.queryByText('stale')).not.toBeInTheDocument()
+    expect(screen.queryByText('OLD_ERROR')).not.toBeInTheDocument()
+
+    // Both API calls were made
+    expect(fetchStorageSettings).toHaveBeenCalledTimes(2)
+  })
+
+  // ── writable=false with available=true shows neutral per-card status ──
+
+  it('shows neutral "已就绪" on cards when writable is false but all available are true', async () => {
+    vi.mocked(fetchStorageSettings).mockResolvedValue(makeSettings({
+      writable: false,
+      assets_available: true,
+      tasks_available: true,
+      temp_available: true,
+      error_code: 'STORAGE_READONLY',
+      suggestion: 'Volume is read-only.',
+    }))
+
+    renderAt(<StoragePage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('素材存储')).toBeInTheDocument()
+    })
+
+    // Per-card shows neutral "逻辑存储已就绪。" — never "可读写"
+    expect(screen.queryByText(/可读写/)).not.toBeInTheDocument()
+    const readyTexts = screen.getAllByText('逻辑存储已就绪。')
+    expect(readyTexts.length).toBe(3)
+
+    // Overall writable card separately shows backend error
+    expect(screen.getByText('STORAGE_READONLY')).toBeInTheDocument()
+    expect(screen.getByText('Volume is read-only.')).toBeInTheDocument()
   })
 
   // ── Page title and description present ───────────────────────────────

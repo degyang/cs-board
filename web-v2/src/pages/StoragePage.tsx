@@ -48,7 +48,7 @@ function StorageCard({ storage }: { storage: LogicalStorage }) {
         </span>
       </div>
       <p className="ss-card-purpose">
-        {storage.available ? '存储目录正常，可读写。' : '存储目录不可用，请检查运行环境。'}
+        {storage.available ? '逻辑存储已就绪。' : '尚不可用。'}
       </p>
     </article>
   )
