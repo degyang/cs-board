@@ -3058,6 +3058,116 @@ docs(mountain): report standalone backend runtime tests
 
 先本地提交，不推送。执行者不得自行宣布审核通过。此切片通过后不再继续启动脚本工作，下一后端切片回到任务队列/新建任务契约。
 
+## 4S. CCB Task 执行计划契约与持久化
+
+### 4S.1 指令编号与已验收基线
+
+```text
+instruction: CCB-TASK-EXECUTION-PLAN-23
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+accepted implementation: e963454 test(mountain): remove sibling worktree dependency
+accepted report: 5bcb7e2 docs(mountain): report standalone backend runtime tests
+```
+
+审核者已复现专项 `14 passed`、禁止 sibling 路径零命中、真实 CCF checker、加密 health、API smoke、PID 终止和临时目录清理。后端启动入口与 standalone 测试验收完成，后续不得继续扩展该区域。
+
+### 4S.2 产品语义
+
+产品只使用两种执行模式：
+
+```text
+auto       自动连续执行全部阶段
+selective  用户选择若干阶段必须手动触发，其余阶段自动连续执行
+```
+
+`selective` 不是现有 Pipeline 内部 `gated` 的别名：`gated` 是每阶段后暂停，无法表达“只手动指定的若干阶段”。`targeted` 是单阶段运行命令，也不是保存的产品执行模式。
+
+标准阶段固定使用现行六阶段 canonical name：
+
+```text
+generate-visual-anchors
+clone-voice
+plan-storyboard
+generate-illustrations
+render-visuals
+compose-video
+```
+
+### 4S.3 唯一目标
+
+建立 Task 输入级 `execution_plan` 的领域类型、校验、原子持久化、API readback 和 CLI 可见性。本轮不实现 selective 自动暂停/继续编排；但必须防止 selective 被静默按 auto 运行。
+
+1. 新增明确领域值对象，例如：
+
+```json
+{
+  "mode": "auto",
+  "manual_stages": []
+}
+```
+
+或：
+
+```json
+{
+  "mode": "selective",
+  "manual_stages": ["generate-illustrations", "compose-video"]
+}
+```
+
+2. `mode` 只允许 `auto/selective`。`auto` 必须对应空 `manual_stages`；`selective` 必须至少一项。阶段必须属于 canonical 六阶段、去重并按 pipeline 顺序规范化；未知、重复、空值和 `segment-script` 一律返回 `VALIDATION_ERROR`。
+3. `POST /api/v1/tasks/{task_id}/inputs` 增加非敏感 multipart 字段：`execution_mode`（默认 `auto`）和 `manual_stages`（JSON array 字符串，默认 `[]`）。解析错误必须 400 结构化错误，不得 500。
+4. `execution_plan` 必须进入现有 input transaction，与 request、task script preparation、reference 一起原子提交/回滚；不得在 Router 另写旁路文件。
+5. `GET /api/v1/tasks/{task_id}/inputs` 返回规范化后的 `execution_plan`。旧/缺失 manifest 读取为默认 auto，但不得重写文件；新保存必须显式持久化。
+6. CLI/`artifact show` 之外提供现有最合适的只读 Task input 命令输出 execution plan；若已有 `task show`/inputs show 则扩展它，不新增重复命令。JSON 输出与 Web API 使用同一 Application DTO。
+7. API `start_run` 不再信任调用者随意传产品 mode。auto plan 保持现有行为；selective plan 在编排支持落地前必须返回结构化 `EXECUTION_PLAN_NOT_READY`（建议 HTTP 409，`retryable=false`，suggestion 指向手动阶段编排尚未启用），且 Run/Stage/Event 不发生任何状态变更。不得静默调用 `policy=auto` 或 `gated`。
+8. 现有内部 `pipeline_run(policy=auto/gated/targeted)` 和 Skills 本轮保持兼容，不改名；文档明确它是内部/CLI 编排策略，与 Task 保存的产品 execution plan 分层。
+9. Secret、路径和完整 script 不进入普通日志；execution plan 可作为非敏感结构化字段记录 mode 和 stage names。
+10. 不修改前端、不实现 selective pause/resume、不改 Provider、资产、TTS 或渲染。
+
+### 4S.4 强制行为测试
+
+- auto 默认、显式 auto、selective 单项/多项及乱序输入规范化。
+- auto+非空 stages、selective+空 stages、未知/重复/legacy stage、非法 JSON/非数组全部 400 `VALIDATION_ERROR`。
+- POST 保存后 GET readback、Repository 重启读取和 CLI JSON 三入口完全一致。
+- execution plan 参与既有 input transaction fault matrix：至少 request/task/reference 安装故障各一处证明旧 plan 不变；不得复制生产提交算法。
+- create 成功但尚未保存 inputs 时 readback 默认 auto；旧 fixture 缺字段默认 auto。
+- auto start 保持现有成功行为；selective start 返回 409 `EXECUTION_PLAN_NOT_READY`，Run/Stage/Event 文件哈希或内容前后不变。
+- 并发保存沿用同 Task 锁，最终 plan 与同一事务 script/reference 自洽。
+- API/CLI 错误与日志不包含完整 script、reference 内容、绝对路径或 Secret。
+
+### 4S.5 门禁、提交和报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_task_execution_plan_23.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+! rg -n "execution_mode.*gated|selective.*gated|segment-script" csboard webapp cli tests/test_task_execution_plan_23.py
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain): persist task execution plans
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-task-execution-plan-23-report.md
+```
+
+报告列出领域不变量、API multipart/GET DTO、Repository 原子事务、CLI 映射、selective start 无副作用证明、内部 policy 分层、门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report task execution plan persistence
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
