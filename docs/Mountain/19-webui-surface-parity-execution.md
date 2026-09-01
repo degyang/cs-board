@@ -292,3 +292,62 @@ git diff --check
 ## 7. 主审核者联合验收
 
 CCF/CCB 均完成后，由主审核者把两个开发分支合入临时验收分支，启动真实后端和生产 WebUI，逐页检查截图、交互、刷新持久化和控制台，再决定是否形成最终 PR-P0。单方测试通过不代表本批次完成。
+
+## 8. 主审核者对 CCF 第二轮的结论与最终纠偏
+
+审核状态：**仍不通过。证据门禁已补齐，但证据本身证明页面没有严格对齐原型。**
+
+主审核者已复跑：build 通过、343 tests 通过、真实后端 contract checker 通过、`git diff --check` 通过。以下是视觉和证据实现的实质缺陷：
+
+1. 冻结原型 `screenshots/settings/01-models.png` 使用约 264px 完整侧边栏，显示品牌、五个中文菜单和底部状态；生产 `models-list.png` 只有约 64px 图标栏。全局布局未对齐。
+2. 原型模型页是一个带标题、说明和 Secret 安全边界提示的主卡片，内部固定两列服务卡；生产页删除主卡片和安全提示，并在 1440px 下排成四列，信息过密。
+3. 生产模型页将所有动作铺在每张卡底部，破坏原型的只读信息层级。列表只保留“详情/探测”等主动作；停用、默认和删除等低频动作放到详情页。
+4. 生产资产截图明显未完成视觉样式：三个 Tab 纵向成为普通文字；筛选控件呈浏览器默认样式；卡片边框拥挤、图片比例和文本换行失控；详情区显示“暂无数据”。这不能作为资产原型对齐结果。
+5. 证据 README 引用了不存在的 `ToolchainStatusTab.tsx`、`TaskStorageStatusTab.tsx`、`SystemDiagnosticsTab.tsx`；实际设计源是 `prototypes/webui/src/features/settings/systemStatus/SystemStatusTabs.tsx`。
+6. 截图脚本只把以后端 `api` 地址开头的 `>=400` response 记为失败，但浏览器通过 Vite 同源 `/api` 请求，实际 URL 以 WebUI 地址开头；因此 4xx/5xx 检测存在漏报。
+7. 模型详情截图选择服务列表第一项，通常是 FFmpeg，未证明 OpenAI-compatible Secret masked/input/error 区域的视觉状态；缺少编辑页截图。
+8. 只有生产截图，没有与冻结原型并排的核对结果；“表面对齐”结论无法从证据中成立。
+
+CCF 继续在原分支完成最终纠偏，不进入任务页：
+
+### 8.1 全局外壳先对齐
+
+- 对照原型 `AppShell.tsx`、`Sidebar.tsx`、`tokens.css`、`app.css`。
+- 1440×900 默认必须为完整固定侧边栏；品牌、菜单中文文字、选中态和底部状态均可见。
+- 截图脚本开始前清理与侧栏相关的 localStorage，验证默认状态而非开发者残留状态。
+
+### 8.2 设置页逐像素级表面整改
+
+- 模型列表恢复原型的页面说明、主卡、Secret 安全边界提示和两列网格。
+- 卡片保持原型的信息顺序、留白与高度；低频危险操作收进详情。
+- 新建、编辑、详情沿用相同 card/form token；补 `models-edit.png`。
+- 模型详情证据固定选择 `openai-compatible-text`，覆盖未配置 Secret 和 masked Secret 区域，但不得写入真实密钥到仓库。
+- 修正证据 README 中三个不存在的原型文件引用。
+
+### 8.3 资产页重新实现表面，不接受局部补丁
+
+- 逐项对照 `prototypes/webui/src/features/asset-management/AssetManagementPage.tsx`、`components.tsx` 和原型 CSS。
+- Tabs 必须横向且有明确 active 状态；搜索、筛选、创建动作使用正式控件样式。
+- 预置风格卡片的图片比例、标题、摘要、标签、badge、选中态和详情面板必须与原型一致。
+- 自定义风格和音色库分别对齐其列表、空状态、详情、表单和动作层级。
+- 1440×900 截图不得出现浏览器默认 select/button 样式、文本挤压或无选择导致的无意义详情空态；预置页默认选中第一项并展示详情。
+
+### 8.4 修复证据脚本
+
+- 对所有 pathname 以 `/api/` 开头的 response 检查 `>=400`，无论 host 是 Vite 还是后端。
+- 截图前等待页面的 loading 状态消失，并断言关键标题/卡片数量。
+- 输出生产截图，并在 evidence README 逐项对照冻结截图或原型组件；不得只列文件名后直接声称一致。
+
+### 8.5 最终门禁
+
+除原有门禁外，必须新增并通过：
+
+```text
+models-list: 完整侧栏 + 主说明卡 + 两列服务卡
+models-detail: openai-compatible-text + Secret 区
+models-edit: 表单证据存在
+assets-preset: 横向 Tabs + 默认选中详情 + 无默认浏览器控件
+all screenshots: 1440x900, console/page/request/API errors = 0
+```
+
+完成后在本节下追加“CCF 最终纠偏报告”，不要覆盖前两轮历史。报告必须给出新 commit、11 张截图及逐项修复结果。
