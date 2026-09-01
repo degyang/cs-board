@@ -1,0 +1,12 @@
+{
+  "display_name": "OpenAI GPT-4o",
+  "capability": "text",
+  "adapter_type": "openai",
+  "endpoint": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "enabled": true,
+  "priority": 5,
+  "config": {
+    "temperature": 0.5
+  }
+}

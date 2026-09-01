@@ -1,0 +1,37 @@
+{
+  "api": {
+    "status": "healthy",
+    "endpoint": null,
+    "latency_ms": null
+  },
+  "services": {
+    "total": 3,
+    "available": 2,
+    "unavailable": 1
+  },
+  "toolchain": {
+    "total": 4,
+    "available": 3,
+    "missing": 1
+  },
+  "storage": {
+    "writable": true,
+    "free_bytes": 53687091200,
+    "used_bytes": 53687091200
+  },
+  "telemetry": {
+    "enabled": false,
+    "endpoint": null
+  },
+  "logs": {
+    "recent_errors": 2,
+    "log_path": "/var/log/mountain/app.log"
+  },
+  "recent_errors": [
+    {
+      "timestamp": "2025-03-20T14:00:00Z",
+      "component": "pipeline",
+      "message": "Stage generate-illustrations failed: timeout"
+    }
+  ]
+}

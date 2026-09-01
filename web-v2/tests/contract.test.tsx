@@ -324,7 +324,7 @@ function setupDefaultMocks() {
 
 function renderWorkbench(initialPath = '/tasks/proj-abc123def456') {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter initialEntries={[initialPath]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/tasks/:taskId" element={<TaskWorkbenchPage />} />
         <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
@@ -375,8 +375,8 @@ describe('Workbench contract: stage timeline', () => {
 
   it('renders all 6 stage nodes', async () => {
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
-    const stageNames = ['生成画面锚定重点', '克隆配音', '拆分分镜', '生成插画', '白板渲染', '合成成片']
+    await screen.findAllByText('文案整理与画面锚定重点')
+    const stageNames = ['文案整理与画面锚定重点', '克隆配音', '拆分分镜', '生成插画', '白板渲染', '合成成片']
     for (const name of stageNames) {
       const els = screen.getAllByText(name)
       expect(els.length).toBeGreaterThanOrEqual(1)
@@ -385,7 +385,7 @@ describe('Workbench contract: stage timeline', () => {
 
   it('shows succeeded stage badges', async () => {
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     const succeeded = screen.getAllByText(/已成功/)
     expect(succeeded.length).toBeGreaterThanOrEqual(1)
   })
@@ -467,7 +467,7 @@ describe('Workbench contract: events & logs', () => {
 
   it('renders event entries', async () => {
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     // The activity panel toggle should be visible
     await waitFor(() => {
       expect(screen.getByText(/运行日志 & 事件/)).toBeDefined()
@@ -484,7 +484,7 @@ describe('Workbench contract: events & logs', () => {
 
   it('renders log entries with level', async () => {
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     const toggle = screen.getByText(/运行日志 & 事件/)
     await userEvent.click(toggle)
     // Log section header with count
@@ -496,7 +496,7 @@ describe('Workbench contract: events & logs', () => {
 
   it('renders event cursor info', async () => {
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     const toggle = screen.getByText(/运行日志 & 事件/)
     await userEvent.click(toggle)
     await waitFor(() => {
@@ -637,7 +637,7 @@ describe('Workbench contract: capability warning', () => {
     renderWorkbench()
     await screen.findByText('fish-speech')
     const link = screen.getByText('fish-speech')
-    expect(link.getAttribute('href')).toBe('/settings/providers/fish-speech')
+    expect(link.getAttribute('href')).toBe('/settings/models/fish-speech')
   })
 
   it('shows error_code from providers.providers[name]', async () => {
@@ -829,7 +829,7 @@ describe('Workbench contract: stage run/retry', () => {
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-stage-1',
     })
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     const stageNames = screen.getAllByText('合成成片')
     expect(stageNames.length).toBeGreaterThanOrEqual(1)
     const executeBtns = screen.getAllByText('执行')
@@ -849,7 +849,7 @@ describe('Workbench contract: stage run/retry', () => {
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-retry-stage-1',
     })
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     const stageNames = screen.getAllByText('白板渲染')
     expect(stageNames.length).toBeGreaterThanOrEqual(1)
     const retryBtns = screen.getAllByText('重试')
@@ -869,7 +869,7 @@ describe('Workbench contract: log filters', () => {
 
   it('renders log filter controls', async () => {
     renderWorkbench()
-    await screen.findAllByText('生成画面锚定重点')
+    await screen.findAllByText('文案整理与画面锚定重点')
     await waitFor(() => {
       expect(screen.getByText('全部级别')).toBeDefined()
     }, { timeout: 3000 })
@@ -910,7 +910,7 @@ describe('Diagnostics contract', () => {
 
   it('renders diagnostics page with stages', async () => {
     render(
-      <MemoryRouter initialEntries={['/tasks/proj-abc123def456/runs/run-xyz789abc123/diagnostics']}>
+      <MemoryRouter initialEntries={['/tasks/proj-abc123def456/runs/run-xyz789abc123/diagnostics']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
         </Routes>

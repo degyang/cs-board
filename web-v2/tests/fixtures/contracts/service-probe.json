@@ -1,0 +1,8 @@
+{
+  "available": true,
+  "checked_at": "2025-03-20T14:25:00Z",
+  "latency_ms": 120,
+  "component": "anthropic",
+  "error_code": null,
+  "suggestion": null
+}

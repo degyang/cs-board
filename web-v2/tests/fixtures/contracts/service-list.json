@@ -1,0 +1,42 @@
+{
+  "items": [
+    {
+      "schema_version": 1,
+      "revision": 1,
+      "service_id": "anthropic-claude",
+      "display_name": "Anthropic Claude",
+      "capability": "text_generation",
+      "adapter_type": "openai_compatible",
+      "endpoint": "https://api.anthropic.com",
+      "model": "claude-sonnet-4-20250514",
+      "enabled": true,
+      "priority": 1,
+      "is_default": true,
+      "config": {},
+      "required_secrets": ["ANTHROPIC_API_KEY"],
+      "optional_secrets": ["ANTHROPIC_ORG_ID"],
+      "config_status": {
+        "configured": true,
+        "missing_fields": [],
+        "missing_secrets": []
+      },
+      "availability": {
+        "available": true,
+        "checked_at": "2025-03-20T14:22:00Z",
+        "latency_ms": 150,
+        "component": "anthropic",
+        "error_code": null,
+        "suggestion": null
+      },
+      "secret_status": {
+        "configured": true,
+        "required": ["ANTHROPIC_API_KEY"],
+        "missing": []
+      },
+      "created_at": "2025-01-15T10:30:00Z",
+      "updated_at": "2025-03-20T14:22:00Z"
+    }
+  ],
+  "next_cursor": null,
+  "total": 1
+}

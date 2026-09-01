@@ -23,7 +23,7 @@ export const STAGE_KEYS: StageKey[] = [
 ]
 
 export const STAGE_NAMES: Record<StageKey, string> = {
-  'generate-visual-anchors': '生成画面锚定重点',
+  'generate-visual-anchors': '文案整理与画面锚定重点',
   'clone-voice': '克隆配音',
   'plan-storyboard': '拆分分镜',
   'generate-illustrations': '生成插画',
@@ -37,7 +37,6 @@ export const ENGINE_NAMES: Record<string, string> = {
 }
 
 // ── Health ──────────────────────────────────────────────────────────────
-// GET /health → { status, providers: { all_available, providers, unavailable } }
 
 export interface ProviderAvailability {
   available: boolean
@@ -56,7 +55,6 @@ export interface HealthResponse {
 }
 
 // ── Capabilities ────────────────────────────────────────────────────────
-// GET /capabilities → { items[], providers }
 
 export interface CapabilityItem {
   engine: string
@@ -75,84 +73,7 @@ export interface CapabilitiesResponse {
   }
 }
 
-// ── Providers ───────────────────────────────────────────────────────────
-// GET /providers → { providers: { <name>: ProviderEntry }, all_configured, all_available }
-
-export interface ProviderProfile {
-  provider_type: string
-  name: string
-  description: string
-  required_secrets: string[]
-  optional_secrets: string[]
-  config: Record<string, unknown>
-}
-
-export interface ConfigStatus {
-  configured: boolean
-  missing_secrets: string[]
-  configured_secrets: string[]
-  is_encrypted: boolean
-}
-
-export interface ProviderEntry {
-  profile: ProviderProfile
-  config_status: ConfigStatus
-  availability: ProviderAvailability
-}
-
-export interface ProviderListResponse {
-  providers: Record<string, ProviderEntry>
-  all_configured: boolean
-  all_available: boolean
-}
-
-// GET /providers/{name} → { name, profile, config, config_status, availability }
-
-export interface ProviderDetail {
-  name: string
-  profile: ProviderProfile
-  config: Record<string, unknown>
-  config_status: ConfigStatus
-  availability: ProviderAvailability
-}
-
-// PUT /providers/{name}/config → { ok, provider, config }
-
-export interface UpdateConfigResponse {
-  ok: boolean
-  provider: string
-  config: Record<string, unknown>
-}
-
-// ── Secrets ─────────────────────────────────────────────────────────────
-// GET /providers/{name}/secrets → { provider, secrets: { <key>: SecretInfo } }
-
-export interface SecretInfo {
-  configured: boolean
-  masked_value: string | null
-}
-
-export interface SecretStatusResponse {
-  provider: string
-  secrets: Record<string, SecretInfo>
-}
-
-// POST /providers/{name}/secrets → { ok, provider, key }
-
-export interface SetSecretRequest {
-  key: string
-  value: string
-}
-
-export interface SecretOperationResponse {
-  ok: boolean
-  provider: string
-  key: string
-}
-
-// ── Tasks ────────────────────────────────────────────────────────────
-// GET /tasks → TaskListResponse
-// Task.to_dict() from dataclasses.asdict()
+// ── Tasks ───────────────────────────────────────────────────────────────
 
 export interface Task {
   task_id: string
@@ -187,8 +108,6 @@ export interface TaskListResponse {
   next_cursor: string | null
 }
 
-// POST /tasks → { ok, command, task_id, run_id, trace_id, command_id, event_sequence }
-
 export interface CreateTaskRequest {
   title: string
   engine?: string
@@ -206,8 +125,6 @@ export interface CreateTaskResponse {
 }
 
 // ── Run ─────────────────────────────────────────────────────────────────
-// GET /tasks/{id}/runs/{runId} → RunView
-// Run.to_dict() + computed fields
 
 export interface RunDetail {
   schema_version: number
@@ -229,9 +146,7 @@ export interface StageState {
   attempt: number
 }
 
-// ── Task Detail ──────────────────────────────────────────────────────
-// GET /tasks/{id} → _project_detail_view()
-// { project, active_run, stages, warnings, artifacts, trace }
+// ── Task Detail ─────────────────────────────────────────────────────────
 
 export interface TaskDetail {
   task: Task
@@ -254,8 +169,6 @@ export interface TraceInfo {
 }
 
 // ── Units ───────────────────────────────────────────────────────────────
-// GET /tasks/{id}/runs/{runId}/units → { items }
-// Merged from av-plan.json voice_units + timeline.json timings
 
 export interface Unit {
   unit_id: string
@@ -270,7 +183,6 @@ export interface UnitListResponse {
 }
 
 // ── Artifacts ───────────────────────────────────────────────────────────
-// GET /tasks/{id}/runs/{runId}/artifacts → { items }
 
 export interface Artifact {
   artifact_key: string
@@ -285,27 +197,18 @@ export interface ArtifactListResponse {
   items: Artifact[]
 }
 
-// ── Events ──────────────────────────────────────────────────────────────
-// GET /tasks/{id}/runs/{runId}/events?after=N → { items, next_cursor }
-// Items are arbitrary event dicts from telemetry
+// ── Events & Logs ───────────────────────────────────────────────────────
 
 export interface EventsResponse {
   items: Record<string, unknown>[]
   next_cursor: number
 }
 
-// ── Logs ────────────────────────────────────────────────────────────────
-// GET /tasks/{id}/runs/{runId}/logs?level=&component=&stage= → { items }
-// Items are parsed JSONL log entries
-
 export interface LogsResponse {
   items: Record<string, unknown>[]
 }
 
-// ── Pipeline Run Response ───────────────────────────────────────────────
-// POST /tasks/{id}/runs/{runId}/start
-// POST /tasks/{id}/runs/{runId}/stages/{stage}/run
-// POST /tasks/{id}/runs/{runId}/stages/{stage}/retry
+// ── Pipeline Run ────────────────────────────────────────────────────────
 
 export interface PipelineRunResponse {
   ok: boolean
@@ -342,16 +245,10 @@ export interface PipelineStageResult {
   }
 }
 
-// ── Cancel Run Response ─────────────────────────────────────────────────
-// POST /tasks/{id}/runs/{runId}/cancel
-
 export interface CancelRunResponse {
   ok: boolean
   status: string
 }
-
-// ── Save Inputs Response ────────────────────────────────────────────────
-// POST /tasks/{id}/inputs (multipart/form-data)
 
 export interface SaveInputsResponse {
   ok: boolean
@@ -359,7 +256,6 @@ export interface SaveInputsResponse {
   input_saved: boolean
 }
 
-// Script preparation DTO
 export interface VoiceUnitDTO {
   unit_id: string
   order: number
@@ -378,8 +274,6 @@ export interface InputsRules {
   min_chars: number
   max_chars: number
 }
-
-// GET /tasks/{id}/inputs
 
 export interface InputsReadback {
   task_id: string
@@ -402,15 +296,342 @@ export interface InputsReadback {
   visual_anchor_enabled: boolean
 }
 
-// ── API Error ───────────────────────────────────────────────────────────
-
 export interface ApiError {
   code: string
   message: string
+  retryable?: boolean
   unavailable?: string[]
-  details?: Array<{
-    provider: string
-    error_code?: string
-    suggestion?: string
-  }>
+  details?: Record<string, unknown> | null
+}
+
+export interface ErrorResponse {
+  error: ApiError
+}
+
+// ==========================================================================
+// NEW: Services, Assets, Settings
+// ==========================================================================
+
+// ── Services (dynamic, extensible) ──────────────────────────────────────
+
+/** Extensible string — backend may add new capabilities */
+export type ServiceCapability = string
+
+/** Extensible string — backend may add new adapter types */
+export type AdapterType = string
+
+/** Known capabilities with display names */
+export const KNOWN_CAPABILITIES: Record<string, string> = {
+  text_generation: '文本生成',
+  image_generation: '图像生成',
+  video_generation: '视频生成',
+  speech_synthesis: '语音合成',
+  speech_alignment: '语音对齐',
+  rendering: '渲染',
+  media: '媒体处理',
+  codex_skill: 'Codex 技能',
+}
+
+/** Known adapters with display names */
+export const KNOWN_ADAPTERS: Record<string, string> = {
+  openai_compatible: 'OpenAI 兼容',
+  indextts: 'IndexTTS',
+  whisper: 'Whisper',
+  codex_skill: 'Codex 技能',
+  ffmpeg: 'FFmpeg',
+  local_process: '本地进程',
+}
+
+/** Capability categories for grouping */
+export const CAPABILITY_CATEGORIES: Record<string, { label: string; capabilities: string[] }> = {
+  ai_generation: {
+    label: 'AI 生成',
+    capabilities: ['text_generation', 'image_generation', 'video_generation'],
+  },
+  speech: {
+    label: '语音',
+    capabilities: ['speech_synthesis', 'speech_alignment'],
+  },
+  media: {
+    label: '媒体',
+    capabilities: ['rendering', 'media'],
+  },
+  other: {
+    label: '其他',
+    capabilities: ['codex_skill'],
+  },
+}
+
+export interface ServiceAvailability {
+  available: boolean
+  checked_at: string | null
+  latency_ms: number | null
+  component: string | null
+  error_code: string | null
+  suggestion: string | null
+}
+
+/** Structured config status */
+export interface ServiceConfigStatus {
+  configured: boolean
+  missing_fields: string[]
+  missing_secrets: string[]
+}
+
+/** Structured secret status */
+export interface ServiceSecretStatus {
+  configured: boolean
+  required: string[]
+  missing: string[]
+}
+
+export interface ServiceDefinition {
+  schema_version: number
+  revision: number
+  service_id: string
+  display_name: string
+  capability: ServiceCapability
+  adapter_type: AdapterType
+  endpoint: string | null
+  model: string | null
+  enabled: boolean
+  priority: number
+  is_default: boolean
+  config: Record<string, unknown>
+  required_secrets: string[]
+  optional_secrets: string[]
+  config_status: ServiceConfigStatus
+  availability: ServiceAvailability
+  secret_status: ServiceSecretStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface ServiceListResponse {
+  items: ServiceDefinition[]
+  next_cursor: string | null
+  total: number
+}
+
+export interface ServiceSecretListResponse {
+  items: ServiceSecret[]
+  total: number
+}
+
+export interface ServiceSecret {
+  secret_key: string
+  configured: boolean
+  masked_value: string | null
+  updated_at: string | null
+}
+
+// ── Assets: Styles ──────────────────────────────────────────────────────
+
+export interface StyleTemplate {
+  style_id: string
+  kind: 'preset' | 'custom'
+  name: string
+  description: string
+  engine: string | null
+  status: 'active' | 'inactive'
+  revision: number
+  tags: string[]
+  prompt_text: string | null
+  negative_prompt: string | null
+  preview_asset_id: string | null
+  config: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface StyleListResponse {
+  items: StyleTemplate[]
+  next_cursor: string | null
+  total: number
+}
+
+export interface StyleListParams {
+  kind?: 'preset' | 'custom'
+  status?: 'active' | 'inactive'
+  engine?: string
+  q?: string
+  cursor?: string
+  limit?: number
+}
+
+export interface CreateStyleRequest {
+  name: string
+  description?: string
+  engine?: string
+  prompt_text?: string
+  negative_prompt?: string
+  tags?: string[]
+  preview_asset_id?: string
+  reference_images?: File[]
+}
+
+export interface UpdateStyleRequest {
+  name?: string
+  description?: string
+  engine?: string
+  prompt_text?: string
+  negative_prompt?: string
+  tags?: string[]
+  preview_asset_id?: string
+}
+
+// ── Assets: Voices ──────────────────────────────────────────────────────
+
+export interface VoiceDefinition {
+  voice_id: string
+  name: string
+  description?: string
+  tags: string[]
+  duration_ms: number
+  sample_rate: number | null
+  channels: number | null
+  format: string | null
+  enabled: boolean
+  status: 'active' | 'inactive'
+  content_url?: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Unified voice DTO name — alias for VoiceDefinition */
+export type VoiceAsset = VoiceDefinition
+
+export interface VoiceListResponse {
+  items: VoiceDefinition[]
+  next_cursor: string | null
+  total: number
+}
+
+export interface VoiceListParams {
+  status?: 'active' | 'inactive'
+  q?: string
+  cursor?: string
+  limit?: number
+}
+
+export interface CreateVoiceRequest {
+  name: string
+  tags?: string[]
+  audio_file: File
+}
+
+export interface UpdateVoiceRequest {
+  name?: string
+  tags?: string[]
+}
+
+// ── Settings ────────────────────────────────────────────────────────────
+
+export interface RuntimeSettings {
+  task_runner: {
+    enabled: boolean
+    max_concurrent_tasks: number
+  }
+  global_defaults: Record<string, unknown>
+}
+
+export interface VoiceAlignmentServiceSummary {
+  service_id: string
+  display_name: string
+  capability: string
+  adapter_type: string
+  endpoint: string | null
+  model: string | null
+  timeout: number | null
+  availability: ServiceAvailability
+}
+
+export interface ProbeSummary {
+  available: boolean
+  checked_at: string | null
+  latency_ms: number | null
+  component: string | null
+  error_code: string | null
+  suggestion: string | null
+}
+
+export interface VoiceAlignmentSettings {
+  speech_synthesis: VoiceAlignmentServiceSummary | null
+  speech_alignment: VoiceAlignmentServiceSummary | null
+  indextts: ProbeSummary | null
+  whisper: ProbeSummary | null
+}
+
+export interface ToolchainComponent {
+  component: string
+  available: boolean
+  version: string | null
+  error_code: string | null
+  suggestion: string | null
+}
+
+export interface ToolchainSettings {
+  tools: ToolchainComponent[]
+}
+
+export interface StorageSettings {
+  writable: boolean
+  assets_available: boolean
+  tasks_available: boolean
+  temp_available: boolean
+  free_bytes: number | null
+  used_bytes: number | null
+  cleanup_policy: string | null
+  error_code: string | null
+  suggestion: string | null
+}
+
+export interface DiagnosticsApiStatus {
+  status: string
+  endpoint: string | null
+  latency_ms: number | null
+}
+
+export interface DiagnosticsServiceSummary {
+  total: number
+  available: number
+  unavailable: number
+}
+
+export interface DiagnosticsToolchainSummary {
+  total: number
+  available: number
+  missing: number
+}
+
+export interface DiagnosticsStorageSummary {
+  writable: boolean
+  free_bytes: number | null
+  used_bytes: number | null
+}
+
+export interface DiagnosticsTelemetry {
+  enabled: boolean
+  endpoint: string | null
+}
+
+export interface DiagnosticsLogs {
+  recent_errors: number
+  log_path: string | null
+}
+
+export interface DiagnosticsRecentError {
+  timestamp: string
+  component: string
+  message: string
+}
+
+export interface DiagnosticsSettings {
+  api: DiagnosticsApiStatus
+  services: DiagnosticsServiceSummary
+  toolchain: DiagnosticsToolchainSummary
+  storage: DiagnosticsStorageSummary
+  telemetry: DiagnosticsTelemetry | null
+  logs: DiagnosticsLogs | null
+  recent_errors: DiagnosticsRecentError[]
 }

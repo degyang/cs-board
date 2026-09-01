@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useEffect, useState, useCallback } from 'react'
-import { fetchTasks } from '../../lib/api/client'
+import { fetchTasks } from '../../lib/api/tasks'
 import { statusText } from '../../lib/formatting'
 
 export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
@@ -8,7 +8,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
 
   const loadRunInfo = useCallback(async () => {
     try {
-      const { items } = await fetchTasks({ limit: 20 })
+      const items = await fetchTasks()
       const running = items.find((t) => t.status === 'running')
       setRunInfo(running ? { title: running.title, status: running.status } : null)
     } catch {
@@ -64,8 +64,19 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
           <span>新建任务</span>
         </NavLink>
 
+        <p className="nav-group-label">素材</p>
+        <NavLink to="/assets">
+          <span className="nav-ico">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M3 12l3-3 2 2 4-4 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span>素材管理</span>
+        </NavLink>
+
         <p className="nav-group-label">系统</p>
-        <NavLink to="/settings/providers">
+        <NavLink to="/settings">
           <span className="nav-ico">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5" />

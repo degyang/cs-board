@@ -1,0 +1,52 @@
+{
+  "speech_synthesis": {
+    "service_id": "tts-default",
+    "display_name": "默认 TTS",
+    "capability": "speech_synthesis",
+    "adapter_type": "openai_compatible",
+    "endpoint": "https://api.openai.com/v1/audio/speech",
+    "model": "tts-1",
+    "timeout": 30,
+    "availability": {
+      "available": true,
+      "checked_at": "2025-03-20T14:25:00Z",
+      "latency_ms": 200,
+      "component": "openai",
+      "error_code": null,
+      "suggestion": null
+    }
+  },
+  "speech_alignment": {
+    "service_id": "whisper-alignment",
+    "display_name": "Whisper 对齐",
+    "capability": "speech_alignment",
+    "adapter_type": "whisper",
+    "endpoint": null,
+    "model": "whisper-large-v3",
+    "timeout": 60,
+    "availability": {
+      "available": true,
+      "checked_at": "2025-03-20T14:25:00Z",
+      "latency_ms": 500,
+      "component": "whisper",
+      "error_code": null,
+      "suggestion": null
+    }
+  },
+  "indextts": {
+    "available": false,
+    "checked_at": null,
+    "latency_ms": null,
+    "component": "indextts",
+    "error_code": "NOT_CONFIGURED",
+    "suggestion": "请配置 IndexTTS 服务"
+  },
+  "whisper": {
+    "available": true,
+    "checked_at": "2025-03-20T14:25:00Z",
+    "latency_ms": 300,
+    "component": "whisper",
+    "error_code": null,
+    "suggestion": null
+  }
+}
