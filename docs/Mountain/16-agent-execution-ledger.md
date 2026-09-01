@@ -1149,6 +1149,88 @@ docs(mountain): report storage status correction
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 3M. CCF 系统诊断只读摘要页
+
+### 3M.1 指令编号与已验收基线
+
+```text
+instruction: CCF-DIAGNOSTICS-SUMMARY-09
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: 879482d fix(mountain-web): close storage status behavior evidence
+accepted report: 69fa143 docs(mountain): report storage status correction
+```
+
+审核者已复现 build、contract checker `48/48`、全量 `271/271`、0 act/Router warning、fixture checker、禁止项和 clean status。Storage 只读状态页验收通过。
+
+视觉基准：
+
+```text
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/settings/systemStatus/SystemStatusTabs.tsx
+/mnt/d/workstation/projects/cs-board-main-docs/docs/Mountain/webui-prototype-baseline/source/src/features/settings/systemStatus/types.ts
+```
+
+真实接口为 `GET /api/v1/settings/diagnostics`，现有 DTO 只有 API、动态服务汇总、工具链汇总、存储汇总、遥测状态、日志错误计数和脱敏 recent_errors。后端没有原型所示“系统能力矩阵”，本轮不得伪造。
+
+### 3M.2 唯一目标
+
+只整改 `/settings/diagnostics` 为系统级只读诊断摘要，不修改 Toolchain、Storage、Voice Alignment、Models、Assets、Task、checker 或后端。
+
+1. 标题为“系统诊断”，说明这是当前运行环境的系统级摘要；具体 Task/Run 的事件、日志、Trace 和产物诊断仍进入任务工作台查看。
+2. 展示 API、动态服务、工具链、存储、遥测、近期错误六类摘要。服务和工具链用后端真实计数；空注册表 `0/0/0` 是有效状态，不显示加载失败。
+3. API status 对 `healthy/ok` 显示正常，对 `degraded` 显示降级，对 `failed/down/unavailable` 显示不可用；未知字符串必须原样可见并使用中性状态，不得过滤或假定正常。
+4. 存储容量采用与已验收 Storage 页一致的安全格式化语义；null、负数、NaN、Infinity 显示“未统计”，不得产生 NaN 或负容量。不得复制一份容易漂移的算法：提取并复用纯展示 helper，或以同一共享函数服务两个页面并保留既有测试。
+5. telemetry 只显示 enabled/disabled；logs 只显示 `recent_errors` 计数。系统摘要页不展示 `api.endpoint`、`telemetry.endpoint`、`logs.log_path`，也不展示 recent_errors 的任意 message/details/path；任务级错误详情由运行诊断页负责。
+6. 增加明确的脱敏/隐私说明，并提供真实链接 `/tasks` 前往任务队列；不得硬编码具体 task_id 或假诊断入口。
+7. 不实现原型能力矩阵。页面可不显示该区，报告记录 API gap；不得用固定 engine/visualSource 列表伪造。
+8. loading 使用同构骨架；请求失败显示错误与真实“重新加载”。刷新/重新加载必须再次调用真实 GET，不得只更新时间或本地状态。
+9. 使用请求生命周期保护：卸载/重进的旧响应不能污染新页面；复用 Storage 已验收的真实双生命周期测试模式，不得提交未解析 Promise 的假竞态测试。
+10. 响应额外包含绝对路径、命令、token、secret、credential 时不得渲染；不得使用 localStorage/sessionStorage/runtime fixture/mock fallback。
+
+### 3M.3 强制行为测试
+
+- 六类摘要对完整真实 DTO 渲染，空服务/工具链计数正常；
+- API healthy/degraded/down/未知状态分别映射；
+- 服务与工具链不一致计数原样显示，不在前端重算或修正；
+- 存储容量有效和异常边界，共享 helper 与 Storage 既有测试继续通过；
+- telemetry/logs 为 null 与非 null 两组；只显示安全摘要，不显示 endpoint/log_path/recent error message/details；
+- 页面包含脱敏说明和 `/tasks` 链接，不包含伪能力矩阵；
+- loading、error、retry、真实双生命周期旧响应晚到测试；
+- 敏感额外字段不进入 `container.textContent`；
+- 0 act warning、0 Router warning、0 unhandled rejection。
+
+### 3M.4 门禁、提交和报告
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 run test:contract-checker
+npm --prefix web-v2 test -- --run
+node web-v2/scripts/check-api-contract.mjs
+! rg -n "localStorage|sessionStorage|mock|fixture" web-v2/src/pages/DiagnosticsPage.tsx
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain-web): align system diagnostics summary
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-diagnostics-summary-09-report.md
+```
+
+报告列出六类 DTO 映射、状态映射、共享容量 helper、敏感字段不渲染、双生命周期时序、能力矩阵 API gap、门禁与 clean status。报告提交：
+
+```text
+docs(mountain): report system diagnostics summary
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
