@@ -2111,6 +2111,62 @@ docs(mountain): report final concurrency evidence
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4K. CCB 后端门禁与并发证明最终清场
+
+### 4K.1 指令编号与审核结论
+
+```text
+instruction: CCB-BACKEND-PREINTEGRATION-15
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed test commit: 6d40b27 test(mountain): close same-task concurrency evidence
+reviewed report: 67d78a3 docs(mountain): report final concurrency evidence
+result: rejected narrowly; blocking observation is still instantaneous and full suite has a stable legacy-server failure
+```
+
+审核者复现：专项 `22 passed`；全量 `1 failed, 456 passed, 5 skipped`。失败项 `tests/test_mountain_v1_api.py::test_v1_provider_configuration_enables_start` 单独运行也稳定失败，原因是该文件测试旧 `webapp.server` 和固定 `/api/v1/providers`，不属于新 Mountain Server。生产事务代码不修改。
+
+### 4K.2 唯一任务
+
+1. 两个同一 Task 并发测试均保留 `b_started.wait(...)`，随后使用有界观察 `assert not b_entered.wait(timeout=<合理短值>)`；不得用紧接着的 `is_set()` 代替等待窗口。A 释放后继续断言 `b_entered.is_set()`、A/B=200、最终 Task/request/reference 一致。
+2. 删除现行测试文件 `tests/test_mountain_v1_api.py`。该文件唯一导入旧 `webapp.server`，测试固定 `/providers`、Provider Profile 和旧启动逻辑；新架构已明确不兼容旧项目，新 `webapp.mountain_server` 已有负向测试保证 `/api/v1/providers` 返回 404。不要通过 monkeypatch 可用性、放宽断言或 skip 继续维持旧契约。
+3. 保留 `tests/test_mountain_server.py` 对新组合根、动态 `/services`、旧 `/providers` 404、加密 SecretStore 和 Task API 的测试。
+4. 扫描现行测试：`from webapp.server import app` 必须为零。对其他直接构造 `mountain_v1_router` 的历史单元测试本轮不扩大清理，但必须在报告列出数量和后续债务；不得让它们访问网络或影响全量确定性。
+5. 连续执行两次完整 pytest，均须 0 failed；不得仅复跑失败测试后宣布通过。
+
+### 4K.3 门禁、提交与报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_input_transaction_11.py tests/test_mountain_server.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+! rg -n "from webapp\.server import app|import webapp\.server" tests
+! rg -n "def _install_target|installed_request|old_request_bak|time\.sleep" tests/test_input_transaction_11.py
+git diff --check
+git status --short
+```
+
+实现/测试提交：
+
+```text
+test(mountain): stabilize new server preintegration gate
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-backend-preintegration-15-report.md
+```
+
+报告必须列出：有界阻塞观察、删除旧测试的契约依据、新 Server 覆盖、两次全量 pytest 原始摘要、剩余直接 `mountain_v1_router` 测试数量、所有门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report backend preintegration gate
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
