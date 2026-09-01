@@ -156,26 +156,39 @@ a { color: var(--nt-primary-700); }
 .task-meta .m { display: inline-flex; align-items: center; gap: 5px; }
 .task-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
-/* ---------------- 模型服务卡片 (.mp-*) ---------------- */
+/* ---------------- 模型服务卡片 (.mp-*) ─── 对齐原型 .ss-card 观感 ---------------- */
+.mp-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
 .mp-card {
-  background: var(--nt-surface); border: 1px solid var(--nt-border);
-  border-radius: var(--nt-radius-lg); box-shadow: var(--nt-shadow-xs);
-  padding: 18px 20px; margin-bottom: 14px;
-  transition: border-color .15s, box-shadow .15s;
+  background: var(--nt-bg);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
 }
-.mp-card:hover { border-color: var(--nt-primary-300); box-shadow: var(--nt-shadow-sm); }
-.mp-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.mp-card-icon {
-  width: 40px; height: 40px; border-radius: var(--nt-radius-md); flex: none;
-  background: linear-gradient(135deg, var(--nt-primary-200), var(--nt-info-200));
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-family: var(--nt-font-display); font-weight: 700;
-  color: var(--nt-primary-700);
+.mp-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mp-card-name { font-size: 15px; font-weight: 600; margin: 0; }
+.mp-card-id { font-size: 12.5px; color: var(--nt-text-muted); margin-top: 2px; }
+.mp-purpose { margin: 0; font-size: 13px; line-height: 1.6; color: var(--nt-text-muted); }
+.mp-caps { display: flex; flex-wrap: wrap; gap: 6px; }
+.mp-meta-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mp-card-meta { font-size: 12px; color: var(--nt-text-muted); }
+.mp-card-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; flex-wrap: wrap; }
+
+/* Error block (对齐原型 .ss-error) */
+.mp-error {
+  border: 1px solid rgba(178, 66, 31, 0.35);
+  background: rgba(212, 95, 65, 0.07);
+  border-radius: var(--nt-radius-sm, 6px);
+  padding: 10px 12px;
 }
-.mp-card-title { font-family: var(--nt-font-display); font-size: 15px; font-weight: 600; }
-.mp-card-desc { font-size: 12.5px; color: var(--nt-text-muted); margin-top: 2px; }
-.mp-card-body { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.mp-card-actions { display: flex; gap: 8px; align-items: center; }
+.mp-error-head { display: flex; align-items: center; gap: 8px; }
+.mp-error-code { font-size: 12.5px; color: #B2421F; font-weight: 600; }
+.mp-error-suggestion { margin: 6px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--nt-text); }
 
 /* Category badge */
 .mp-category-badge {
@@ -184,10 +197,6 @@ a { color: var(--nt-primary-700); }
   font-size: 11px; font-weight: 600;
   background: var(--nt-neutral-100); color: var(--nt-text-secondary);
 }
-.mp-category-badge.cat-text { background: var(--nt-info-50); color: var(--nt-info-700); }
-.mp-category-badge.cat-image { background: #f5e6ff; color: #7c3aed; }
-.mp-category-badge.cat-voice { background: var(--nt-primary-50); color: var(--nt-primary-700); }
-.mp-category-badge.cat-tool { background: var(--nt-neutral-100); color: var(--nt-text-secondary); }
 
 /* Model chip */
 .mp-model-chip {
@@ -542,7 +551,7 @@ a { color: var(--nt-primary-700); }
 
 .set-content { margin-top: 0; }
 .set-filter-row { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
-.set-models .mp-list { display: flex; flex-direction: column; gap: 14px; }
+.set-models .mp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 
 /* ==========================================================================
    Voice Alignment (.va-*)

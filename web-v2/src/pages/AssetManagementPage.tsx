@@ -518,16 +518,16 @@ export function AssetManagementPage() {
   const showFilters = activeTab === 'preset' || activeTab === 'custom'
 
   return (
-    <div className="page-container">
-      <div className="am-header">
-        <h1 className="am-title">资产管理</h1>
-        <p className="am-description">管理预置风格、自定义风格和音色库</p>
+    <div className="page">
+      <div className="page-head">
+        <h1 className="page-title">资产管理</h1>
+        <p className="page-desc">管理预置风格、自定义风格和音色库</p>
       </div>
 
       <Tabs items={TAB_ITEMS} active={activeTab} onChange={setActiveTab} />
 
-      {feedback && <div className="am-feedback">{feedback}</div>}
-      {error && <div className="am-error" role="alert">{error}</div>}
+      {feedback && <div className="notice notice-ok">{feedback}</div>}
+      {error && <div className="error-card" role="alert"><div>{error}</div></div>}
 
       <div className="am-toolbar">
         <input
@@ -592,16 +592,14 @@ export function AssetManagementPage() {
       ) : items.length === 0 ? (
         <div className="am-empty">暂无数据</div>
       ) : (
-        <div className="am-layout">
+        <div className="am-body">
           <div className="am-list">
             {items.map(item => (
-              <div
+              <button
                 key={getId(item)}
-                className={`am-list-item ${selected && getId(selected) === getId(item) ? 'am-list-item--selected' : ''}`}
+                type="button"
+                className={`am-item${selected && getId(selected) === getId(item) ? ' on' : ''}`}
                 onClick={() => setSelected(item)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(item) }}
               >
                 {isPreset && !isVoice(item) && (item as StyleTemplate).preview_asset_id ? (
                   <div className="am-list-thumb">
@@ -617,26 +615,26 @@ export function AssetManagementPage() {
                     <span>🎨</span>
                   </div>
                 ) : null}
-                <div className="am-list-item-main">
-                  <div className="am-list-item-name">{item.name}</div>
+                <div className="am-item-main">
+                  <div className="am-item-name">{item.name}</div>
                   {!isVoice(item) && isPreset && (item as StyleTemplate).description && (
-                    <div className="am-list-item-desc">{(item as StyleTemplate).description}</div>
+                    <div className="am-item-sub">{(item as StyleTemplate).description}</div>
                   )}
                   {!isVoice(item) && isPreset && (item as StyleTemplate).tags.length > 0 && (
-                    <div className="am-list-item-tags">
+                    <div className="am-tags">
                       {(item as StyleTemplate).tags.slice(0, 3).map(t => (
-                        <span key={t} className="am-tag am-tag-sm">{t}</span>
+                        <span key={t} className="am-tag">{t}</span>
                       ))}
                       {(item as StyleTemplate).tags.length > 3 && (
-                        <span className="am-tag am-tag-sm am-tag-more">+{(item as StyleTemplate).tags.length - 3}</span>
+                        <span className="am-tag am-tag-more">+{(item as StyleTemplate).tags.length - 3}</span>
                       )}
                     </div>
                   )}
                   {(!isPreset || isVoice(item)) && (
-                    <div className="am-list-item-status">{item.status === 'active' ? '已启用' : '未启用'}</div>
+                    <div className="am-item-sub">{item.status === 'active' ? '已启用' : '未启用'}</div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
 
             {hasMore && (
@@ -651,7 +649,7 @@ export function AssetManagementPage() {
             )}
           </div>
 
-          <div className="am-detail">
+          <div className="am-detail card">
             {selected ? (
               isVoice(selected) ? (
                 <VoiceDetail
@@ -679,7 +677,11 @@ export function AssetManagementPage() {
                 />
               )
             ) : (
-              <div className="am-detail-empty">选择一项查看详情</div>
+              <div className="am-empty-state">
+                <div className="am-empty-illu">🗂️</div>
+                <div className="am-empty-title">暂无数据</div>
+                <div className="am-empty-sub">请从左侧列表选择一项查看详情</div>
+              </div>
             )}
           </div>
         </div>

@@ -418,8 +418,8 @@ describe('Preset Style Browser', () => {
 
     await waitFor(() => {
       // List item tags container
-      const listItem = document.querySelector('.am-list-item')!
-      const listTags = listItem.querySelectorAll('.am-tag-sm')
+      const listItem = document.querySelector('.am-item')!
+      const listTags = listItem.querySelectorAll('.am-tag')
       // 3 visible tags + 1 "+1" indicator
       expect(listTags.length).toBe(4)
       expect(listTags[0].textContent).toBe('白板')

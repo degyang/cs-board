@@ -1,5 +1,6 @@
 /* ===========================================================================
    System toolchain — runtime detection results, presented read-only.
+   Card hierarchy 对齐原型 ToolchainStatusTab: card → ss-grid → ss-card
    =========================================================================== */
 
 import { useEffect, useRef, useState } from 'react'
@@ -24,7 +25,7 @@ function presentationFor(component: string): ToolPresentation {
 
 function ToolchainSkeleton() {
   return (
-    <div className="tc-grid" aria-label="正在加载系统工具链">
+    <div className="ss-grid" aria-label="正在加载系统工具链">
       {[0, 1, 2, 3].map(index => (
         <div className="tc-card tc-card--skeleton" key={index} aria-hidden="true">
           <span className="tc-skeleton tc-skeleton--title" />
@@ -40,22 +41,25 @@ function ToolCard({ tool }: { tool: ToolchainComponent }) {
   const presentation = presentationFor(tool.component)
 
   return (
-    <article className="tc-card">
-      <div className="tc-card-header">
-        <h3 className="tc-card-name">{presentation.name}</h3>
-        <span className={`tc-status tc-status--${tool.available ? 'available' : 'unavailable'}`}>
+    <div className="ss-card">
+      <div className="ss-card-head">
+        <h3 className="ss-card-name">{presentation.name}</h3>
+        <span className={`badge st-${tool.available ? 'succeeded' : 'failed'}`}>
           {tool.available ? '可用' : '不可用'}
         </span>
       </div>
-      <p className="tc-card-purpose">{presentation.purpose}</p>
-      {tool.version && <p className="tc-card-version">{tool.version}</p>}
+      <p className="ss-card-purpose">{presentation.purpose}</p>
+      {tool.version && <div className="ss-card-meta mono">{tool.version}</div>}
+
       {!tool.available && (tool.error_code || tool.suggestion) && (
-        <div className="tc-unavailable-detail">
-          {tool.error_code && <p className="tc-error-code">{tool.error_code}</p>}
-          {tool.suggestion && <p className="tc-suggestion">{tool.suggestion}</p>}
+        <div className="ss-error">
+          <div className="ss-error-head">
+            {tool.error_code && <span className="ss-error-code mono">{tool.error_code}</span>}
+          </div>
+          {tool.suggestion && <p className="ss-error-suggestion">{tool.suggestion}</p>}
         </div>
       )}
-    </article>
+    </div>
   )
 }
 
@@ -94,9 +98,9 @@ export function ToolchainPage() {
   const tools = settings?.tools ?? []
 
   return (
-    <section className="tc-panel" aria-labelledby="toolchain-title">
-      <h2 className="tc-title" id="toolchain-title">系统工具链</h2>
-      <p className="tc-description">
+    <div className="card">
+      <h2 className="card-title">系统工具链</h2>
+      <p className="card-sub">
         以下为本地运行环境探测到的系统工具链状态，仅作只读展示；不提供可保存配置或手动探测操作。
       </p>
 
@@ -109,10 +113,10 @@ export function ToolchainPage() {
       )}
       {!loading && !error && tools.length === 0 && <p className="tc-empty">未探测到工具链组件</p>}
       {!loading && !error && tools.length > 0 && (
-        <div className="tc-grid">
+        <div className="ss-grid">
           {tools.map(tool => <ToolCard key={tool.component} tool={tool} />)}
         </div>
       )}
-    </section>
+    </div>
   )
 }
