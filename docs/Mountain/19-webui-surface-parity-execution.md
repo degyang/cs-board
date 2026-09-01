@@ -440,3 +440,56 @@ web-v2/src/styles/settings.css               — .ss-hint
 - 任务队列、新建任务、工作台：未进入（用户约束）
 - mock/fixture/localStorage：未引入（§1.2 约束）
 - 硬编码供应商/模型/资产数据：未新增（§2 约束）
+
+## 9. 主审核者对“最终纠偏报告”的验收结论
+
+审核状态：**不通过。报告与仓库交付物不一致。**
+
+可复现证据：
+
+1. commit `67d37af` 没有新增或修改任何 PNG；`git diff 504702f..67d37af` 仅有 6 个文本文件。
+2. `docs/Mountain/webui-parity-evidence/` 仍是第二轮留下的 10 张旧图，时间均为 2026-09-01 23:32；报告声称的第 11 张 `settings/models-edit.png` 不存在。
+3. 旧 `models-list.png` 仍是 64px rail，旧 `assets/preset.png` 仍是错版页面，因此不能作为本轮修复证据。
+4. `AppShell.tsx` 没有修改：localStorage 没有 `mountain.ui.sidebarPinned` 时返回 `false`，默认仍是 rail；这与冻结原型默认完整侧栏直接冲突。
+5. 截图脚本仍取 `services.items[0]`，并未固定选择 `openai-compatible-text`；报告声称 LLM Secret 详情证据不成立。
+6. 截图脚本没有按第 8.4 节断言关键标题、侧栏状态、卡片数量和 loading 消失。
+7. evidence README 中三个不存在的原型文件引用仍未修正。
+
+CCF 继续原分支，只执行以下可机械验收的修复：
+
+### 9.1 修复默认侧栏并增加测试
+
+- `AppShell` 在 PIN_KEY 不存在时默认 `pinned=true`；只有明确保存 `0` 才进入 rail。
+- 增加组件测试：空 localStorage 时存在“山野小读”“任务队列”“新建任务”“资产管理”“设置”“帮助”的可见文本，shell 包含 `is-pinned`。
+
+### 9.2 修复证据脚本的确定性
+
+- 通过 `service_id === 'openai-compatible-text'` 选择详情/编辑服务；找不到时立即失败。
+- 每次 browser context 开始时清空业务 localStorage，再显式验证应用默认生成 `is-pinned`，不得靠写入 PIN_KEY 伪造默认状态。
+- 每页截图前断言设置二级导航、页面标题存在且 loading/spinner 不可见。
+- 模型列表断言 `.mp-card` 数量至少 6、网格计算列数为 2。
+- 资产 preset 断言三个横向 Tab 可见、至少 13 个 preset、第一项被选中且详情标题非“暂无数据”。
+- 对所有 `/api/` pathname 的 `>=400` response 判失败。
+
+### 9.3 实际生成并提交证据
+
+- 使用当前分支 WebUI 和真实 8000 后端运行 `npm --prefix web-v2 run evidence`。
+- `git status --short` 必须显示 10 张旧 PNG 被修改以及 `models-edit.png` 新增。
+- 人工打开 `models-list.png` 和 `assets/preset.png`，确认不再是本节描述的旧图后再提交。
+- evidence README 的三个系统页统一引用 `prototypes/webui/src/features/settings/systemStatus/SystemStatusTabs.tsx`。
+- README 增加本轮生成时间、前端 commit 和后端基线 commit，防止旧证据冒充新证据。
+
+### 9.4 完成条件
+
+最终提交必须至少包含：
+
+```text
+M web-v2/src/components/layout/AppShell.tsx
+M/A 对应 AppShell 测试
+M web-v2/scripts/capture-parity-evidence.mjs
+M docs/Mountain/webui-parity-evidence/README.md
+M 10 张既有 PNG
+A docs/Mountain/webui-parity-evidence/settings/models-edit.png
+```
+
+如果上述文件集合不完整，不得再次填写“完成报告”。完成后在本节末尾追加实际 commit、`git diff --name-status` 摘要和 11 张文件的 SHA-256。
