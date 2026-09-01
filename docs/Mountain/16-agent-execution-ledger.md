@@ -2997,6 +2997,67 @@ docs(mountain): report startup failure cleanup
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4R. CCB 后端测试去除 sibling worktree 依赖
+
+### 4R.1 指令编号与审核结论
+
+```text
+instruction: CCB-PORTABLE-BACKEND-RUNTIME-22
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 1930c0b fix(mountain): prove startup failure cleanup
+reviewed report: 94fb655 docs(mountain): report startup failure cleanup
+result: runtime behavior accepted; backend test portability rejected due hardcoded CCF sibling worktree
+```
+
+审核者已复现专项 `14 passed in 19.85s`、真实 CCF checker、三条 smoke、加密 health、PID 终止与临时目录清理。startup failure 和日志句柄问题已关闭。
+
+唯一剩余阻断：`tests/test_backend_runtime_17.py` 重新定义 `CCF_CHECKER = Path('/mnt/d/Workstation/.../mountain-assets-settings-web/...')`，成功与 startup failure 测试均依赖该文件预先存在。新 clone、CI 或单独后端 worktree 无此 sibling 路径，全量后端测试不可运行。这违反 §4P 已明确的“后端 pytest 不得硬编码 CCF sibling worktree”；真实 CCF checker 只能属于独立集成门禁。
+
+### 4R.2 唯一任务
+
+只删除后端测试对外部 worktree 的依赖，不再改启动器和 smoke 生命周期生产逻辑。
+
+1. 从 `tests/test_backend_runtime_17.py` 删除 `CCF_CHECKER` 绝对路径及所有 `/mnt/d/Workstation` 引用。
+2. lifecycle 成功测试在 pytest 临时目录生成最小成功 checker，输出 smoke 所需的精确成功标记；它只证明 smoke 生命周期，不冒充 CCF 契约测试。
+3. checker failure 继续使用临时失败 checker；startup failure 使用任意存在的临时 checker，因为 launcher 在 checker 执行前失败。三个测试不得依赖 sibling repo。
+4. 报告明确区分：pytest lifecycle checker 是测试 fixture；真实 CCF production checker 由固定独立门禁命令验证。不得把 fixture 结果写成契约对齐。
+5. 模拟 CCF checker 文件被移除/重命名后专项测试仍须全部通过。可在隔离环境通过只检出本 worktree或显式 monkeypatch 外部环境验证，不得实际改动 CCF worktree。
+6. 保留真实集成 smoke 门禁，路径仅出现在本节命令/报告执行记录，不得进入后端生产代码或 pytest。
+7. 新建纠偏报告，不改写旧报告；专项必须 0 skipped，worktree clean。
+
+### 4R.3 门禁、提交和报告
+
+```bash
+env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q -rs tests/test_backend_runtime_17.py
+! rg -n "/mnt/[a-zA-Z]/|mountain-assets-settings-web|CCF_CHECKER" tests/test_backend_runtime_17.py scripts/run_mountain_backend.py scripts/smoke_real_backend_contract.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/smoke_real_backend_contract.py --checker-path /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+test(mountain): remove sibling worktree dependency
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-portable-runtime-22-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report standalone backend runtime tests
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。此切片通过后不再继续启动脚本工作，下一后端切片回到任务队列/新建任务契约。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
