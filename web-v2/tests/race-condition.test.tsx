@@ -253,16 +253,29 @@ describe('race condition: unmount safety', () => {
       }))
     })
 
+    // Call-through spy: real console.error still prints to stderr (no
+    // suppression), so any genuine warning still surfaces and is caught by
+    // the gate's warning scan. We only record calls to assert the unmount
+    // scenario stays clean.
+    const errorSpy = vi.spyOn(console, 'error')
+
     const { unmount } = renderAssetPage()
 
     // Unmount before fetch completes
     unmount()
 
-    // Resolve the fetch — should not cause warnings
+    // Resolve the fetch — the mounted guard must skip the state update
     await act(async () => { resolveFetch!(undefined) })
     await new Promise(r => setTimeout(r, 50))
 
-    // No assertion needed — test passes if no "setState on unmounted" warning
+    // Real assertion: resolving the fetch after unmount must not emit a
+    // state-update-on-unmounted warning or an act violation.
+    const leaked = errorSpy.mock.calls.filter(([msg]) =>
+      typeof msg === 'string' &&
+      /unmounted|can't perform a react state update|not wrapped in act/i.test(msg),
+    )
+    expect(leaked).toHaveLength(0)
+    errorSpy.mockRestore()
   })
 })
 
