@@ -86,16 +86,18 @@ class FileSecretStore:
             import os
             env = os.environ.get("CSBOARD_MASTER_KEY")
             if env:
-                import base64
-                master_key = base64.b64decode(env)
+                master_key = env.encode("ascii")
             else:
-                master_key = Fernet.generate_key()
-                import sys
-                print(
-                    f"[FileSecretStore] Generated master key. "
-                    f"Set CSBOARD_MASTER_KEY={master_key.decode()} to persist.",
-                    file=sys.stderr,
-                )
+                key_path = self._path.parent / "master.key"
+                if key_path.is_file():
+                    master_key = key_path.read_bytes().strip()
+                else:
+                    master_key = Fernet.generate_key()
+                    key_path.write_bytes(master_key)
+                    try:
+                        os.chmod(key_path, 0o600)
+                    except (OSError, AttributeError):
+                        pass
 
         self._fernet = Fernet(master_key)
         self._data: dict[str, str] = {}

@@ -29,9 +29,18 @@ def test_create_secret_store_encrypted(tmp_path: Path):
         store, is_encrypted = create_secret_store(tmp_path, encrypted=True)
         assert is_encrypted is True
         assert isinstance(store, FileSecretStore)
+        assert (tmp_path / ".secrets" / "master.key").is_file()
     except Exception:
         # 如果环境不支持加密，应抛出异常
         pytest.skip("环境不支持 Fernet 加密")
+
+
+def test_default_encrypted_store_survives_restart(tmp_path: Path):
+    store, _ = create_secret_store(tmp_path, encrypted=True)
+    store.set("service_api_key", "persist-me")
+
+    reopened, _ = create_secret_store(tmp_path, encrypted=True)
+    assert reopened.get("service_api_key") == "persist-me"
 
 
 def test_create_secret_store_plaintext_explicit(tmp_path: Path):
