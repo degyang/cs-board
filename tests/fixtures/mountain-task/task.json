@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "task_id": "project-fixture-001",
+  "title": "Mountain contract fixture",
+  "status": "running",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "created_at": "2026-08-29T09:00:00Z",
+  "updated_at": "2026-08-29T10:00:00Z",
+  "active_run_id": "run-fixture-001",
+  "revision": 1
+}

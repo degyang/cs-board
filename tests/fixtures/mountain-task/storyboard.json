@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifact_type": "storyboard",
+  "artifact_id": "artifact-storyboard-001",
+  "artifact_key": "planning.storyboard",
+  "task_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "producer_stage": "plan-storyboard",
+  "producer_version": "1.0.0",
+  "created_at": "2026-08-29T09:05:00Z",
+  "input_fingerprint": "sha256:0123456789abcdef",
+  "visuals": [{"visual_id": "visual-001-01", "unit_id": "unit-001", "prompt": "public data analysis disclaimer illustration", "negative_prompt": "text, watermark, logo", "composition": "centered", "overlay_text": [], "style_profile": "fixture-whiteboard"}]
+}

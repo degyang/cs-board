@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/mountain/domain-event.schema.json",
+  "type": "object",
+  "required": ["schema_version", "record_id", "sequence", "timestamp", "event_name", "task_id", "run_id", "trace_id", "command_id"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "record_id": {"$ref": "common.schema.json#/$defs/id"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "timestamp": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "event_name": {"type": "string", "minLength": 1},
+    "entrypoint": {"$ref": "common.schema.json#/$defs/entrypoint"},
+    "task_id": {"$ref": "common.schema.json#/$defs/id"},
+    "run_id": {"$ref": "common.schema.json#/$defs/id"},
+    "trace_id": {"$ref": "common.schema.json#/$defs/id"},
+    "command_id": {"$ref": "common.schema.json#/$defs/id"},
+    "span_id": {"$ref": "common.schema.json#/$defs/id"},
+    "parent_span_id": {"$ref": "common.schema.json#/$defs/id"},
+    "stage": {"type": "string"},
+    "unit_id": {"$ref": "common.schema.json#/$defs/id"},
+    "visual_id": {"$ref": "common.schema.json#/$defs/id"},
+    "artifact_key": {"type": "string"},
+    "message": {"type": "string", "maxLength": 2000}
+  }
+}

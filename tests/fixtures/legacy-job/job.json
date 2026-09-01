@@ -1,0 +1,28 @@
+{
+  "id": "legacy-fixture-001",
+  "status": "done",
+  "stage": "制作完成",
+  "progress": 100,
+  "created_at": 1724893200.0,
+  "started_at": 1724893200.0,
+  "finished_at": 1724893260.0,
+  "queue_order": 1724893200000000000,
+  "queue_stage": "render",
+  "job_type": "generate",
+  "pipeline_version": "standard_v1",
+  "reference_mode": "standard",
+  "task_name": "脱敏旧任务",
+  "copy": "这是用于固定 legacy 任务格式的脱敏测试文案。",
+  "style": "极简粗线简笔白板风",
+  "scenes_per_image": 1,
+  "pen_text": "",
+  "include_key_text": true,
+  "include_subtitles": true,
+  "stroke_detail": "detailed",
+  "timings": {
+    "voice": {"label": "语音克隆", "seconds": 18.2},
+    "render": {"label": "本地渲染", "seconds": 41.8}
+  },
+  "result_file": "final.mp4",
+  "can_rerender": true
+}

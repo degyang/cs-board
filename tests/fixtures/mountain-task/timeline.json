@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifact_type": "timeline",
+  "artifact_id": "artifact-timeline-001",
+  "artifact_key": "timing.timeline",
+  "task_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "producer_stage": "clone-voice",
+  "producer_version": "1.0.0",
+  "created_at": "2026-08-29T09:04:00Z",
+  "input_fingerprint": "sha256:0123456789abcdef",
+  "units": [{"unit_id": "unit-001", "duration_ms": 8280, "timing_source": "whisper", "alignment": {"status": "succeeded", "engine": "whisper", "coverage": 0.98, "confidence": 0.91}, "visual_timings": [{"visual_id": "visual-001-01", "start_ms": 0, "end_ms": 5740}, {"visual_id": "visual-001-02", "start_ms": 5740, "end_ms": 8280}]}]
+}

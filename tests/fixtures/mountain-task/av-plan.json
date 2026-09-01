@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "artifact_type": "av-plan",
+  "artifact_id": "artifact-av-plan-001",
+  "artifact_key": "planning.av-plan",
+  "task_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "producer_stage": "generate-visual-anchors",
+  "producer_version": "1.0.0",
+  "created_at": "2026-08-29T09:02:00Z",
+  "input_fingerprint": "sha256:0123456789abcdef",
+  "source_text_sha256": "sha256:fedcba9876543210",
+  "voice_units": [
+    {
+      "unit_id": "unit-001",
+      "order": 1,
+      "source_range": {"start": 0, "end": 41},
+      "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。",
+      "visual_items": [
+        {"visual_id": "visual-001-01", "order": 1, "source_range": {"start": 0, "end": 29}, "text": "以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。"},
+        {"visual_id": "visual-001-02", "order": 2, "source_range": {"start": 29, "end": 41}, "text": "市场有风险，投资需谨慎。"}
+      ]
+    }
+  ]
+}

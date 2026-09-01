@@ -1,0 +1,85 @@
+/* ==========================================================================
+   山野小读 NovaTech — Design Token System
+   来源：brand-tokens-shanye-xiaodu.html
+   ========================================================================== */
+:root {
+  /* ---- 中性色 Neutral ---- */
+  --nt-neutral-50:#FAF9F5;  --nt-neutral-100:#F2F0E9; --nt-neutral-200:#E8E6DC;
+  --nt-neutral-300:#D6D3C6; --nt-neutral-400:#B0AEA5; --nt-neutral-500:#8A887F;
+  --nt-neutral-600:#6B6A63; --nt-neutral-700:#4D4C47; --nt-neutral-800:#32312E;
+  --nt-neutral-900:#1F1E1C; --nt-neutral-950:#141413;
+
+  /* ---- 主色 Primary · 苔绿 Moss ---- */
+  --nt-primary-50:#F4F6EF;  --nt-primary-100:#E7ECDD; --nt-primary-200:#D0D9BD;
+  --nt-primary-300:#B5C399; --nt-primary-400:#97A878; --nt-primary-500:#788C5D;
+  --nt-primary-600:#62744B; --nt-primary-700:#4B593A; --nt-primary-800:#363F2B;
+  --nt-primary-900:#232A1C;
+
+  /* ---- 辅助色 Accent · 落日橙 Sunset ---- */
+  --nt-accent-50:#FCF3EF;   --nt-accent-100:#F8E3DA;  --nt-accent-200:#F0C6B5;
+  --nt-accent-300:#E5A389;  --nt-accent-400:#DC8161;  --nt-accent-500:#D97757;
+  --nt-accent-600:#C25F41;  --nt-accent-700:#9C4A33;  --nt-accent-800:#7A3A29;
+  --nt-accent-900:#5C2C20;
+
+  /* ---- 辅助色 Info · 远山蓝 Distant ---- */
+  --nt-info-50:#F1F6FB;     --nt-info-100:#DFEBF6;    --nt-info-200:#C2D8EC;
+  --nt-info-300:#9DC0E0;    --nt-info-400:#77A5CE;    --nt-info-500:#6A9BCC;
+  --nt-info-600:#4F80B0;    --nt-info-700:#3D648C;    --nt-info-800:#2F4C6B;
+  --nt-info-900:#22364C;
+
+  /* ---- 语义色 Semantic ---- */
+  --nt-bg:#FAF9F5;          --nt-bg-sunken:#F2F0E9;
+  --nt-surface:#FFFFFF;     --nt-border:#E8E6DC;      --nt-border-strong:#D6D3C6;
+  --nt-text:#141413;        --nt-text-secondary:#4D4C47;
+  --nt-text-muted:#6B6A63;  --nt-text-inverse:#FAF9F5;
+  --nt-brand:#788C5D;       --nt-brand-hover:#62744B;
+  --nt-warning:#D97757;     --nt-danger:#B3452F;      --nt-success:#5C7A3F;
+
+  /* ---- 字体 Font ---- */
+  --nt-font-display:'Poppins','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;
+  --nt-font-body:'Lora',Georgia,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+  --nt-font-mono:'SFMono-Regular','JetBrains Mono',Consolas,'Courier New',monospace;
+
+  --nt-text-h1:40px;   --nt-lh-h1:1.2;   --nt-weight-h1:700;
+  --nt-text-h2:32px;   --nt-lh-h2:1.25;  --nt-weight-h2:700;
+  --nt-text-h3:28px;   --nt-lh-h3:1.32;  --nt-weight-h3:600;
+  --nt-text-h4:24px;   --nt-lh-h4:1.35;  --nt-weight-h4:600;
+  --nt-text-h5:20px;   --nt-lh-h5:1.4;   --nt-weight-h5:600;
+  --nt-text-h6:16px;   --nt-lh-h6:1.5;   --nt-weight-h6:600;
+  --nt-text-lead:18px; --nt-lh-lead:1.7;
+  --nt-text-body:16px; --nt-lh-body:1.75;
+  --nt-text-sm:14px;   --nt-lh-sm:1.65;
+  --nt-text-caption:13px; --nt-lh-caption:1.5;
+
+  /* ---- 间距 Spacing（基准 4px） ---- */
+  --nt-space-0:0px;   --nt-space-1:4px;   --nt-space-2:8px;   --nt-space-3:12px;
+  --nt-space-4:16px;  --nt-space-5:20px;  --nt-space-6:24px;  --nt-space-8:32px;
+  --nt-space-10:40px; --nt-space-12:48px; --nt-space-16:64px; --nt-space-20:80px;
+
+  /* ---- 圆角 Radius ---- */
+  --nt-radius-sm:4px;  --nt-radius-md:8px;  --nt-radius-lg:12px;
+  --nt-radius-xl:16px; --nt-radius-full:9999px;
+
+  /* ---- 阴影 Shadow ---- */
+  --nt-shadow-xs:0 1px 2px rgba(20,20,19,.06);
+  --nt-shadow-sm:0 1px 3px rgba(20,20,19,.08), 0 1px 2px rgba(20,20,19,.04);
+  --nt-shadow-md:0 4px 8px -2px rgba(20,20,19,.10), 0 2px 4px -2px rgba(20,20,19,.06);
+  --nt-shadow-focus:0 0 0 3px rgba(217,119,87,.35);
+
+  /* ---- Status variants ---- */
+  --nt-st-stale-bg:#f0ece7;   --nt-st-stale-fg:#8a8580;
+  --nt-st-skipped-bg:#eae6e1;  --nt-st-skipped-fg:#6b6560;
+
+  /* ---- Typography tracking ---- */
+  --nt-tracking-h1:-0.01em;
+  --nt-tracking-h2:0em;
+  --nt-tracking-body:0em;
+
+  /* ---- Breakpoints (reference) ---- */
+  --nt-bp-md:768px;
+  --nt-bp-lg:1024px;
+  --nt-bp-xl:1280px;
+
+  /* ---- 本地界面变量 ---- */
+  --ui-sidebar-w:264px;
+}

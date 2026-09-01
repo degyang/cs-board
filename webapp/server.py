@@ -21,6 +21,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from gradio_client import Client, handle_file
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# LEGACY ARCHIVE — 以下导入为旧 WebUI (mountain_api, mountain_stages,
+# LegacyJobBridge, /api/jobs/..., 127.0.0.1:8000) 的遗留兼容。
+# Mountain M07+ 新功能禁止依赖这些模块；新代码只使用 /api/v1 端点。
+# 待旧 WebUI 完全下线后，以下三行及 mountain_router/mountain_stages_router
+# 注册可整体移除。
+#
+# 注意：LegacyJobBridge 从 legacy_bridge 直接导入，不经过 __init__.py。
+# csboard.application.__init__ 不再导出 LegacyJobBridge。
+# ═══════════════════════════════════════════════════════════════════════════════
+from csboard.application.legacy_bridge import LegacyJobBridge
+from webapp.mountain_api import mountain_router
+from webapp.mountain_v1_api import mountain_v1_router
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / ".webapp"
@@ -39,6 +53,7 @@ DEFAULT_CONFIG = {
     "base_url": "https://api.openlux.ai/v1",
     "text_model": "gpt-5",
     "image_model": "gpt-image-2",
+    "llm_api_mode": "chat-completions",
     "tts_url": "http://127.0.0.1:7860",
     "tts_url_2": "",
     "tts_mode": "gradio",
@@ -213,6 +228,8 @@ def oil_visual_reference_context(scenes: list[dict[str, Any]], infographic: bool
     return [path], instruction
 
 app = FastAPI(title="白板声画工坊", version="0.1.0")
+app.include_router(mountain_router(STATE_DIR))
+app.include_router(mountain_v1_router(STATE_DIR))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:13000", "http://127.0.0.1:13000"],
@@ -278,6 +295,13 @@ def terminate_running_process(job_id: str) -> None:
 def _persist_job_locked(job_id: str) -> None:
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    # A legacy job remains the source of truth during the migration period.  The
+    # bridge only appends a private correlation block and writes sidecar Mountain
+    # telemetry; any bridge failure must never prevent legacy recovery.
+    try:
+        LegacyJobBridge(JOBS_DIR.parent).sync(job_id, JOBS[job_id])
+    except Exception:
+        pass
     target = job_dir / "job.json"
     temporary = job_dir / "job.json.tmp"
     temporary.write_text(json.dumps(JOBS[job_id], ensure_ascii=False, indent=2), encoding="utf-8")
@@ -512,6 +536,7 @@ def job_snapshot(job_id: str) -> dict[str, Any]:
             result["can_rerender"] = True
         result.pop("copy", None)
         result.pop("visual_references", None)
+        result.pop("_mountain", None)
         timings = {key: value.copy() for key, value in source.get("timings", {}).items()}
         current = source.get("current_phase")
         phase_started = source.get("phase_started_at")
@@ -638,7 +663,7 @@ def provider_retry_delay(attempt: int) -> int:
 
 def provider_post(config: dict[str, Any], endpoint: str, payload: dict[str, Any], timeout: float = 1800, job_id: str | None = None) -> dict[str, Any]:
     if not config.get("api_key"):
-        raise RuntimeError("请先在 API 设置中填写 OpenLux API Key")
+        raise RuntimeError("请先在 API 设置中填写 OpenAI 兼容 API Key")
     last_error: Exception | None = None
     for attempt in range(3):
         try:
@@ -649,7 +674,7 @@ def provider_post(config: dict[str, Any], endpoint: str, payload: dict[str, Any]
                     json=payload,
                 )
             if response.is_error:
-                error = ProviderHTTPError(response.status_code, f"OpenLux 调用失败：{response.status_code} {response.text[:800]}")
+                error = ProviderHTTPError(response.status_code, f"模型服务调用失败：{response.status_code} {response.text[:800]}")
                 if response.status_code not in {408, 409, 425, 429, 500, 502, 503, 504}:
                     raise error
                 raise error
@@ -667,16 +692,27 @@ def provider_post(config: dict[str, Any], endpoint: str, payload: dict[str, Any]
 
 def provider_models(config: dict[str, Any], timeout: float = 30) -> set[str]:
     if not config.get("api_key"):
-        raise RuntimeError("请先在 API 设置中填写 OpenLux API Key")
+        raise RuntimeError("请先在 API 设置中填写 OpenAI 兼容 API Key")
     with httpx.Client(timeout=timeout) as client:
         response = client.get(
             f"{config['base_url'].rstrip('/')}/models",
             headers={"Authorization": f"Bearer {config['api_key']}"},
         )
         if response.is_error:
-            raise ProviderHTTPError(response.status_code, f"OpenLux 模型列表读取失败：{response.status_code} {response.text[:800]}")
+            raise ProviderHTTPError(response.status_code, f"模型列表读取失败：{response.status_code} {response.text[:800]}")
         payload = response.json()
     return {str(item.get("id")) for item in payload.get("data", []) if isinstance(item, dict) and item.get("id")}
+
+
+def provider_text(config: dict[str, Any], prompt: str, job_id: str | None = None) -> dict[str, Any]:
+    """Call either common Chat Completions or the newer Responses API."""
+    if config.get("llm_api_mode") == "responses":
+        return provider_post(config, "responses", {"model": config["text_model"], "input": prompt}, job_id=job_id)
+    return provider_post(config, "chat/completions", {
+        "model": config["text_model"],
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+    }, job_id=job_id)
 
 
 def script_units(copy: str) -> list[str]:
@@ -1034,7 +1070,7 @@ elements 必须是恰好 3 个具体可画的中文短语，按叙事顺序排�
     scenes: list[dict[str, Any]] = []
     last_plan_error: Exception | None = None
     for attempt in range(3):
-        payload = provider_post(config, "responses", {"model": config["text_model"], "input": prompt}, job_id=job_id)
+        payload = provider_text(config, prompt, job_id=job_id)
         try:
             candidate = parse_json_block(extract_response_text(payload))
             if not isinstance(candidate, list) or not candidate:
@@ -1167,7 +1203,7 @@ def generate_image(config: dict[str, Any], prompt: str, target: Path, reference_
     }
     if reference_images:
         if not config.get("api_key"):
-            raise RuntimeError("请先在 API 设置中填写 OpenLux API Key")
+            raise RuntimeError("请先在 API 设置中填写 OpenAI 兼容 API Key")
         form_data = {key: str(value) for key, value in request_payload.items()}
         raw_files = [(path.name, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "image/png") for path in reference_images]
         response = None
@@ -1200,7 +1236,7 @@ def generate_image(config: dict[str, Any], prompt: str, target: Path, reference_
         if response is None or response.is_error:
             status = response.status_code if response is not None else 500
             detail = response.text[:800] if response is not None else str(last_transport_error or "没有响应")
-            raise ProviderHTTPError(status, f"OpenLux 参考图调用失败：{status} {detail}")
+            raise ProviderHTTPError(status, f"参考图模型调用失败：{status} {detail}")
         payload = response.json()
     else:
         try:
@@ -1280,9 +1316,11 @@ def _synthesize_voice_once(config: dict[str, Any], reference: Path, copy: str, t
     # default Gradio HTTP read timeout is too short and abandons a healthy job.
     client = Client(config["tts_url"], verbose=False, httpx_kwargs={"timeout": 1800.0})
     job = client.submit(
-        "与参考音频的音色相同", handle_file(str(reference)), copy, None, 0.65,
+        "Same as the voice reference", handle_file(str(reference)), copy,
+        None,  # optional emotion-reference audio
+        0.65,
         0, 0, 0, 0, 0, 0, 0, 0, "", False, 120,
-        True, 0.8, 30, 0.8, 0.0, 3, 10.0, 1500,
+        1.0, True, 0.8, 30, 0.8, 0.0, 3, 10.0, 1500,
         api_name="/gen_single",
     )
     result = job.result(timeout=1800)
@@ -2209,10 +2247,10 @@ def test_config(payload: dict[str, Any]) -> dict[str, Any]:
             config[key] = value
     results: dict[str, Any] = {}
     try:
-        provider_post(config, "responses", {"model": config["text_model"], "input": "只回复：连接成功"}, timeout=60)
-        results["openlux"] = {"ok": True, "message": f"OpenLux {config['text_model']} 连接成功"}
+        provider_text(config, "只回复：连接成功")
+        results["llm"] = {"ok": True, "message": f"LLM {config['text_model']} 连接成功"}
     except Exception as exc:
-        results["openlux"] = {"ok": False, "message": str(exc)}
+        results["llm"] = {"ok": False, "message": str(exc)}
     try:
         models = provider_models(config)
         image_model = str(config["image_model"])

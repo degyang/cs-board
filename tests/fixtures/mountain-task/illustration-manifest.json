@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifact_type": "illustration-manifest",
+  "artifact_id": "artifact-illustration-001",
+  "artifact_key": "illustrations.manifest",
+  "task_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "producer_stage": "generate-illustrations",
+  "producer_version": "1.0.0",
+  "created_at": "2026-08-29T09:06:00Z",
+  "input_fingerprint": "sha256:0123456789abcdef",
+  "illustrations": [{"visual_id": "visual-001-01", "source_image_path": "runs/run-fixture-001/media/images/visual-001-01-source.png", "final_image_path": "runs/run-fixture-001/media/images/visual-001-01.png", "sha256": "sha256:2222222222222222", "width": 1920, "height": 1080, "profile": "fixture-image", "model": "fixture-model", "attempt": 1}]
+}

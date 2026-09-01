@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifact_type": "voice-manifest",
+  "artifact_id": "artifact-voice-001",
+  "artifact_key": "audio.voice-manifest",
+  "task_id": "project-fixture-001",
+  "run_id": "run-fixture-001",
+  "pipeline_id": "mountain-av-v1",
+  "engine": "whiteboard",
+  "producer_stage": "clone-voice",
+  "producer_version": "1.0.0",
+  "created_at": "2026-08-29T09:03:00Z",
+  "input_fingerprint": "sha256:0123456789abcdef",
+  "voices": [{"unit_id": "unit-001", "audio_path": "runs/run-fixture-001/media/voices/unit-001.wav", "sha256": "sha256:1111111111111111", "duration_ms": 8280, "sample_rate": 24000, "channels": 1, "tts_profile": "fixture-tts", "attempt": 1}]
+}

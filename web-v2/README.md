@@ -1,13 +1,117 @@
-# CS Board WebUI v2
+# Mountain WebUI v2
 
-`web-v2/` 是 Mountain 新 WebUI 的独立工作目录。它将在 M07 实现为纯 React + Vite SPA，并由 FastAPI 在生产环境同源托管其 `dist`。
+Mountain 山野小读 — 新版 WebUI（Vite + React + TypeScript）
 
-当前 M01 只建立目录边界，不创建应用或更改启动器：
+## 快速开始
 
-- 现有 `web/` 仍是 legacy Vinext 前端，也是当前唯一运行入口；
-- `web-v2/` 不导入 legacy `web/` 的页面、状态或构建产物；
-- 未来共享的 API 类型只能来自稳定 API Schema/生成客户端，不能通过相对路径跨目录导入；
-- 新前端开发端口、构建、部署和 FastAPI 静态托管会在 M07 接入；
-- 删除 legacy `web/` 只能在新工作台稳定并完成历史任务回归后单独决定。
+```bash
+# 安装依赖
+npm install
 
-目录隔离用于保证新 UI 可以渐进开发、独立构建和独立回滚，而不会影响现有用户入口。
+# 启动开发服务器（默认 http://localhost:5175）
+npm run dev
+
+# 构建生产版本
+npm run build
+
+# 运行测试
+npm test
+
+# 预览构建产物
+npm run preview
+```
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `VITE_API_BASE_URL` | `http://127.0.0.1:8000/api/v1` | 后端 API 地址 |
+
+创建 `.env.local` 文件覆盖默认值：
+
+```env
+VITE_API_BASE_URL=http://your-server:8000/api/v1
+```
+
+**安全要求**：禁止将 API Key、Secret 或任何敏感信息写入前端环境变量、localStorage、sessionStorage、URL 或构建产物。
+
+## 路由表
+
+| 路径 | 页面 | 说明 |
+|------|------|------|
+| `/` | TasksPage | 任务队列（状态筛选 + 搜索 + 15s 轮询） |
+| `/tasks/new` | CreateTaskPage | 新建任务 |
+| `/tasks/:taskId` | TaskWorkbenchPage | 工作台（三栏布局：配音单元 / 阶段工作区 / 产物） |
+| `/tasks/:taskId/runs/:runId/diagnostics` | RunDiagnosticsPage | 运行诊断（事件流 + 日志） |
+| `/settings/providers` | ProvidersPage | Provider 配置列表 |
+| `/settings/providers/:name` | ProviderDetailPage | Provider 详情与配置 |
+| `/help` | HelpPage | 帮助中心 |
+
+## API 映射表
+
+| 前端功能 | HTTP 方法 | API 端点 |
+|----------|-----------|----------|
+| 健康检查 | GET | `/health` |
+| 能力查询 | GET | `/capabilities` |
+| Provider 列表 | GET | `/providers` |
+| Provider 详情 | GET | `/providers/{name}` |
+| 更新配置 | PUT | `/providers/{name}/config` |
+| 查看密钥状态 | GET | `/providers/{name}/secrets` |
+| 设置密钥 | POST | `/providers/{name}/secrets` |
+| 删除密钥 | DELETE | `/providers/{name}/secrets/{key}` |
+| 任务列表 | GET | `/api/v1/tasks` |
+| 创建任务 | POST | `/api/v1/tasks` |
+| 任务详情 | GET | `/api/v1/tasks/{id}` |
+| 上传输入 | POST | `/api/v1/tasks/{id}/inputs` |
+| 读取输入 | GET | `/api/v1/tasks/{id}/inputs` |
+| 运行详情 | GET | `/api/v1/tasks/{id}/runs/{runId}` |
+| 取消运行 | POST | `/api/v1/tasks/{id}/runs/{runId}/cancel` |
+| 重试运行 | POST | `/api/v1/tasks/{id}/runs/{runId}/retry` |
+| 阶段列表 | GET | `/api/v1/tasks/{id}/runs/{runId}/stages` |
+| 配音单元 | GET | `/api/v1/tasks/{id}/runs/{runId}/units` |
+| 产物列表 | GET | `/api/v1/tasks/{id}/runs/{runId}/artifacts` |
+| 事件流 | GET | `/api/v1/tasks/{id}/runs/{runId}/events` |
+| 日志 | GET | `/api/v1/tasks/{id}/runs/{runId}/logs` |
+| 下载成片 | GET | `/api/v1/tasks/{id}/runs/{runId}/final` |
+
+## 项目结构
+
+```
+web-v2/
+├── src/
+│   ├── main.tsx              # 入口
+│   ├── app/
+│   │   ├── router.tsx        # 路由定义（createBrowserRouter）
+│   │   └── providers.tsx     # 全局 Provider（AppContext + Health 轮询）
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── AppShell.tsx  # 布局骨架（pin/rail 模式）
+│   │   │   └── Sidebar.tsx   # 侧边导航（原型结构 + 运行状态 footer）
+│   │   └── ui/
+│   │       ├── Tabs.tsx       # 状态筛选标签
+│   │       ├── StatusBadge.tsx# 状态徽章
+│   │       ├── CopyButton.tsx # 复制按钮
+│   │       └── BackButton.tsx # 返回按钮
+│   ├── pages/
+│   │   ├── TasksPage.tsx           # 任务队列
+│   │   ├── CreateTaskPage.tsx      # 新建任务
+│   │   ├── TaskWorkbenchPage.tsx   # 工作台（三栏布局）
+│   │   ├── RunDiagnosticsPage.tsx  # 运行诊断
+│   │   ├── HelpPage.tsx           # 帮助中心
+│   │   ├── ProvidersPage.tsx      # Provider 列表
+│   │   └── ProviderDetailPage.tsx # Provider 详情
+│   ├── lib/
+│   │   ├── api/
+│   │   │   ├── client.ts     # API 客户端
+│   │   │   ├── types.ts      # TypeScript 类型
+│   │   │   └── queries.ts    # useAsync Hook（轮询支持）
+│   │   └── formatting.ts     # 格式化工具
+│   └── styles/
+│       ├── tokens.css        # 设计 Token（NovaTech）
+│       └── app.css           # 组件样式
+└── tests/
+    ├── setup.ts
+    ├── api-client.test.ts
+    ├── providers-page.test.tsx
+    └── create-task.test.tsx
+```
