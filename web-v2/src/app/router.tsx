@@ -15,6 +15,14 @@ import { StoragePage } from '../pages/StoragePage'
 import { DiagnosticsPage } from '../pages/DiagnosticsPage'
 import { HelpPage } from '../pages/HelpPage'
 
+/** Task-related child routes — exported for test verification via matchRoutes(). */
+export const TASK_ROUTES = [
+  { index: true, element: <TasksPage /> },
+  { path: 'tasks/new', element: <CreateTaskPage /> },
+  { path: 'tasks/:taskId', element: <TaskWorkbenchPage /> },
+  { path: 'tasks/:taskId/runs/:runId/diagnostics', element: <RunDiagnosticsPage /> },
+]
+
 export const SETTINGS_ROUTES = {
   path: 'settings',
   element: <SettingsLayout />,
@@ -35,10 +43,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <TasksPage /> },
-      { path: 'tasks/new', element: <CreateTaskPage /> },
-      { path: 'tasks/:taskId', element: <TaskWorkbenchPage /> },
-      { path: 'tasks/:taskId/runs/:runId/diagnostics', element: <RunDiagnosticsPage /> },
+      ...TASK_ROUTES,
       { path: 'assets', element: <AssetManagementPage /> },
       { path: 'settings', element: <Navigate to="/settings/models" replace /> },
       SETTINGS_ROUTES,
