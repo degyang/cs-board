@@ -2369,6 +2369,67 @@ docs(mountain): report real backend contract runtime
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4M. CCB 可移植后端启动与 Smoke 加固
+
+### 4M.1 指令编号与已验收基线
+
+```text
+instruction: CCB-PORTABLE-BACKEND-RUNTIME-17
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+accepted implementation: 97be79b test(mountain): prove real backend frontend contract
+accepted report: 7d4869b docs(mountain): report real backend contract runtime
+```
+
+审核者已复现真实 uvicorn、默认加密 health、动态 Service HTTP 创建、CCF 生产 checker `All contracts aligned against real backend`、API smoke、全量 `427 passed, 5 skipped` 和 clean status。真实后端契约联调验收通过。
+
+保留一个 follow-up 缺陷：smoke 成功路径在 `cleanup_process(proc)` 后立即 `proc = None`，随后 `if proc is not None` 永远不执行；临时目录使用 `ignore_errors=True` 后也没有检查路径消失。因此清理实际执行了，但脚本没有证明它。
+
+### 4M.2 唯一目标
+
+将真实后端启动和 smoke 做成仓库内可移植入口，为后续集成新 WebUI 使用；不得修改业务 API、DTO、前端或 Pipeline。
+
+1. 新增正式前台启动脚本，例如 `scripts/run_mountain_backend.py`。必须使用当前 `sys.executable`/当前环境导入 `webapp.mountain_server:app`，支持 `--host`、`--port`、`--data-dir`、`--log-level`；默认 host 为 `127.0.0.1`、port 为 `8000`，data dir 遵循 `CSBOARD_DATA_DIR`/现有默认语义。
+2. 启动脚本不得导入或启动 `webapp.server`，不得创建明文 SecretStore，不负责后台 daemon、浏览器和 WebUI 构建。依赖缺失、端口占用、app 为 None 时给出可操作错误并非零退出。
+3. `smoke_real_backend_contract.py` 改用 `sys.executable`，Node 使用 `shutil.which("node")`；不得硬编码 `/mnt/d/workstation/.../.venv` 或 mise 版本目录。
+4. checker 默认优先使用当前仓库 `web-v2/scripts/check-api-contract.mjs`；允许 `--checker-path` 或 `MOUNTAIN_CONTRACT_CHECKER` 覆盖。文件不存在时打印明确路径和解决方式，非零退出；不得静默切 fixture。
+5. smoke 必须通过新增正式启动脚本拉起后端，而不是另写一套 uvicorn 命令，确保测试的就是用户启动入口。
+6. 修复清理证明：保留原 `Popen` 引用/PID，终止后断言 `poll() is not None`；删除临时目录后断言 `not Path(tmp_dir).exists()`。清理失败必须非零，不能 `ignore_errors=True` 后无条件打印成功。
+7. stdout/stderr 不得因 PIPE 无人消费导致长时间运行阻塞。可使用临时日志文件或 communicate/受控日志策略；启动失败时在错误输出中带最后有限行日志，不泄漏 Secret。
+8. 增加行为测试覆盖参数解析、当前解释器、默认加密环境、启动失败、checker 缺失、子进程终止和临时目录清理。测试不得真的杀无关进程或使用固定端口。
+9. 更新后端开发启动说明，只引用新脚本；明确这是前台后端入口，新 WebUI 仍将在后续集成切片启动。
+
+### 4M.3 门禁、提交和报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/smoke_real_backend_contract.py --checker-path /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+! rg -n "/mnt/d/|mise/installs|webapp\.server|CSBOARD_ALLOW_PLAINTEXT_SECRETS.*1" scripts/run_mountain_backend.py scripts/smoke_real_backend_contract.py
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain): add portable backend runtime entry
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-portable-runtime-17-report.md
+```
+
+报告列出正式启动命令、跨平台路径策略、smoke 复用关系、失败行为测试、PID/临时目录清理断言、真实 checker、门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report portable backend runtime
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
