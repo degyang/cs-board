@@ -2656,6 +2656,79 @@ docs(mountain): report proven portable backend runtime
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4O. CCB 启动测试挂起与伪清理证据纠偏
+
+### 4O.1 指令编号与审核结论
+
+```text
+instruction: CCB-PORTABLE-BACKEND-RUNTIME-19
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed working tree: uncommitted changes over 58c98ab
+result: rejected; delivery is uncommitted, report absent, targeted test fails and leaks a backend process
+```
+
+审核时 worktree 有三个未提交文件，HEAD 仍为上一轮 `58c98ab`，`m07-ccb-portable-runtime-18-report.md` 不存在。审核者运行 §4N 专项测试后看到 `.F.......`，随后 pytest 挂起并遗留 `run_mountain_backend.py --port 48585` 子进程；审核者已只终止本次审核创建的 pytest 与该子进程。
+
+已确认的代码问题：
+
+1. `test_launch_script_port_occupied` 在启动 subprocess 前已退出 socket `with`，端口被释放，测试实际启动长期运行的后端并在 `subprocess.run(timeout=10)` 后泄漏进程。
+2. `test_import_failure_cleanup` 函数体是 `pass`，没有任何验收价值。
+3. `test_health_timeout_cleanup` 只由测试手动 kill launcher、手动 rmtree，未运行 smoke health 失败路径。
+4. 没有按 §4N 测试 smoke 的真实 checker 成功路径、checker 非零失败路径及其 PID/临时目录清理。
+5. 多个异常清理仍使用 `ignore_errors=True`，与要求相反；多个 Popen 使用无人持续消费的 PIPE。
+6. `test_script_error_no_secret_leak` 的布尔断言近似恒真，且没有向环境注入可识别的 canary Secret 来证明脱敏。
+7. 当前修改虽然可能修复仓库外 import，但尚未形成可审计提交和报告，不能验收。
+
+### 4O.2 唯一任务
+
+在当前未提交修改上完成 §4N，不新增业务功能。先确保所有本轮测试创建的进程和目录均由 `try/finally` 所有权模型清理，再运行门禁。
+
+1. 修正端口占用测试：监听 socket 必须保持打开直到 launcher 已返回；使用有界 Popen/communicate 或等价方式，finally 无条件终止仍存活的测试子进程。
+2. 删除空 `pass` 测试。若需要验证 import/startup failure，提供最窄的可注入 app target/factory seam 或测试专用环境变量，默认生产路径不变；真实运行失败并断言非零、可操作错误、无 traceback/canary Secret。
+3. health 失败测试必须执行 `smoke_real_backend_contract.py` 自身的失败路径，不能由测试复制 kill/rmtree 算法冒充。
+4. 为 smoke 提供最窄的可观测测试接口，例如可选 `--temp-parent` 和 PID marker，或将 main 分解为返回运行上下文的可调用函数。生产默认不变；测试必须能在 smoke 返回后证明它创建的 PID 不存在且该 parent 下无工作目录。
+5. 分别真实执行：checker 成功、checker 返回非零、health/startup 失败。三条路径都断言进程消失、目录消失、日志句柄可删除；不得 `ignore_errors=True`。
+6. 测试 Popen 日志使用临时文件或持续消费策略，禁止无人消费 PIPE；每个 Popen 在创建后立刻进入 try/finally 所有权范围。
+7. 脱敏测试在环境/失败 checker 输出中放入唯一 canary（例如 `ccb-runtime-secret-canary`），断言 smoke stdout、stderr 和启动失败尾部日志均不含 canary；不得使用近似恒真的复合条件。
+8. 保留并通过仓库外 cwd、含空格 cwd、移除 PYTHONPATH、默认加密 health 的真实行为测试。
+9. 完成后必须形成纠偏实现提交和独立报告提交；提交前 worktree 只能有预期报告，报告提交后 clean。
+
+### 4O.3 固定门禁与泄漏门禁
+
+```bash
+env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_backend_runtime_17.py
+! pgrep -af "scripts/run_mountain_backend.py" | grep -v "pgrep -af"
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/smoke_real_backend_contract.py --checker-path /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+! rg -n "pass$|ignore_errors=True|stdout=subprocess\.PIPE|stderr=subprocess\.PIPE|PYTHONPATH" tests/test_backend_runtime_17.py scripts/smoke_real_backend_contract.py
+git diff --check
+git status --short
+```
+
+`pgrep` 门禁执行前先确认没有用户原本启动的 Mountain 后端；不得为了过门禁杀不属于本轮测试的进程。若存在外部进程，在报告中记录并使用测试 PID 清单逐个证明，不得运行广泛 kill。
+
+纠偏实现提交：
+
+```text
+fix(mountain): close portable runtime process leaks
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-portable-runtime-19-report.md
+```
+
+报告必须列出三个 smoke 路径各自的 exit code、PID 消失、temp parent 清空、canary 脱敏、仓库外与空格 cwd health、专项/全量门禁、两个 commit 和 clean status。报告提交：
+
+```text
+docs(mountain): report leak-free portable runtime
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
