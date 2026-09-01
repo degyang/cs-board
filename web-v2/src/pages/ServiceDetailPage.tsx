@@ -188,7 +188,7 @@ export function ServiceDetailPage() {
   const secretOk = svc.secret_status.configured
 
   return (
-    <div className="page">
+    <div className="page page-narrow service-detail-page">
       <BackButton to="/settings/models" label="返回模型服务" />
 
       <div className="page-head">
@@ -202,7 +202,7 @@ export function ServiceDetailPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="service-detail-actions">
         <Link to={`/settings/models/${serviceId}/edit`} className="btn btn-ghost btn-sm">编辑</Link>
         <button
           type="button"
@@ -241,7 +241,7 @@ export function ServiceDetailPage() {
       </div>
 
       {/* Basic info */}
-      <div className="card">
+      <div className="card service-detail-card">
         <div className="card-title">基本信息</div>
         <div className="settings-row">
           <span className="k">服务 ID</span>
@@ -286,7 +286,7 @@ export function ServiceDetailPage() {
       </div>
 
       {/* Availability */}
-      <div className="card">
+      <div className="card service-detail-card">
         <div className="card-title">可用性</div>
         <div className="settings-row">
           <span className="k">可用</span>
@@ -326,7 +326,7 @@ export function ServiceDetailPage() {
 
       {/* Probe result */}
       {probeResult && (
-        <div className="card">
+        <div className="card service-detail-card">
           <div className="card-title">探测结果</div>
           <div className="settings-row">
             <span className="k">可用</span>
@@ -366,7 +366,7 @@ export function ServiceDetailPage() {
       )}
 
       {/* Config status */}
-      <div className="card">
+      <div className="card service-detail-card">
         <div className="card-title">配置状态</div>
         <div className="settings-row">
           <span className="k">配置</span>
@@ -419,7 +419,7 @@ export function ServiceDetailPage() {
       </div>
 
       {/* Secrets management */}
-      <div className="card">
+      <div className="card service-detail-card">
         <div className="card-title">Secret 管理</div>
         {secretError && <div className="error-card" role="alert" style={{ marginBottom: 8 }}><div>{secretError}</div></div>}
         {secretsLoading ? (

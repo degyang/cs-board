@@ -27,7 +27,10 @@ async function main() {
 
   if (BASE) {
     console.log('\n\u{1F517} Connecting to real backend: ' + BASE + '\n')
-    violations = await checkRealBackend(tsContent, BASE, { serviceId: SERVICE_ID })
+    // The public server URL is accepted for CI and manual verification; API-root
+    // callers remain compatible to avoid silently testing the Vite HTML fallback.
+    const apiBase = BASE.replace(/\/$/, '').endsWith('/api/v1') ? BASE.replace(/\/$/, '') : BASE.replace(/\/$/, '') + '/api/v1'
+    violations = await checkRealBackend(tsContent, apiBase, { serviceId: SERVICE_ID })
 
     if (violations.length === 0) {
       console.log('\nAll contracts aligned against real backend ✓')

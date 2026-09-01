@@ -894,6 +894,50 @@
   min-width: 160px;
 }
 
+/* Surface-parity extensions: service CRUD uses the same quiet card and form
+   hierarchy as the prototype model registry, while retaining real actions. */
+.service-form-page, .service-detail-page { display: flex; flex-direction: column; gap: 14px; }
+.mp-form-surface { max-width: 720px; padding: 20px 22px; background: var(--nt-bg); border: 1px solid var(--nt-primary-300); border-radius: var(--nt-radius-md); box-shadow: var(--nt-shadow-xs); }
+.mp-form-surface .form-field { margin-bottom: 18px; }
+.mp-form-surface .form-label { font-family: var(--nt-font-display); font-weight: 600; color: var(--nt-text-secondary); }
+.service-enabled-row { padding-top: 2px; }
+.service-advanced { background: var(--nt-surface); border-color: var(--nt-border); }
+.service-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0 2px; border-bottom: 1px solid var(--nt-border); }
+.service-detail-card { background: var(--nt-bg); border-radius: var(--nt-radius-md); padding: 18px 20px; }
+
+/* Voice page copied from the frozen prototype's information hierarchy. */
+.va-page { gap: 14px; }
+.va-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 0; }
+.va-card { background: var(--nt-bg); border: 1px solid var(--nt-border); border-radius: var(--nt-radius-md); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.va-card-head { display: flex; flex-direction: column; }
+.va-card-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.va-card-name { font-size: 15px; font-weight: 600; margin: 0; }
+.va-card-desc { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--nt-text-muted); }
+.va-status-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.va-status-item { display: flex; align-items: center; gap: 8px; }
+.va-status-label { font-size: 12.5px; color: var(--nt-text-muted); }
+.va-config { display: flex; flex-direction: column; background: var(--nt-bg-sunken); border: 1px solid var(--nt-border); border-radius: var(--nt-radius-sm); overflow: hidden; }
+.va-config-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 12px; }
+.va-config-row + .va-config-row { border-top: 1px solid var(--nt-border); }
+.va-config-key { width: 76px; flex: none; font-size: 12px; color: var(--nt-text-muted); }
+.va-config-val { font-size: 12.5px; word-break: break-all; }
+.va-error { border: 1px solid rgba(178,66,31,.35); background: rgba(212,95,65,.07); border-radius: var(--nt-radius-sm); padding: 10px 12px; color: var(--nt-text); margin: 0; }
+.va-error-head { display: flex; align-items: center; gap: 8px; }
+.va-error-code { font-size: 12.5px; color: #B2421F; font-weight: 600; }
+.va-error-suggestion { margin: 6px 0 0; font-size: 12.5px; line-height: 1.65; }
+.va-card-actions { display: flex; gap: 8px; margin-top: auto; }
+.va-card-hint { font-size: 11.5px; color: var(--nt-text-muted); }
+.va-rules { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.va-rule { display: flex; gap: 12px; align-items: flex-start; }
+.va-rule-step { width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--nt-primary-700); color: #fff; font-size: 12.5px; font-weight: 600; }
+.va-rule-body { display: flex; flex-direction: column; gap: 2px; }
+.va-rule-title { font-size: 13.5px; font-weight: 600; }
+.va-rule-desc { font-size: 12.5px; line-height: 1.6; color: var(--nt-text-muted); }
+.va-entry-card { margin-top: 0; }.va-entry-body { display: flex; flex-direction: column; gap: 6px; }.va-entry-actions { display: flex; gap: 8px; margin-top: 12px; }
+.va-skeleton .va-sk-line, .va-skeleton .va-sk-chip { border-radius: 6px; background: linear-gradient(90deg,var(--nt-bg-sunken) 25%,var(--nt-border) 50%,var(--nt-bg-sunken) 75%); background-size: 200% 100%; animation: va-shimmer 1.2s ease-in-out infinite; }
+.va-sk-line { height: 14px; margin-bottom: 10px; }.va-sk-row { display: flex; gap: 10px; margin-bottom: 10px; }.va-sk-chip { width: 72px; height: 22px; }.va-sk-line.w-30 { width:30%; }.va-sk-line.w-40 { width:40%; }.va-sk-line.w-60 { width:60%; }.va-sk-line.w-70 { width:70%; }.va-sk-line.w-80 { width:80%; }
+@keyframes va-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
 /* ── Confirm Dialog ────────────────────────────────────────────────────── */
 
 .confirm-dialog {

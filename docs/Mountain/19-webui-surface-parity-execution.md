@@ -128,7 +128,38 @@ git diff --check
 
 - 暂无。
 
-## 5. CCF 完成报告
+## 5. CCF 返工完成报告
+
+**执行者**: Codex (CCF)
+**日期**: 2026-09-01
+**分支**: `feat/mountain-webui-surface-parity`
+**Commit**: `49d66c4`
+
+### 本轮返工
+
+- 完成模型服务四条路由的统一表面：列表、创建、详情和编辑共用原型的静态卡片、表单、状态和动作层级；真实 CRUD、Secret、Probe、启停和默认服务保留为明确的生产扩展。
+- 以 `VoiceAlignmentPage.tsx` 和 `VoiceServiceCard.tsx` 原型逐项重做真实语音页：标题说明、双服务卡、配置/可用性顺序、不可用块、加载骨架、五项只读同步原则及入口说明均已对齐。
+- 新增 Playwright 截图/控制台验收脚本；使用真实后端生成十张 1440×900 证据，控制台 error/warning、未处理异常和失败 API 请求均为 0。
+- 真实 API checker 已运行通过。checker 现接受文档指定的 server root（自动规范化为 `/api/v1`）；`StyleTemplate.config` 与真实 preset 响应一致地标为 optional。
+
+### 证据与门禁
+
+- 截图与逐页端点、状态、有意差异记录：[webui-parity-evidence README](webui-parity-evidence/README.md)。
+- `npm --prefix web-v2 run build`：通过。
+- `npm --prefix web-v2 test`：通过（343 tests）。
+- `MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs`：`All contracts aligned against real backend`。
+- `npm --prefix web-v2 run evidence`（真实后端）：10 张截图，console error/warning 0、失败 API 请求 0。
+- `rg -n "VITE_USE_MOCK|mock View|fallback mock|mountain.assets" web-v2/src`：0 匹配。
+- `git diff --check`：通过。
+
+### 契约缺口与未完成项
+
+- 无阻塞契约缺口。真实 preset 响应不含 `StyleTemplate.config`，前端类型已改为 optional，未影响任何页面读取。
+- 无未完成项。
+
+---
+
+## 5. 首轮 CCF 完成报告（历史记录）
 
 **执行者**: Claude (CCF)
 **日期**: 2026-09-01

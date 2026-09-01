@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:contract-checker": "vitest run tests/checker-behavior.test.ts tests/contract-checker-exec.test.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "evidence": "node scripts/capture-parity-evidence.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -17,6 +18,7 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",

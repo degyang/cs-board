@@ -439,7 +439,8 @@ export interface StyleTemplate {
   prompt_text: string | null
   negative_prompt: string | null
   preview_asset_id: string | null
-  config: Record<string, unknown>
+  /** Optional: preset style records intentionally expose only browser-safe fields. */
+  config?: Record<string, unknown>
   created_at: string
   updated_at: string
 }

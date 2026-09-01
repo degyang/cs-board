@@ -127,18 +127,20 @@ export function ServiceFormPage() {
   const adapterOptions = Object.entries(KNOWN_ADAPTERS)
 
   return (
-    <div className="page">
+    <div className="page page-narrow service-form-page">
       <BackButton to="/settings/models" label="返回模型服务" />
 
       <div className="page-head">
         <h1 className="page-title">{isEdit ? '编辑服务' : '新建服务'}</h1>
+        <p className="page-desc">服务注册、连接配置与 Secret 统一在此维护。保存后可在详情页探测、启停或设为默认服务。</p>
       </div>
 
       {error && (
         <div className="error-card" role="alert"><div>{error}</div></div>
       )}
 
-      <form onSubmit={handleSubmit} className="service-form">
+      <form onSubmit={handleSubmit} className="service-form mp-form-surface">
+        <div className="mp-form-title">基础配置</div>
         {/* Fix #1: service_id field - required for create, disabled for edit */}
         <div className="form-field">
           <label className="form-label" htmlFor="svc-id">服务 ID *</label>
@@ -233,14 +235,14 @@ export function ServiceFormPage() {
           <input id="svc-priority" type="number" className="input" min="0" value={priority} onChange={e => setPriority(e.target.value)} />
         </div>
 
-        <div className="form-field">
+        <div className="form-field service-enabled-row">
           <label className="form-label">
             <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
             {' '}启用
           </label>
         </div>
 
-        <details className="card" style={{ marginBottom: 16 }}>
+        <details className="card service-advanced" style={{ marginBottom: 16 }}>
           <summary className="card-title" style={{ cursor: 'pointer' }}>高级配置</summary>
         <div className="form-field" style={{ marginTop: 16 }}>
           <label className="form-label" htmlFor="svc-required-secrets">必填 Secret（逗号分隔）</label>
