@@ -493,3 +493,29 @@ A docs/Mountain/webui-parity-evidence/settings/models-edit.png
 ```
 
 如果上述文件集合不完整，不得再次填写“完成报告”。完成后在本节末尾追加实际 commit、`git diff --name-status` 摘要和 11 张文件的 SHA-256。
+
+### CCF §9 机械验收完成报告
+
+**实现 commit**: `3757cb6`
+**截图生成时间**: 2026-09-02（真实 `http://127.0.0.1:8000` 后端）
+
+- `AppShell` 在未设置 `mountain.ui.sidebarPinned` 时默认完整侧栏；仅存储值 `0` 会进入 rail。新增组件测试验证 `is-pinned` 及“山野小读、任务队列、新建任务、资产管理、设置、帮助”可见。
+- 证据脚本清空 localStorage，固定使用 `openai-compatible-text` 生成详情和编辑页；缺失该服务、剩余 loading、结构数量不符或任意 `/api/` 4xx/5xx 都会失败。
+- 已重新生成 10 张既有 PNG，并新增 `settings/models-edit.png`；人工检查 `models-list.png` 为完整中文侧栏与两列服务卡，`assets/preset.png` 为横向 Tab、真实预置项已选中且详情非空。
+- README 已改为实际 `systemStatus/SystemStatusTabs.tsx` 路径，并记录生成时间和前后端基线。
+
+`git diff --name-status d579358..3757cb6` 摘要：10 个既有截图为 `M`，`settings/models-edit.png` 为 `A`；同时包含 `AppShell.tsx`、`app-shell.test.tsx`、`capture-parity-evidence.mjs` 与 evidence README。
+
+| SHA-256 | 文件 |
+|---|---|
+| `bea72288f8b2d38d8418a59a2994b8649d73657f7970c6d57a807f907f09ef38` | `settings/diagnostics.png` |
+| `c3cc7b1349f4bcbe606f95ba89d53ab6fcfb64cb9631d3983aee88a9f867ffa3` | `settings/models-create.png` |
+| `9622f1db6e225a43cbdfaeae7c3bcffb596f94b05610b3e50d63ab37b9303a9f` | `settings/models-detail.png` |
+| `573eecc453f79811bd622fa1b2fc558431dbd3dd9d1e0c0533c5b072bc64e299` | `settings/models-edit.png` |
+| `e96203154cba52c48865104aed501f4d85a5ffd5edd06556f047749aa0562a55` | `settings/models-list.png` |
+| `7bceafde30198230915f8124a721c05a21411c2fd2630aa03f3a8ed715be39ff` | `settings/storage.png` |
+| `1730e9defc3ad021dd5475cd3b8c6f97d9eae10cbf812b081f11c63f32efc6c7` | `settings/toolchain.png` |
+| `9f9e2a1a7dd2a7bd846467ed6f52bbc04b618035009dba9325f7f1dde258d83c` | `settings/voice-alignment.png` |
+| `a5140bf21f6853125c4acd851ccc6f886e3c2f57d3c6a0b58f6aa2b2a664db61` | `assets/custom.png` |
+| `4db1c865bcd2c694807bf118f98203da570d10b60c280a4ac3dba6642bf8a048` | `assets/preset.png` |
+| `0b6b5908747453d5a476364d4db2ef631aa4fb8952004eaa17a5bc050d46cccb` | `assets/voices.png` |
