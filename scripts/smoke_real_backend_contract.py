@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Real backend contract smoke — 启动真实 uvicorn，验证 CCF 契约。
+"""Real backend contract smoke — 通过正式启动脚本拉起后端，验证 CCF 契约。
 
 用法:
     python scripts/smoke_real_backend_contract.py [--port PORT] [--checker-path PATH]
 
 自动:
     1. 创建临时 CSBOARD_DATA_DIR（默认加密模式）
-    2. 启动 uvicorn 子进程
+    2. 通过 scripts/run_mountain_backend.py 启动 uvicorn
     3. 轮询 /api/v1/health 等待就绪
     4. 通过 HTTP 创建契约 Service
     5. 运行 CCF 生产 check-api-contract.mjs
     6. 执行 API smoke 表验证
-    7. finally 终止子进程并清理临时目录
+    7. finally 终止子进程并清理临时目录（带断言证明）
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -27,6 +28,9 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+
+# 项目根目录
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -73,16 +77,33 @@ def http_json(method: str, url: str, data: dict | None = None) -> tuple[int, dic
         return exc.code, json.loads(exc.read())
 
 
-def cleanup_process(proc: subprocess.Popen | None) -> None:
-    """终止子进程，确保无残留。"""
-    if proc is None or proc.poll() is not None:
-        return
+def cleanup_process(proc: subprocess.Popen | None) -> bool:
+    """终止子进程，返回是否成功终止。"""
+    if proc is None:
+        return True
+    if proc.poll() is not None:
+        return True
     try:
         proc.send_signal(signal.SIGTERM)
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=5)
+    return proc.poll() is not None
+
+
+def resolve_checker_path(checker_arg: str | None) -> Path:
+    """解析 checker 路径：参数 > 环境变量 > 仓库默认。"""
+    if checker_arg:
+        return Path(checker_arg)
+
+    env_path = os.environ.get("MOUNTAIN_CONTRACT_CHECKER")
+    if env_path:
+        return Path(env_path)
+
+    # 仓库内默认路径
+    default = PROJECT_ROOT / "web-v2" / "scripts" / "check-api-contract.mjs"
+    return default
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -94,55 +115,72 @@ def main() -> int:
     parser.add_argument(
         "--checker-path",
         type=str,
-        default=str(
-            Path("/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/"
-                 "mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs")
-        ),
-        help="CCF contract checker 绝对路径",
+        default=None,
+        help="CCF contract checker 路径（默认: 仓库内 web-v2/scripts/check-api-contract.mjs）",
     )
     args = parser.parse_args()
 
     port = args.port or find_free_port()
     base = f"http://127.0.0.1:{port}/api/v1"
-    checker_path = Path(args.checker_path)
-    venv_python = "/mnt/d/workstation/projects/cs-board/.venv/bin/python"
+    checker_path = resolve_checker_path(args.checker_path)
+
+    # 验证 checker 存在
+    if not checker_path.exists():
+        print(f"[smoke] ✗ Checker 不存在: {checker_path}", file=sys.stderr)
+        print(f"[smoke] 解决: 确认 CCF worktree 已检出，或使用 --checker-path 指定路径", file=sys.stderr)
+        return 1
 
     # ── 1. 创建临时数据目录 ──────────────────────────────────────────────
     tmp_dir = tempfile.mkdtemp(prefix="csboard-smoke-")
     data_dir = Path(tmp_dir) / "data"
     data_dir.mkdir()
     proc = None
+    log_file = Path(tmp_dir) / "uvicorn.log"
 
     print(f"[smoke] 临时数据目录: {data_dir}")
     print(f"[smoke] 端口: {port}")
     print(f"[smoke] API base: {base}")
+    print(f"[smoke] Checker: {checker_path}")
 
     try:
-        # ── 2. 启动 uvicorn ──────────────────────────────────────────────
+        # ── 2. 通过正式启动脚本拉起后端 ──────────────────────────────────
         env = os.environ.copy()
         env.pop("CSBOARD_ALLOW_PLAINTEXT_SECRETS", None)
         env["CSBOARD_DATA_DIR"] = str(data_dir)
-        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+        env["PYTHONPATH"] = str(PROJECT_ROOT)
 
+        launch_script = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
         uvicorn_cmd = [
-            venv_python, "-m", "uvicorn",
-            "webapp.mountain_server:app",
+            sys.executable, str(launch_script),
             "--host", "127.0.0.1",
             "--port", str(port),
             "--log-level", "warning",
         ]
         print(f"[smoke] 启动: {' '.join(uvicorn_cmd)}")
 
+        # 使用临时日志文件避免 PIPE 阻塞
+        log_fd = open(log_file, "w")
         proc = subprocess.Popen(
             uvicorn_cmd,
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_fd,
+            stderr=subprocess.STDOUT,
         )
 
         # ── 3. 等待 health ───────────────────────────────────────────────
         print("[smoke] 等待 /api/v1/health ...")
-        health = wait_for_health(base, timeout=30)
+        try:
+            health = wait_for_health(base, timeout=30)
+        except TimeoutError:
+            # 启动失败：输出最后几行日志
+            log_fd.flush()
+            if log_file.exists():
+                lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
+                print(f"[smoke] 启动失败，最后 {len(lines)} 行日志:", file=sys.stderr)
+                for line in lines:
+                    print(f"  {line}", file=sys.stderr)
+            raise
+
         print(f"[smoke] Health: status={health['status']}")
 
         checks = health.get("checks", {})
@@ -177,7 +215,6 @@ def main() -> int:
         service_id = created["service_id"]
         print(f"[smoke] 契约 Service 创建成功: service_id={service_id}")
 
-        # 打印非敏感字段
         safe_fields = {
             k: v for k, v in created.items()
             if k not in ("config", "required_secrets", "optional_secrets")
@@ -191,10 +228,11 @@ def main() -> int:
         checker_env["MOUNTAIN_API_BASE"] = base
         checker_env["MOUNTAIN_CONTRACT_SERVICE_ID"] = service_id
 
-        # 确保 node 可用
-        node_bin = "/home/ubuntu/.local/share/mise/installs/node/22.19.0/bin/node"
-        if not Path(node_bin).exists():
-            node_bin = "node"
+        # 使用 shutil.which 查找 node
+        node_bin = shutil.which("node")
+        if not node_bin:
+            print("[smoke] ✗ node 未找到，请确保 Node.js 已安装并在 PATH 中", file=sys.stderr)
+            return 1
 
         checker_cmd = [node_bin, str(checker_path)]
         result = subprocess.run(
@@ -229,41 +267,20 @@ def main() -> int:
 
         smoke_results = []
 
-        # /api/v1/services
-        status, body = http_json("GET", f"{base}/services")
-        ok = status == 200 and "items" in body
-        smoke_results.append(("GET /services", status, ok))
-        print(f"  GET /services → {status} {'✓' if ok else '✗'}")
+        endpoints = [
+            ("GET /services", "GET", "/services", 200, lambda b: "items" in b),
+            ("GET /assets/styles?kind=preset", "GET", "/assets/styles?kind=preset", 200, lambda b: "items" in b),
+            ("GET /settings/toolchain", "GET", "/settings/toolchain", 200, lambda b: "tools" in b),
+            ("GET /settings/storage", "GET", "/settings/storage", 200, lambda b: "writable" in b),
+            ("GET /settings/diagnostics", "GET", "/settings/diagnostics", 200, lambda b: "api" in b),
+            ("GET /nonexistent-api-404", "GET", "/nonexistent-api-404", 404, lambda b: "error" in b),
+        ]
 
-        # /api/v1/assets/styles?kind=preset
-        status, body = http_json("GET", f"{base}/assets/styles?kind=preset")
-        ok = status == 200 and "items" in body
-        smoke_results.append(("GET /assets/styles?kind=preset", status, ok))
-        print(f"  GET /assets/styles?kind=preset → {status} {'✓' if ok else '✗'}")
-
-        # /api/v1/settings/toolchain
-        status, body = http_json("GET", f"{base}/settings/toolchain")
-        ok = status == 200 and "tools" in body
-        smoke_results.append(("GET /settings/toolchain", status, ok))
-        print(f"  GET /settings/toolchain → {status} {'✓' if ok else '✗'}")
-
-        # /api/v1/settings/storage
-        status, body = http_json("GET", f"{base}/settings/storage")
-        ok = status == 200 and "writable" in body
-        smoke_results.append(("GET /settings/storage", status, ok))
-        print(f"  GET /settings/storage → {status} {'✓' if ok else '✗'}")
-
-        # /api/v1/settings/diagnostics
-        status, body = http_json("GET", f"{base}/settings/diagnostics")
-        ok = status == 200 and "api" in body
-        smoke_results.append(("GET /settings/diagnostics", status, ok))
-        print(f"  GET /settings/diagnostics → {status} {'✓' if ok else '✗'}")
-
-        # 不存在的 API
-        status, body = http_json("GET", f"{base}/nonexistent-api-404")
-        ok = status == 404 and "error" in body
-        smoke_results.append(("GET /nonexistent-api-404", status, ok))
-        print(f"  GET /nonexistent-api-404 → {status} {'✓' if ok else '✗'}")
+        for name, method, path, expected_status, check_fn in endpoints:
+            status, body = http_json(method, f"{base}{path}")
+            ok = status == expected_status and check_fn(body)
+            smoke_results.append((name, status, ok))
+            print(f"  {name} → {status} {'✓' if ok else '✗'}")
 
         print("-" * 70)
         all_ok = all(ok for _, _, ok in smoke_results)
@@ -274,15 +291,25 @@ def main() -> int:
 
         # ── 7. 进程和临时目录清理 ────────────────────────────────────────
         print("\n[smoke] 清理中...")
-        cleanup_process(proc)
+        proc_pid = proc.pid
+        terminated = cleanup_process(proc)
         proc = None
 
-        # 验证进程已终止
-        if proc is not None:
-            assert proc.poll() is not None, "进程未终止"
+        if not terminated:
+            print(f"[smoke] ✗ 进程 {proc_pid} 未能终止", file=sys.stderr)
+            return 1
+        print(f"[smoke] ✓ uvicorn 进程 (PID {proc_pid}) 已终止")
 
-        print(f"[smoke] ✓ uvicorn 进程已终止")
-        print(f"[smoke] ✓ 临时目录将由系统清理: {tmp_dir}")
+        # 关闭日志文件句柄
+        log_fd.close()
+
+        # 清理临时目录并断言
+        shutil.rmtree(tmp_dir)
+        if Path(tmp_dir).exists():
+            print(f"[smoke] ✗ 临时目录未清理: {tmp_dir}", file=sys.stderr)
+            return 1
+        print(f"[smoke] ✓ 临时目录已清理: {tmp_dir}")
+
         print("\n[smoke] 所有检查通过 ✓")
         return 0
 
@@ -294,13 +321,9 @@ def main() -> int:
 
     finally:
         cleanup_process(proc)
-        # 清理临时目录
-        import shutil
-        try:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            print(f"[smoke] 临时目录已清理: {tmp_dir}")
-        except Exception:
-            pass
+        # 清理临时目录（不使用 ignore_errors，失败时报错）
+        if Path(tmp_dir).exists():
+            shutil.rmtree(tmp_dir)
 
 
 if __name__ == "__main__":
