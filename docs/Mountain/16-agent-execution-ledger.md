@@ -1439,6 +1439,80 @@ docs(mountain): report warning-free task route evidence
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 3Q. CCF 新建任务核心输入真实保存
+
+### 3Q.1 指令编号与已验收基线
+
+```text
+instruction: CCF-CREATE-TASK-13
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: 41041dd test(mountain-web): prove production task routes without warnings
+accepted report: 685787d docs(mountain): report warning-free task route evidence
+```
+
+审核者已复现 build、全量 `332 passed`、checker `48 passed`，并扫描确认 0 act warning、0 Router warning、0 unhandled rejection。任务队列前端阶段验收完成。
+
+### 3Q.2 唯一目标
+
+将 `/tasks/new` 从“只创建空 Task、丢弃用户文案”的占位页，改为能够真实完成 `createTask → uploadInputs` 的标准白板任务输入保存。只覆盖任务名称、完整文案、文案整理规则、参考音频、画面锚定开关和字幕开关；不实现资产选择、选择性手动阶段、启动 Run 或其他引擎。
+
+1. 当前页面的 `script` 已采集却从未提交，这是阻断缺陷。本轮保存成功的定义必须同时满足：`POST /tasks` 成功且随后 `POST /tasks/{task_id}/inputs` 成功。
+2. 标准流程本轮固定 `engine=whiteboard`，不得继续展示尚未完成的动态信息图选择。Task 创建请求只发送后端真实支持的 `title/engine/pipeline_id`。
+3. 文案必填，使用原始完整文本提交；不得在前端自行实现另一套分割算法或把预览结果当权威数据。
+4. 提供 `target_chars/min_chars/max_chars` 三个明确的整数输入，默认分别为 `80/35/140`；校验 `1 <= min <= target <= max`，并设置合理上限。将三项原样写入 FormData。
+5. 提供 `visual_anchor_enabled` 和 `include_subtitles` 开关，按真实布尔字符串写入 FormData。其余现有必需字段使用明确、可见的标准默认值：`style`、`pen_text`、`stroke_detail`；不得秘密从 localStorage 读取。
+6. 提供可选参考音频文件输入，只接受后端支持的 `.wav/.mp3/.m4a/.ogg/.flac`；FormData 字段名为 `reference`。浏览器不得读取、打印、缓存或 base64 化文件内容。
+7. 创建 Task 成功而 input 保存失败时，不得再次点击就重复创建 Task。组件保留本次响应的 `task_id/run_id`，显示“任务已创建、输入保存失败”，提供“重试保存输入”和“进入任务工作台”两个明确选择。
+8. 重试保存只调用 `uploadInputs(existingTaskId, form)`；成功后跳转编码后的 `/tasks/{task_id}`。首次两步均成功也跳转工作台。
+9. 防止重复提交：create 和 upload 任一步 pending 时主按钮 disabled；双击只产生一次 create。卸载后请求完成不得 setState/navigate。
+10. API 错误只展示 `MountainApiError` 的安全 message/code；不得渲染响应中的 path、command、token、secret、traceback 或参考音频内容。
+11. “执行策略”本轮不得伪造保存。页面明确说明当前仅保存任务输入，Run 在任务工作台启动；选择性手动阶段等待后端正式契约。不得把产品 `manual` 偷换成内部 `gated`。
+
+### 3Q.3 强制行为测试
+
+- 空标题、空文案、规则逆序/非整数/越界均不会发送请求，并显示对应字段错误。
+- 正常路径严格先 create 后 upload；断言 create JSON 和 FormData 每个字段的真实值，FormData 无手工 Content-Type。
+- 有/无 reference 两条路径；验证只传 File 对象，不读取内容。
+- create 失败不调用 upload；upload 失败保留真实 task_id/run_id，不导航、不重复 create。
+- upload 失败后点击重试只调用 upload；成功跳转编码 Task ID。
+- 双击提交只调用一次 create；pending 状态禁用。
+- unmount 后 create 或 upload 完成不更新状态、不导航，0 act warning/unhandled rejection。
+- 注入敏感扩展错误字段，页面不渲染。
+- HTTP 边界继续验证 `POST /api/v1/tasks` JSON 与 `/inputs` multipart；不得只断言 mock 次数。
+
+### 3Q.4 门禁、提交和报告
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run 2>&1 | tee /tmp/ccf-create-task-13-test.log
+! rg -n "not wrapped in act|React Router Future Flag|Unhandled|unhandled rejection" /tmp/ccf-create-task-13-test.log
+npm --prefix web-v2 run test:contract-checker
+! rg -n "localStorage|sessionStorage|FileReader|readAsDataURL|infographic-remotion|execution_strategy.*manual|policy.*gated" web-v2/src/pages/CreateTaskPage.tsx web-v2/tests/create-task.test.tsx
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+feat(mountain-web): persist core task inputs
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-create-task-13-report.md
+```
+
+报告列出两步请求时序、字段/FormData 映射、校验矩阵、partial failure 状态机、reference 安全边界、执行策略 API gap、门禁和 clean status。报告提交：
+
+```text
+docs(mountain): report core task input persistence
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
