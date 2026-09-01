@@ -1231,6 +1231,78 @@ docs(mountain): report system diagnostics summary
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 3N. CCF 任务队列真实列表基线
+
+### 3N.1 指令编号与已验收基线
+
+```text
+instruction: CCF-TASK-QUEUE-10
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web
+branch: feat/mountain-assets-settings-web
+accepted implementation: 7218eb5 feat(mountain-web): align system diagnostics summary
+accepted report: 77837b0 docs(mountain): report system diagnostics summary
+```
+
+审核者已复现 `npm run build`、前端全量 `300 passed`，并使用真实 CCB uvicorn 与加密 SecretStore 运行本分支生产 checker，结果为 `All contracts aligned against real backend`。系统诊断摘要验收通过；旧报告中“真实 CCB checker 未运行”已由审核者补齐，无需改写旧报告。
+
+### 3N.2 唯一目标
+
+结束资产与设置阶段，依据仓库内现行 WebUI 原型基准，将 `/tasks` 收口为读取真实 `GET /api/v1/tasks` 的任务队列入口。只实现列表、筛选、游标翻页和合法导航，不修改任务工作台、创建任务流程、后端 API、DTO 契约或 Pipeline。
+
+1. 页面和导航统一使用“任务队列”“新建任务”，不得重新引入 Project/项目作为业务概念。
+2. 通过现有 `fetchTasks({limit,cursor,status,q})` 获取数据；搜索同时表达标题或 Task ID，状态筛选只发送后端支持的真实值。不得下载全量数据再伪装服务端筛选。
+3. 每项只展示真实 DTO：`task_id`、`title`、Task 状态、`updated_at`，以及存在时的 `active_run.status/current_stage/retryable/final_available`。不得用固定阶段、随机进度、假百分比或推测性成果数量填充。
+4. `active_run` 不存在时显示“尚未运行”。当前阶段通过统一阶段名称映射显示；未知阶段保留安全可读原值，不能崩溃。
+5. 提供进入任务工作台的主操作；仅在 `active_run` 存在时提供运行诊断导航，仅在 `final_available=true` 且 run id 存在时提供成片入口。不得伪造尚无 API 支撑的取消、暂停、重试或逐工序控制。
+6. 实现 loading skeleton、请求失败与重试、无任务、筛选无结果四种可区分状态。重试调用真实 adapter。
+7. 分页严格使用响应 `next_cursor`；切换 `q/status` 必须清空旧 items 和 cursor。后发请求胜出，卸载后不得 setState；不得用延时猜竞态。
+8. 不在 localStorage/sessionStorage 保存业务数据；不展示路径、命令、Secret、日志内容或错误内部详情。
+9. 原型中若有现行 DTO 不提供的逐阶段状态、成果缩略图或批量控制，不得伪造；在报告 API gap 表逐项记录，供后续 CCB 切片处理。
+
+### 3N.3 强制行为测试
+
+- 首次请求参数、`q/status` 切换后 cursor 重置、`next_cursor` 翻页及无下一页行为。
+- running、failed、completed、无 active run、未知状态和未知阶段的真实渲染。
+- diagnostics/final 链接分别受 active run 与 `final_available` 约束，URL 编码 Task/Run ID。
+- loading、请求错误后重试、空队列、筛选无结果。
+- 两个可控 Promise 证明后发请求胜出；unmount 后旧请求完成不更新状态且无 act/unhandled rejection。
+- 注入额外 `path/command/token/secret/logs` 字段，断言页面不渲染。
+- 生产 API adapter 的 HTTP 边界测试；不得以源码字符串或只检查 mock 次数代替行为断言。
+
+### 3N.4 门禁、提交和报告
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+npm --prefix web-v2 run test:contract-checker
+MOUNTAIN_API_BASE=http://127.0.0.1:<动态端口>/api/v1 node web-v2/scripts/check-api-contract.mjs
+! rg -n "\b(project|projects|Project|Projects)\b|localStorage|sessionStorage|Math\.random" web-v2/src/pages/TasksPage.tsx web-v2/tests/task*
+git diff --check
+git status --short
+```
+
+真实 checker 需要 CCB 后端已启动；若无法访问，只能如实标记 blocked，不能用 fixture 冒充。其余门禁必须完成。
+
+实现提交：
+
+```text
+feat(mountain-web): establish real task queue
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/docs/Mountain/m07-ccf-task-queue-10-report.md
+```
+
+报告列出原型映射、DTO 字段表、状态/阶段映射、操作显示条件、请求时序、API gap、门禁原始摘要、implementation commit 和 clean status。报告提交：
+
+```text
+docs(mountain): report real task queue
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 4. CCB 当前执行指令
 
 ### 4.1 指令编号
