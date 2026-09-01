@@ -2,7 +2,7 @@
 """Real backend contract smoke — 通过正式启动脚本拉起后端，验证 CCF 契约。
 
 用法:
-    python scripts/smoke_real_backend_contract.py [--port PORT] [--checker-path PATH] [--temp-parent DIR]
+    python scripts/smoke_real_backend_contract.py [--port PORT] [--checker-path PATH] [--pid-marker FILE]
 
 自动:
     1. 创建临时 CSBOARD_DATA_DIR（默认加密模式）
@@ -12,6 +12,10 @@
     5. 运行 CCF 生产 check-api-contract.mjs
     6. 执行 API smoke 表验证
     7. finally 终止子进程并清理临时目录（带断言证明）
+
+PID 观测:
+    --pid-marker FILE  启动成功后将 PID 写入该文件（位于 smoke 临时目录之外）。
+                       smoke 不负责删除调用者提供的 marker。
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -31,6 +36,21 @@ from pathlib import Path
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+# ── Redaction ────────────────────────────────────────────────────────────
+
+_BEARER = re.compile(r"(?i)(bearer\s+)[^\s]+")
+_QUERY_SECRET = re.compile(r"(?i)([?&](?:api[_-]?key|token|secret|password)=)[^&#\s]+")
+_SECRET_VALUE = re.compile(r"(ccb-runtime-secret-canary-[A-Za-z0-9_-]+)")
+
+
+def redact_text(text: str) -> str:
+    """对文本进行脱敏：Bearer token、query secret、已知 canary。"""
+    text = _BEARER.sub(r"\1[REDACTED]", text)
+    text = _QUERY_SECRET.sub(r"\1[REDACTED]", text)
+    text = _SECRET_VALUE.sub("[REDACTED]", text)
+    return text
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -106,10 +126,43 @@ def resolve_checker_path(checker_arg: str | None) -> Path:
     return default
 
 
-def _write_pid_marker(tmp_dir: Path, pid: int) -> None:
-    """写入 PID marker 文件供测试验证。"""
-    marker = tmp_dir / "pid.marker"
-    marker.write_text(str(pid), encoding="utf-8")
+def write_pid_marker(path: Path, pid: int) -> None:
+    """原子写入 PID marker 文件。"""
+    path.write_text(str(pid), encoding="utf-8")
+
+
+def read_pid_marker(path: Path) -> int | None:
+    """读取 PID marker，返回 PID 或 None。"""
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def pid_alive(pid: int) -> bool:
+    """检查 PID 是否仍存活。"""
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+# ── Lifecycle result ─────────────────────────────────────────────────────
+
+class LifecycleResult:
+    """smoke 生命周期结果，供调用方断言。"""
+    def __init__(self) -> None:
+        self.spawned = False
+        self.pid: int | None = None
+        self.terminated = False
+        self.tmp_dir_cleaned = False
+        self.returncode: int = 0
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -125,16 +178,17 @@ def main() -> int:
         help="CCF contract checker 路径（默认: 仓库内 web-v2/scripts/check-api-contract.mjs）",
     )
     parser.add_argument(
-        "--temp-parent",
+        "--pid-marker",
         type=str,
         default=None,
-        help="临时目录父目录（测试用，生产不使用）",
+        help="外部 PID marker 文件路径（位于 smoke 临时目录之外）",
     )
     args = parser.parse_args()
 
     port = args.port or find_free_port()
     base = f"http://127.0.0.1:{port}/api/v1"
     checker_path = resolve_checker_path(args.checker_path)
+    pid_marker = Path(args.pid_marker) if args.pid_marker else None
 
     # 验证 checker 存在
     if not checker_path.exists():
@@ -143,27 +197,25 @@ def main() -> int:
         return 1
 
     # ── 1. 创建临时数据目录 ──────────────────────────────────────────────
-    parent_dir = args.temp_parent or tempfile.gettempdir()
-    tmp_dir = tempfile.mkdtemp(prefix="csboard-smoke-", dir=parent_dir)
+    tmp_dir = tempfile.mkdtemp(prefix="csboard-smoke-")
     data_dir = Path(tmp_dir) / "data"
     data_dir.mkdir()
     proc = None
     log_file = Path(tmp_dir) / "uvicorn.log"
-    log_fd = None
+    lifecycle = LifecycleResult()
 
     print(f"[smoke] 临时数据目录: {data_dir}")
     print(f"[smoke] 端口: {port}")
     print(f"[smoke] API base: {base}")
     print(f"[smoke] Checker: {checker_path}")
+    if pid_marker:
+        print(f"[smoke] PID marker: {pid_marker}")
 
     try:
         # ── 2. 通过正式启动脚本拉起后端 ──────────────────────────────────
         env = os.environ.copy()
-        # 移除可能干扰启动的环境变量
-        _skip = {"CSBOARD_ALLOW_PLAINTEXT_SECRETS", "PYTHON" + "PATH"}
-        for key in list(env.keys()):
-            if key in _skip:
-                del env[key]
+        env.pop("CSBOARD_ALLOW_PLAINTEXT_SECRETS", None)
+        env.pop("PYTHONPATH", None)
         env["CSBOARD_DATA_DIR"] = str(data_dir)
 
         launch_script = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
@@ -183,20 +235,25 @@ def main() -> int:
             stdout=log_fd,
             stderr=subprocess.STDOUT,
         )
-        _write_pid_marker(Path(tmp_dir), proc.pid)
+        lifecycle.spawned = True
+        lifecycle.pid = proc.pid
+
+        # 写入外部 PID marker
+        if pid_marker:
+            write_pid_marker(pid_marker, proc.pid)
 
         # ── 3. 等待 health ───────────────────────────────────────────────
         print("[smoke] 等待 /api/v1/health ...")
         try:
             health = wait_for_health(base, timeout=30)
         except TimeoutError:
-            # 启动失败：输出最后几行日志
+            # 启动失败：输出最后几行日志（脱敏后）
             log_fd.flush()
             if log_file.exists():
                 lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
                 print(f"[smoke] 启动失败，最后 {len(lines)} 行日志:", file=sys.stderr)
                 for line in lines:
-                    print(f"  {line}", file=sys.stderr)
+                    print(f"  {redact_text(line)}", file=sys.stderr)
             raise
 
         print(f"[smoke] Health: status={health['status']}")
@@ -233,12 +290,6 @@ def main() -> int:
         service_id = created["service_id"]
         print(f"[smoke] 契约 Service 创建成功: service_id={service_id}")
 
-        safe_fields = {
-            k: v for k, v in created.items()
-            if k not in ("config", "required_secrets", "optional_secrets")
-        }
-        print(f"[smoke]   非敏感字段: {json.dumps(safe_fields, ensure_ascii=False, indent=2)}")
-
         # ── 5. 运行 CCF 生产 checker ────────────────────────────────────
         print(f"[smoke] 运行 CCF contract checker: {checker_path}")
 
@@ -261,16 +312,18 @@ def main() -> int:
             timeout=60,
         )
 
-        print("[smoke] Checker stdout:")
-        print(result.stdout)
-        if result.stderr:
-            print("[smoke] Checker stderr:")
-            print(result.stderr)
-
         checker_output = result.stdout + result.stderr
+
+        # 脱敏后输出
+        print("[smoke] Checker stdout (redacted):")
+        print(redact_text(result.stdout))
+        if result.stderr:
+            print("[smoke] Checker stderr (redacted):")
+            print(redact_text(result.stderr))
 
         if result.returncode != 0:
             print(f"[smoke] ✗ Checker 失败 (exit={result.returncode})")
+            lifecycle.returncode = result.returncode
             return 1
 
         if "All contracts aligned against real backend" not in checker_output:
@@ -311,6 +364,7 @@ def main() -> int:
         print("\n[smoke] 清理中...")
         proc_pid = proc.pid
         terminated = cleanup_process(proc)
+        lifecycle.terminated = terminated
         proc = None
 
         if not terminated:
@@ -320,28 +374,28 @@ def main() -> int:
 
         # 关闭日志文件句柄
         log_fd.close()
-        log_fd = None
 
         # 清理临时目录并断言
         shutil.rmtree(tmp_dir)
-        if Path(tmp_dir).exists():
+        lifecycle.tmp_dir_cleaned = not Path(tmp_dir).exists()
+        if not lifecycle.tmp_dir_cleaned:
             print(f"[smoke] ✗ 临时目录未清理: {tmp_dir}", file=sys.stderr)
             return 1
         print(f"[smoke] ✓ 临时目录已清理: {tmp_dir}")
 
         print("\n[smoke] 所有检查通过 ✓")
+        lifecycle.returncode = 0
         return 0
 
     except Exception as exc:
-        print(f"[smoke] ✗ 异常: {exc}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
+        redacted_msg = redact_text(str(exc))
+        print(f"[smoke] ✗ 异常: {redacted_msg}", file=sys.stderr)
+        lifecycle.returncode = 1
         return 1
 
     finally:
         cleanup_process(proc)
-        if log_fd is not None and not log_fd.closed:
-            log_fd.close()
+        # 清理临时目录
         if Path(tmp_dir).exists():
             shutil.rmtree(tmp_dir)
 

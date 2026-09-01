@@ -37,8 +37,8 @@ def _check_port_available(host: str, port: int) -> None:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((host, port))
-    except OSError as exc:
-        print(f"错误: 端口 {port} 不可用 ({exc})", file=sys.stderr)
+    except OSError:
+        print(f"错误: 端口 {port} 不可用", file=sys.stderr)
         print(f"解决: 使用 --port 指定其他端口，或终止占用 {port} 的进程", file=sys.stderr)
         sys.exit(1)
 
@@ -97,8 +97,8 @@ def main() -> None:
             print("错误: webapp.mountain_server:app 为 None", file=sys.stderr)
             print("解决: 检查依赖是否完整安装", file=sys.stderr)
             sys.exit(1)
-    except Exception as exc:
-        print(f"错误: 无法导入 webapp.mountain_server: {exc}", file=sys.stderr)
+    except Exception:
+        print("错误: 无法导入 webapp.mountain_server", file=sys.stderr)
         print("解决: 确认在仓库根目录或已正确安装依赖", file=sys.stderr)
         sys.exit(1)
 
