@@ -54,6 +54,21 @@ export function percent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
 }
 
+/** Check if a byte value is safe to display (not null, finite, non-negative) */
+export function hasValidCapacity(bytes: number | null | undefined): bytes is number {
+  return bytes != null && Number.isFinite(bytes) && bytes >= 0
+}
+
+/** Format bytes with safe fallback for null/NaN/Infinity/negative → "未统计" */
+export function formatCapacityBytes(bytes: number | null | undefined): string {
+  if (!hasValidCapacity(bytes)) return '未统计'
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const value = bytes / Math.pow(1024, i)
+  return `${value.toFixed(i > 1 ? 1 : 0)} ${units[i]}`
+}
+
 /** Status display text */
 export function statusText(status: string): string {
   const map: Record<string, string> = {

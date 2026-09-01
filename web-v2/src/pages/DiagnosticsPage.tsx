@@ -1,86 +1,147 @@
 /* ==========================================================================
-   诊断 — Diagnostics Page
+   系统诊断 — read-only system-level summary
    ========================================================================== */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchDiagnosticsSettings } from '../lib/api/settings'
 import type { DiagnosticsSettings } from '../lib/api/types'
+import { hasValidCapacity, formatCapacityBytes } from '../lib/formatting'
+
+function mapApiStatus(raw: string): { label: string; cls: string } {
+  const lower = raw.toLowerCase()
+  if (lower === 'healthy' || lower === 'ok') return { label: '正常', cls: 'dg-status--ok' }
+  if (lower === 'degraded') return { label: '降级', cls: 'dg-status--warn' }
+  if (lower === 'failed' || lower === 'down' || lower === 'unavailable') return { label: '不可用', cls: 'dg-status--fail' }
+  return { label: raw, cls: 'dg-status--unknown' }
+}
+
+function DiagnosticsSkeleton() {
+  return (
+    <div className="dg-grid" aria-label="正在加载诊断信息">
+      {[0, 1, 2, 3, 4, 5].map(i => (
+        <div className="dg-card dg-card--skeleton" key={i} aria-hidden="true">
+          <span className="dg-skeleton dg-skeleton--title" />
+          <span className="dg-skeleton dg-skeleton--line" />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function DiagnosticsPage() {
   const [settings, setSettings] = useState<DiagnosticsSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const mounted = useRef(false)
+  const requestId = useRef(0)
 
   const load = async () => {
+    const currentRequest = ++requestId.current
     setLoading(true)
     setError(null)
     try {
       const data = await fetchDiagnosticsSettings()
-      setSettings(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
+      if (mounted.current && currentRequest === requestId.current) setSettings(data)
+    } catch (cause) {
+      if (mounted.current && currentRequest === requestId.current) {
+        setError(cause instanceof Error ? cause.message : '加载诊断信息失败')
+      }
     } finally {
-      setLoading(false)
+      if (mounted.current && currentRequest === requestId.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
+    mounted.current = true
+    void load()
+    return () => {
+      mounted.current = false
+      requestId.current += 1
+    }
   }, [])
 
-  if (loading) return <div className="page-container"><div className="dg-loading">加载中...</div></div>
-  if (error) return <div className="page-container"><div className="dg-error">{error}</div></div>
-  if (!settings) return <div className="page-container"><div className="dg-empty">未找到配置</div></div>
+  const apiStatus = settings ? mapApiStatus(settings.api.status) : null
+  const freeValid = hasValidCapacity(settings?.storage.free_bytes)
+  const usedValid = hasValidCapacity(settings?.storage.used_bytes)
 
   return (
-    <div className="page-container">
-      <div className="dg-header">
-        <h1 className="dg-title">诊断</h1>
-        <p className="dg-description">系统健康状态</p>
-        <button className="btn btn-secondary" onClick={load}>刷新</button>
-      </div>
+    <section className="dg-panel" aria-labelledby="diagnostics-title">
+      <h2 className="dg-title" id="diagnostics-title">系统诊断</h2>
+      <p className="dg-description">
+        以下为当前运行环境的系统级摘要，仅作只读展示。
+        具体任务的事件、日志、Trace 和产物诊断请进入任务工作台查看。
+      </p>
 
-      <div className="dg-grid">
-        <div className="dg-item">
-          <span className="dg-item-label">API 状态</span>
-          <span className={`dg-item-value ${settings.api.status === 'ok' ? 'dg-item-value--ok' : 'dg-item-value--fail'}`}>
-            {settings.api.status}
-          </span>
+      {loading && <DiagnosticsSkeleton />}
+      {!loading && error && (
+        <div className="dg-error" role="alert">
+          <p>加载诊断信息失败：{error}</p>
+          <button className="btn btn-secondary" type="button" onClick={() => void load()}>重新加载</button>
         </div>
-        <div className="dg-item">
-          <span className="dg-item-label">服务</span>
-          <span className="dg-item-value">
-            总计 {settings.services.total} | 可用 {settings.services.available} | 不可用 {settings.services.unavailable}
-          </span>
-        </div>
-        <div className="dg-item">
-          <span className="dg-item-label">工具链</span>
-          <span className="dg-item-value">
-            总计 {settings.toolchain.total} | 可用 {settings.toolchain.available} | 缺失 {settings.toolchain.missing}
-          </span>
-        </div>
-        <div className="dg-item">
-          <span className="dg-item-label">存储</span>
-          <span className={`dg-item-value ${settings.storage.writable ? 'dg-item-value--ok' : 'dg-item-value--fail'}`}>
-            {settings.storage.writable ? '可写' : '不可写'}
-            {settings.storage.free_bytes != null && ` | 可用空间: ${(settings.storage.free_bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`}
-          </span>
-        </div>
-        {settings.telemetry && (
-          <div className="dg-item">
-            <span className="dg-item-label">遥测</span>
-            <span className="dg-item-value">{settings.telemetry.enabled ? '已启用' : '未启用'}</span>
+      )}
+      {!loading && !error && settings && (
+        <>
+          <div className="dg-grid">
+            {/* API */}
+            <article className="dg-card">
+              <h3 className="dg-card-title">API</h3>
+              <span className={`dg-status ${apiStatus!.cls}`}>{apiStatus!.label}</span>
+            </article>
+
+            {/* Services */}
+            <article className="dg-card">
+              <h3 className="dg-card-title">动态服务</h3>
+              <p className="dg-card-value">
+                总计 {settings.services.total} · 可用 {settings.services.available} · 不可用 {settings.services.unavailable}
+              </p>
+            </article>
+
+            {/* Toolchain */}
+            <article className="dg-card">
+              <h3 className="dg-card-title">工具链</h3>
+              <p className="dg-card-value">
+                总计 {settings.toolchain.total} · 可用 {settings.toolchain.available} · 缺失 {settings.toolchain.missing}
+              </p>
+            </article>
+
+            {/* Storage */}
+            <article className="dg-card">
+              <h3 className="dg-card-title">存储</h3>
+              <p className="dg-card-value">
+                {settings.storage.writable ? '可写' : '不可写'}
+                {freeValid && (
+                  <> · 可用 {formatCapacityBytes(settings.storage.free_bytes)}</>
+                )}
+                {usedValid && (
+                  <> · 已用 {formatCapacityBytes(settings.storage.used_bytes)}</>
+                )}
+              </p>
+            </article>
+
+            {/* Telemetry */}
+            <article className="dg-card">
+              <h3 className="dg-card-title">遥测</h3>
+              <p className="dg-card-value">
+                {settings.telemetry ? (settings.telemetry.enabled ? '已启用' : '未启用') : '未配置'}
+              </p>
+            </article>
+
+            {/* Logs */}
+            <article className="dg-card">
+              <h3 className="dg-card-title">近期错误</h3>
+              <p className={`dg-card-value ${settings.logs && settings.logs.recent_errors > 0 ? 'dg-card-value--warn' : ''}`}>
+                {settings.logs ? settings.logs.recent_errors : 0}
+              </p>
+            </article>
           </div>
-        )}
-        {settings.logs && (
-          <div className="dg-item">
-            <span className="dg-item-label">近期错误</span>
-            <span className={`dg-item-value ${settings.logs.recent_errors > 0 ? 'dg-item-value--warn' : 'dg-item-value--ok'}`}>
-              {settings.logs.recent_errors}
-            </span>
+
+          <div className="dg-redaction">
+            <p>系统摘要不包含端点地址、日志路径、错误详情或敏感配置。任务级诊断请前往任务队列。</p>
+            <Link to="/tasks" className="btn btn-secondary">前往任务队列</Link>
           </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </section>
   )
 }

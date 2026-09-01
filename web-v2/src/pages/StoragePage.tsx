@@ -5,24 +5,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchStorageSettings } from '../lib/api/settings'
 import type { StorageSettings } from '../lib/api/types'
+import { hasValidCapacity, formatCapacityBytes } from '../lib/formatting'
 
 type LogicalStorage = {
   key: 'assets' | 'tasks' | 'temp'
   label: string
   available: boolean
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '未统计'
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const value = bytes / Math.pow(1024, i)
-  return `${value.toFixed(i > 1 ? 1 : 0)} ${units[i]}`
-}
-
-function hasValidCapacity(bytes: number | null | undefined): bytes is number {
-  return bytes != null && Number.isFinite(bytes) && bytes >= 0
 }
 
 function StorageSkeleton() {
@@ -145,11 +133,11 @@ export function StoragePage() {
                   <div className="ss-capacity-grid">
                     <div className="ss-capacity-item">
                       <span className="ss-capacity-item-label">可用空间</span>
-                      <span className="ss-capacity-item-value">{freeValid ? formatBytes(settings!.free_bytes!) : '未统计'}</span>
+                      <span className="ss-capacity-item-value">{freeValid ? formatCapacityBytes(settings!.free_bytes!) : '未统计'}</span>
                     </div>
                     <div className="ss-capacity-item">
                       <span className="ss-capacity-item-label">已用空间</span>
-                      <span className="ss-capacity-item-value">{usedValid ? formatBytes(settings!.used_bytes!) : '未统计'}</span>
+                      <span className="ss-capacity-item-value">{usedValid ? formatCapacityBytes(settings!.used_bytes!) : '未统计'}</span>
                     </div>
                     {ratio !== null && (
                       <div className="ss-capacity-item">
