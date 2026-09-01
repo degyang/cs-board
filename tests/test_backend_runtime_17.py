@@ -1,9 +1,11 @@
-"""CCB-PORTABLE-BACKEND-RUNTIME-21: Health 失败路径与日志句柄最终收口。
+"""CCB-PORTABLE-BACKEND-RUNTIME-22: 后端测试去除 sibling worktree 依赖。
 
 所有测试必须证明真实行为。
 每个 Popen 创建后立即纳入 try/finally。
 不得使用 ignore_errors 或无人消费的 PIPE。
 专项测试必须 0 skipped。
+pytest fixture checker 只证明生命周期，不冒充真实 CCF 契约检查；
+真实 CCF checker 仅保留在独立集成 smoke 门禁中。
 """
 
 from __future__ import annotations
@@ -25,10 +27,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
 SMOKE_SCRIPT = PROJECT_ROOT / "scripts" / "smoke_real_backend_contract.py"
-CCF_CHECKER = Path(
-    "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/"
-    "mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs"
-)
 
 # 唯一 canary
 CANARY = "ccb-runtime-secret-canary-9f3a7b2e"
@@ -319,14 +317,25 @@ def test_success_cleanup_proven():
 
 
 def test_smoke_checker_success_path():
-    """smoke checker 成功：exit=0，PID marker 非空，PID 已死，目录消失。"""
+    """smoke 生命周期成功路径：临时最小 checker 输出成功标记后 exit=0。
+
+    此 checker 只证明 smoke 生命周期（启动→health→checker→清理），
+    不冒充真实 CCF 契约检查。真实 CCF checker 仅在独立集成 smoke 门禁中运行。
+    """
     tmp_parent = Path(tempfile.mkdtemp(prefix="smoke-success-"))
     marker = tmp_parent / "pid.marker"
+    # 临时最小成功 checker：仅输出成功标记，不执行真实契约断言
+    min_checker = tmp_parent / "min-success-checker.mjs"
+    min_checker.write_text(
+        'console.log("All contracts aligned against real backend ✓");\n'
+        'process.exit(0);\n',
+        encoding="utf-8",
+    )
     try:
         result = subprocess.run(
             [
                 PYTHON, str(SMOKE_SCRIPT),
-                "--checker-path", str(CCF_CHECKER),
+                "--checker-path", str(min_checker),
                 "--temp-parent", str(tmp_parent),
                 "--pid-marker", str(marker),
             ],
@@ -342,8 +351,8 @@ def test_smoke_checker_success_path():
         assert pid > 0, f"PID 无效: {pid}"
         assert not _pid_alive(pid), f"PID {pid} 仍存活"
 
-        # PID marker 是测试创建的，由测试清理；smoke 临时目录应已消失
-        remaining = [f for f in tmp_parent.iterdir() if f != marker]
+        # PID marker 和 min_checker 是测试创建的，由测试清理；smoke 临时目录应已消失
+        remaining = [f for f in tmp_parent.iterdir() if f not in (min_checker, marker)]
         assert len(remaining) == 0, f"遗留: {remaining}"
     finally:
         if tmp_parent.exists():
@@ -406,6 +415,7 @@ def test_smoke_startup_failure_path():
 
     smoke 检测到 launcher 提前退出 → startup failure → 非零。
     断言：PID marker 非空，PID 已死，canary 脱敏，目录消失。
+    launcher 在 checker 运行前即失败，故 checker 只需存在（不执行真实契约）。
     """
     tmp_parent = Path(tempfile.mkdtemp(prefix="smoke-startup-"))
     marker = tmp_parent / "pid.marker"
@@ -418,12 +428,18 @@ def test_smoke_startup_failure_path():
         f'sys.exit(42)\n',
         encoding="utf-8",
     )
+    # 临时存在 checker：launcher 在 checker 运行前即失败，checker 只需存在
+    existing_checker = tmp_parent / "existing-checker.mjs"
+    existing_checker.write_text(
+        'console.log("placeholder checker");\nprocess.exit(0);\n',
+        encoding="utf-8",
+    )
     try:
         result = subprocess.run(
             [
                 PYTHON, str(SMOKE_SCRIPT),
                 "--launcher-path", str(bad_launcher),
-                "--checker-path", str(CCF_CHECKER),
+                "--checker-path", str(existing_checker),
                 "--temp-parent", str(tmp_parent),
                 "--pid-marker", str(marker),
             ],
@@ -443,8 +459,8 @@ def test_smoke_startup_failure_path():
         assert "[REDACTED]" in output, "未出现脱敏标记"
 
         # 临时目录消失
-        # PID marker 和 bad_launcher 是测试创建的，由测试清理
-        remaining = [f for f in tmp_parent.iterdir() if f not in (bad_launcher, marker)]
+        # PID marker、bad_launcher、existing_checker 是测试创建的，由测试清理
+        remaining = [f for f in tmp_parent.iterdir() if f not in (bad_launcher, existing_checker, marker)]
         assert len(remaining) == 0, f"遗留: {remaining}"
     finally:
         if tmp_parent.exists():
