@@ -2223,6 +2223,70 @@ docs(mountain): report backend preintegration gate
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4L. CCB 新 WebUI 联调后端运行切片
+
+### 4L.1 指令编号与已验收基线
+
+```text
+instruction: CCB-REAL-RUNTIME-CONTRACT-16
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+accepted implementation/test: d90e405 test(mountain): stabilize new server preintegration gate
+accepted report: b22dad3 docs(mountain): report backend preintegration gate
+```
+
+审核者已复现专项 `42/42`、全量 `427 passed, 5 skipped`、compileall、旧 Server import 清零及 clean status。输入事务与新 Server 后端基线正式验收通过，不再追加该领域测试。
+
+### 4L.2 唯一目标
+
+把当前分支的 `webapp.mountain_server:app` 作为真实独立进程启动，并让 CCF 工作树的生产 contract checker 对它通过，为后续新 WebUI 集成提供可复现后端。不得合并或修改 CCF 分支，不得启动旧 `webapp.server`。
+
+1. 使用项目指定解释器和临时 `CSBOARD_DATA_DIR` 启动真实 uvicorn；默认加密模式，禁止设置 `CSBOARD_ALLOW_PLAINTEXT_SECRETS=1`。端口使用未占用的测试端口，不写用户正式 `~/.csboard`。
+2. 轮询 `/api/v1/health` 等待就绪，验证 `secret_store.encrypted=true`、storage writable、service registry 正常。启动失败必须输出可操作错误并非零退出。
+3. 通过真实 HTTP 创建一条仅用于契约检查的动态 Service，取得确定的 `service_id`；不得直接写 registry JSON。Service 可以不可用，但 list/detail/secrets/probe DTO 必须结构完整且脱敏。
+4. 从以下绝对路径运行 CCF 的生产 checker，不复制 checker 或 fixture：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+```
+
+环境必须同时设置真实 `MOUNTAIN_API_BASE=http://127.0.0.1:<port>/api/v1` 和 `MOUNTAIN_CONTRACT_SERVICE_ID=<service_id>`。输出必须是 `All contracts aligned against real backend`；fixture mode 不算通过。
+5. 若 checker 发现后端 DTO 不一致，只在 CCB 分支做最小后端契约修复和行为测试；不得修改前端 types、fixtures 或 checker 来迁就后端。
+6. 增加一个可重复执行的后端 runtime/contract smoke 自动化入口（Python 脚本或 pytest 集成测试），负责：创建临时数据目录、选择/接收端口、启动 uvicorn、等待 health、创建契约 Service、调用外部生产 checker、在 finally 终止子进程并清理临时目录。不得残留后台进程、正式数据或 Secret。
+7. 自动化还要真实请求 `/api/v1/services`、`/api/v1/assets/styles?kind=preset`、`/api/v1/settings/toolchain`、`/api/v1/settings/storage`、`/api/v1/settings/diagnostics` 和不存在 API，确认状态码及统一 `body.error`。不得访问 `/api/v1/providers` 作为正向能力。
+8. 本轮不构建/托管 WebUI，不修改启动器；静态 SPA 和统一启动属于后续集成切片。
+
+### 4L.3 门禁、提交和报告
+
+```bash
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+<新增的真实 runtime/contract smoke 命令>
+! rg -n "webapp\.server:app|from webapp\.server import|/api/v1/providers" <新增生产脚本及测试>
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+test(mountain): prove real backend frontend contract
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-real-runtime-contract-16-report.md
+```
+
+报告必须包含：实际 uvicorn 命令（隐藏随机路径）、端口、health 摘要、契约 Service 非敏感字段、生产 checker 原始成功输出、API smoke 表、进程和临时目录清理证据、pytest/compileall/diff/clean status。报告提交：
+
+```text
+docs(mountain): report real backend contract runtime
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
