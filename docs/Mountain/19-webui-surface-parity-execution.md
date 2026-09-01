@@ -184,6 +184,80 @@ git diff --check
 
 待填写。
 
+## 6A. 主审核者对 CCF 首轮的结论与返工指令
+
+审核状态：**不通过，继续在 `feat/mountain-webui-surface-parity` 原分支返工。**
+
+首轮提交 `7b617c1` 的 build 与 343 项 Vitest 已由主审核者复跑通过，但未达到“表面对齐”交付定义：
+
+1. 指令要求的截图目录为空，没有任何 1440×900 视觉证据；
+2. 未运行真实后端 contract checker，只运行了 fixture；
+3. 未验证浏览器控制台 error/warning；
+4. `ServiceFormPage.tsx`、`ServiceDetailPage.tsx` 完全未修改，模型服务的新建、详情、编辑没有对齐；
+5. `VoiceAlignmentPage.tsx` 完全未修改，且报告错误写成“无原型设计源”；真实设计源明确存在于 `prototypes/webui/src/pages/VoiceAlignmentPage.tsx` 和 `prototypes/webui/src/features/voice-alignment/`；
+6. 本轮主要是生产组件内部重排和 CSS 类修改，尚无证据证明页面布局、文字、交互状态与原型严格一致。
+
+CCF 下一轮只做以下返工，不进入任务队列、新建任务或工作台：
+
+### A. 补全模型服务四条路由
+
+- `/settings/models`
+- `/settings/models/new`
+- `/settings/models/:serviceId`
+- `/settings/models/:serviceId/edit`
+
+列表页对齐原型的标题、说明、卡片信息层级和状态表达；新建/编辑/详情延续同一视觉语言。CRUD、Secret、Probe、默认服务是生产必需的有意扩展，必须在证据 README 中明确说明，不能因此另造一套页面风格。
+
+### B. 重新对齐语音与对齐页
+
+逐项对照：
+
+```text
+prototypes/webui/src/pages/VoiceAlignmentPage.tsx
+prototypes/webui/src/features/voice-alignment/VoiceServiceCard.tsx
+prototypes/webui/src/features/voice-alignment/types.ts
+```
+
+生产页仍使用真实 API，但标题、说明、三项同步原则、服务卡信息顺序、加载/不可用状态必须与原型一致。
+
+### C. 为八个页面/页签生成真实视觉证据
+
+允许增加 `@playwright/test` 作为开发依赖，并建立只用于截图/控制台验收的脚本。若本机缺少浏览器，执行 Playwright Chromium 安装；若安装被外部环境阻止，必须明确报告阻塞，不能把截图门禁改成“无需完成”。
+
+使用真实后端 `http://127.0.0.1:8000`，固定视口 `1440x900`，至少生成：
+
+```text
+docs/Mountain/webui-parity-evidence/settings/models-list.png
+docs/Mountain/webui-parity-evidence/settings/models-create.png
+docs/Mountain/webui-parity-evidence/settings/models-detail.png
+docs/Mountain/webui-parity-evidence/settings/voice-alignment.png
+docs/Mountain/webui-parity-evidence/settings/toolchain.png
+docs/Mountain/webui-parity-evidence/settings/storage.png
+docs/Mountain/webui-parity-evidence/settings/diagnostics.png
+docs/Mountain/webui-parity-evidence/assets/preset.png
+docs/Mountain/webui-parity-evidence/assets/custom.png
+docs/Mountain/webui-parity-evidence/assets/voices.png
+```
+
+截图脚本同时收集 `console.error`、未处理异常和失败请求；结果必须为 0。不得截取 fixture 页面。
+
+### D. 补真实契约与报告
+
+```bash
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+```
+
+更新 `docs/Mountain/webui-parity-evidence/README.md`，逐页记录原型文件、生产文件、真实端点、正常/加载/空/错误状态覆盖、有意差异。将第 5 节完成报告改为“返工完成报告”，如实列出新 commit 和全部门禁。
+
+完成前执行：
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+git diff --check
+```
+
 ## 7. 主审核者联合验收
 
 CCF/CCB 均完成后，由主审核者把两个开发分支合入临时验收分支，启动真实后端和生产 WebUI，逐页检查截图、交互、刷新持久化和控制台，再决定是否形成最终 PR-P0。单方测试通过不代表本批次完成。
