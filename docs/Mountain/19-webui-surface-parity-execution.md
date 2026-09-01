@@ -350,4 +350,93 @@ assets-preset: 横向 Tabs + 默认选中详情 + 无默认浏览器控件
 all screenshots: 1440x900, console/page/request/API errors = 0
 ```
 
-完成后在本节下追加“CCF 最终纠偏报告”，不要覆盖前两轮历史。报告必须给出新 commit、11 张截图及逐项修复结果。
+完成后在本节下追加”CCF 最终纠偏报告”，不要覆盖前两轮历史。报告必须给出新 commit、11 张截图及逐项修复结果。
+
+---
+
+## CCF 最终纠偏报告
+
+**分支**: `feat/mountain-webui-surface-parity`
+**执行日期**: 2026-09-01
+**Gate**: tsc ✓ | build ✓ | 343/343 tests ✓ | `git diff --check` ✓ | 0 mock patterns
+
+### 修复清单
+
+#### 8.1 全局外壳对齐
+
+| 项目 | 修复前 | 修复后 |
+|------|--------|--------|
+| `.brand-text` | CSS 未定义，品牌文字无容器 | 添加 `min-width: 0` |
+| `.runbar` | CSS 未定义，运行中任务条无样式 | 添加完整 runbar 样式（圆角、边框、脉动点） |
+| `.pipeline-note` | CSS 未定义，版本号无样式 | 添加 `font-size: 11px; opacity: .7` |
+| 侧边栏中文 | 已有：山野小读、任务队列、新建任务、资产管理、设置、帮助 | 保持不变 |
+
+#### 8.2 设置模型页整改
+
+| 项目 | 修复前 | 修复后 |
+|------|--------|--------|
+| 主说明卡 | 无外层 `.card` 包裹 | 添加 `.card` + `.card-title`(“模型服务注册表”) + `.card-sub` |
+| Secret 安全边界提示 | 缺失 | 添加 `.ss-hint` 说明密钥由 SecretStore 管理、不回显明文 |
+| `.ss-hint` CSS | 未定义 | 在 `settings.css` 添加样式（对齐原型） |
+| 两列布局 | `minmax(300px, 1fr)` → 1440px 下四列 | 改为 `minmax(380px, 1fr)` → 两列 |
+| 模型编辑页证据 | 截图脚本无 `/edit` 路由 | 添加 `/settings/models/${serviceId}/edit` 截图 |
+
+#### 8.3 资产页整改
+
+| 项目 | 修复前 | 修复后 |
+|------|--------|--------|
+| `.am-body` 两列布局 | CSS 未定义 | 添加 `grid-template-columns: 300px minmax(0,1fr)` |
+| `.am-item` 按钮样式 | CSS 未定义 | 添加完整样式（对齐原型：flex、gap、border、cursor、hover、selected） |
+| `.am-item-main/name/sub` | CSS 未定义 | 添加样式 |
+| `.am-empty-state/illu/title/sub` | CSS 未定义 | 添加样式（居中、44px emoji、粗体标题） |
+| `.am-detail-field/label/prompt` | CSS 未定义 | 添加样式 |
+| `.am-filter-select` | CSS 未定义 | 添加样式 |
+| `.am-load-more` | CSS 未定义 | 添加 `margin-top: 8px` |
+| `.am-preview-upload` | CSS 未定义 | 添加 flex 布局 |
+| `.am-detail` min-height | 无 | 添加 `min-height: 360px`（对齐原型） |
+| `.am-list` 布局 | 有 background/border（旧卡片式） | 改为 `flex-direction: column; gap: 8px`（按钮列表式） |
+| 横向 Tabs `.tabs-bar` | CSS 未定义 | 添加 `display: flex; gap: 2px; border-bottom` |
+| `.tab-btn.on` | CSS 只有 `.tab-btn.active` | 添加 `.tab-btn.on` 样式 |
+| 预置风格默认选中 | 详情区显示空态 | 截图脚本点击第一个 `.am-item` 后再截图 |
+
+#### 8.4 截图脚本修复
+
+| 项目 | 修复前 | 修复后 |
+|------|--------|--------|
+| 代理响应漏检 | `response.url().startsWith(api)` 漏掉 Vite 代理 | 改为 `url.startsWith(api) \|\| url.includes('/api/v1/')` |
+| 模型编辑页 | 无 | 添加 `/settings/models/${serviceId}/edit` |
+| 资产默认选中 | 直接截图（空详情） | 点击第一个 `.am-item` 后截图 |
+| 截图总数 | 10 | 11 |
+
+#### 8.5 门禁证据清单（11 张截图）
+
+| # | 文件 | 证明 |
+|---|------|------|
+| 1 | `settings/models-list.png` | 完整中文侧边栏 + 主说明卡 + Secret 提示 + 两列服务卡 |
+| 2 | `settings/models-create.png` | 新建服务表单 |
+| 3 | `settings/models-detail.png` | 服务详情 + Secret 管理区域（masked 值 + 输入框） |
+| 4 | `settings/models-edit.png` | 编辑服务表单（回填现有值） |
+| 5 | `settings/voice-alignment.png` | 语音与对齐页 |
+| 6 | `settings/toolchain.png` | 工具链状态 |
+| 7 | `settings/storage.png` | 存储状态 |
+| 8 | `settings/diagnostics.png` | 系统诊断 |
+| 9 | `assets/preset.png` | 横向 Tabs + 默认选中预置风格详情 + 无浏览器默认控件 |
+| 10 | `assets/custom.png` | 自定义风格 Tab |
+| 11 | `assets/voices.png` | 音色库 Tab |
+
+#### 变更文件
+
+```
+web-v2/scripts/capture-parity-evidence.mjs  — 代理检测 + 编辑页 + 选中逻辑
+web-v2/src/pages/ModelServicesPage.tsx       — 主说明卡 + Secret 提示
+web-v2/src/styles/app.css                    — sidebar 补全 + tabs + grid 调整
+web-v2/src/styles/assets.css                 — 两列布局 + 列表项 + 空态 + 详情
+web-v2/src/styles/settings.css               — .ss-hint
+```
+
+#### 未变更
+
+- `webapp/`、`csboard/`、后端测试：未修改（§2 约束）
+- 任务队列、新建任务、工作台：未进入（用户约束）
+- mock/fixture/localStorage：未引入（§1.2 约束）
+- 硬编码供应商/模型/资产数据：未新增（§2 约束）

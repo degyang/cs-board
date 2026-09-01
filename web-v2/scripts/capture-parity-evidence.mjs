@@ -14,7 +14,12 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, dev
 page.on('console', message => { if (['error', 'warning'].includes(message.type())) consoleIssues.push(`${message.type()}: ${message.text()}`) })
 page.on('pageerror', error => consoleIssues.push(`exception: ${error.message}`))
 page.on('requestfailed', request => requestIssues.push(`${request.method()} ${request.url()} — ${request.failure()?.errorText ?? 'failed'}`))
-page.on('response', response => { if (response.url().startsWith(api) && response.status() >= 400) requestIssues.push(`${response.status()} ${response.request().method()} ${response.url()}`) })
+// Detect API responses — both direct (url starts with api) and proxied (url contains /api/v1/)
+page.on('response', response => {
+  const url = response.url()
+  const isApi = url.startsWith(api) || url.includes('/api/v1/')
+  if (isApi && response.status() >= 400) requestIssues.push(`${response.status()} ${response.request().method()} ${url}`)
+})
 
 const services = await (await fetch(`${api}/api/v1/services?limit=1`)).json()
 const serviceId = services.items[0]?.service_id
@@ -23,6 +28,7 @@ const shots = [
   ['/settings/models', 'settings/models-list.png'],
   ['/settings/models/new', 'settings/models-create.png'],
   [`/settings/models/${serviceId}`, 'settings/models-detail.png'],
+  [`/settings/models/${serviceId}/edit`, 'settings/models-edit.png'],
   ['/settings/voice-alignment', 'settings/voice-alignment.png'],
   ['/settings/toolchain', 'settings/toolchain.png'],
   ['/settings/storage', 'settings/storage.png'],
@@ -37,6 +43,14 @@ for (const [route, file, tab] of shots) {
   await page.goto(web + route, { waitUntil: 'networkidle' })
   if (tab) await page.getByRole('tab', { name: tab }).click()
   await page.waitForLoadState('networkidle')
+  // For asset pages, click the first list item to show detail panel
+  if (file.startsWith('assets/')) {
+    const firstItem = page.locator('.am-item').first()
+    if (await firstItem.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await firstItem.click()
+      await page.waitForTimeout(300)
+    }
+  }
   await page.screenshot({ path: path.join(evidence, file), fullPage: false })
 }
 await browser.close()

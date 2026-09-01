@@ -196,24 +196,36 @@ export function ModelServicesPage() {
         <div className="notice notice-ok" role="status">{actionSuccess}</div>
       )}
 
-      {services.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-title">暂无服务</div>
-          <div className="empty-sub">尚未配置任何模型服务</div>
+      <div className="card">
+        <h2 className="card-title">模型服务注册表</h2>
+        <p className="card-sub">
+          当前已接入的模型服务能力。本地引擎开箱可用、无需密钥；外部 API 需配置密钥后探测可用性。
+        </p>
+
+        <div className="ss-hint">
+          密钥安全边界：API Key / token / secret 由后端密钥库（SecretStore）统一管理。本页不存储、不回显明文密钥；
+          密钥仅作为一次性输入提交，落库后立即清空。
         </div>
-      ) : (
-        <div className="mp-list">
-          {services.map(svc => (
-            <ServiceCard
-              key={svc.service_id}
-              svc={svc}
-              actingId={actingId}
-              onAction={doAction}
-              onDelete={setDeleteTarget}
-            />
-          ))}
-        </div>
-      )}
+
+        {services.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-title">暂无服务</div>
+            <div className="empty-sub">尚未配置任何模型服务</div>
+          </div>
+        ) : (
+          <div className="mp-list">
+            {services.map(svc => (
+              <ServiceCard
+                key={svc.service_id}
+                svc={svc}
+                actingId={actingId}
+                onAction={doAction}
+                onDelete={setDeleteTarget}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={deleteTarget !== null}

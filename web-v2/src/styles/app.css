@@ -28,6 +28,7 @@ a { color: var(--nt-primary-700); }
 }
 .brand { padding: 24px 22px 18px; border-bottom: 1px solid var(--nt-border); }
 .brand-row { display: flex; align-items: center; gap: 12px; }
+.brand-text { min-width: 0; }
 .brand-mark {
   width: 40px; height: 40px; border-radius: var(--nt-radius-lg); flex: none;
   background: linear-gradient(135deg, var(--nt-primary-500), var(--nt-primary-700));
@@ -65,6 +66,16 @@ a { color: var(--nt-primary-700); }
 .nav-ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 
 .sidebar-footer { border-top: 1px solid var(--nt-border); padding: 14px 16px; font-size: 12px; color: var(--nt-text-muted); }
+.runbar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-radius: var(--nt-radius-md); background: var(--nt-surface);
+  border: 1px solid var(--nt-border); text-decoration: none;
+  color: var(--nt-text-secondary); margin-bottom: 10px; font-size: 12px;
+}
+.runbar:hover { border-color: var(--nt-accent-400); color: var(--nt-text); }
+.runbar .dot { width: 8px; height: 8px; border-radius: var(--nt-radius-full); flex: none; background: var(--nt-accent-500); animation: pulse 1.6s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.pipeline-note { font-size: 11px; color: var(--nt-text-muted); opacity: .7; }
 
 /* ---------------- 内容区 ---------------- */
 .main { overflow-y: auto; display: flex; flex-direction: column; grid-column: 2; grid-row: 1; }
@@ -159,7 +170,7 @@ a { color: var(--nt-primary-700); }
 /* ---------------- 模型服务卡片 (.mp-*) ─── 对齐原型 .ss-card 观感 ---------------- */
 .mp-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 12px;
   margin-top: 14px;
 }
@@ -295,6 +306,7 @@ a { color: var(--nt-primary-700); }
 
 /* ---------------- Tabs ---------------- */
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--nt-border); padding-bottom: 0; }
+.tabs-bar { display: flex; gap: 2px; border-bottom: 1px solid var(--nt-border); flex-wrap: wrap; }
 .tab-btn {
   padding: 8px 14px; border: none; background: none; cursor: pointer;
   font-family: var(--nt-font-display); font-size: 13px; font-weight: 600;
@@ -302,7 +314,8 @@ a { color: var(--nt-primary-700); }
   transition: color .15s, border-color .15s; display: flex; align-items: center; gap: 6px;
 }
 .tab-btn:hover { color: var(--nt-text); }
-.tab-btn.active { color: var(--nt-primary-700); border-bottom-color: var(--nt-primary-500); }
+.tab-btn.active, .tab-btn.on { color: var(--nt-primary-700); border-bottom-color: var(--nt-primary-500); font-weight: 600; }
+.tab-btn.on .tab-count { background: rgba(120,140,93,.16); color: var(--nt-primary-700); }
 .tab-count { font-size: 11px; color: var(--nt-text-muted); background: var(--nt-neutral-100); padding: 0 6px; border-radius: 9999px; }
 
 /* ---------------- BackButton ---------------- */
@@ -551,7 +564,7 @@ a { color: var(--nt-primary-700); }
 
 .set-content { margin-top: 0; }
 .set-filter-row { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
-.set-models .mp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.set-models .mp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
 
 /* ==========================================================================
    Voice Alignment (.va-*)

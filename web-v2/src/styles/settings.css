@@ -4,6 +4,16 @@
 
 /* ── Settings Page (.set-*) ────────────────────────────────────────────── */
 
+/* Hint bar (对齐原型 .ss-hint) */
+.ss-hint {
+  background: var(--nt-bg-sunken);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-md);
+  padding: 10px 12px;
+  font-size: 12.5px; line-height: 1.6; color: var(--nt-text-muted);
+  margin: 4px 0 14px;
+}
+
 .set-header {
   margin-bottom: 20px;
 }
