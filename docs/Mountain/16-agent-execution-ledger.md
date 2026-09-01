@@ -2729,6 +2729,73 @@ docs(mountain): report leak-free portable runtime
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4P. CCB 非空 PID 与脱敏证据收口
+
+### 4P.1 指令编号与审核结论
+
+```text
+instruction: CCB-PORTABLE-BACKEND-RUNTIME-20
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: 3155369 fix(mountain): close portable runtime process leaks
+reviewed report: ae220a1 docs(mountain): report leak-free portable runtime
+result: rejected; runtime works and 12 tests pass, but PID and secret-redaction assertions are vacuous
+```
+
+审核者已复现专项 `12 passed in 22.03s` 且 worktree clean。运行入口的跨 cwd 修复方向正确。本轮拒绝只针对下列证据缺陷：
+
+1. smoke 将 `pid.marker` 写在 `csboard-smoke-*` 内，成功清理后 marker 同目录一起消失；测试断言 `len(marker) == 0 or PID 已死`，所以只要目录删除就永远通过，未证明 PID 消失。
+2. checker failure 测试只证明目录剩余项为空，完全没有保存或检查真实 PID。
+3. canary 仅注入环境变量 `CSBOARD_CONTRACT_CANARY`，没有进入 checker stdout/stderr 或启动日志；`CANARY not in output` 因此是空证明。
+4. `CCF_CHECKER` 在后端 pytest 中硬编码 sibling worktree `/mnt/d/Workstation/...`；一个新 clone 或 CI 没有该目录时全量测试失败，违反可移植目标。
+5. report 把上述空断言写成 PID 和 canary 已验证，与实际测试不符。
+
+### 4P.2 唯一任务
+
+只修复上述验收证据，不扩展业务功能。
+
+1. smoke 增加可选的外部 PID 观测方式，例如 `--pid-marker /path/file`。marker 必须位于 smoke 自有临时工作目录之外，启动成功后原子写 PID；smoke 不负责删除调用者提供的 marker。默认生产调用不创建 marker。
+2. 三条 smoke 测试都从外部 marker 读取一个确定的非空 PID；smoke 返回后逐个断言该 PID 不存活，再由测试删除 marker。禁止 `marker 不存在 OR PID 已死` 形式。
+3. checker 成功路径、checker 非零路径、health/startup 失败路径分别断言 PID。若启动失败前未创建子进程，则必须有明确 lifecycle 结果证明 `spawned=false`；不得把 marker 缺失当作通用成功。
+4. 构造失败 checker，令其在 stdout 和 stderr 输出真实敏感形态，例如 `Authorization: Bearer ccb-runtime-secret-canary-...` 与 `?api_key=...`。smoke 在回显 checker stdout/stderr 前必须使用现有 `DefaultRedactor` 或等价统一脱敏器；测试断言原 canary 不出现且 `[REDACTED]` 出现。
+5. 启动失败尾部日志走同一脱敏函数。测试通过最窄、明确的测试 seam 让日志包含 Bearer/query secret，再断言原值不出现、替代值出现；不得仅把 canary 放进无人输出的环境变量。
+6. 后端 pytest 不得硬编码 CCF sibling worktree。进程生命周期单测使用测试创建的 checker 文件；真实 CCF checker 只保留在独立 smoke 门禁参数中。若仓库将来包含生产 checker，可通过 repo-relative 路径使用。
+7. `run_mountain_backend.py` 捕获 app import 异常时不得直接打印未经脱敏的 `str(exc)`；输出稳定错误码/建议，详细异常只经脱敏后进入受控日志。
+8. 修正报告，逐条列出外部 marker 的实际 PID、原始 canary 输入形态、脱敏输出摘要及独立真实 CCF checker 门禁，不能继续复用空证明表述。
+
+### 4P.3 固定门禁
+
+```bash
+env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_backend_runtime_17.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/smoke_real_backend_contract.py --checker-path /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+! rg -n "/mnt/d/Workstation|len\(marker\).*== 0|CSBOARD_CONTRACT_CANARY| or all\(" tests/test_backend_runtime_17.py
+! rg -n "print\(.*str\(exc\)|print\(f.*\{exc\}" scripts/run_mountain_backend.py scripts/smoke_real_backend_contract.py
+git diff --check
+git status --short
+```
+
+纠偏实现提交：
+
+```text
+test(mountain): prove runtime pid cleanup and redaction
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-portable-runtime-20-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report proven runtime cleanup and redaction
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
