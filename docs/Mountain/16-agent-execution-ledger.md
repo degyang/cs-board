@@ -2796,6 +2796,74 @@ docs(mountain): report proven runtime cleanup and redaction
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4Q. CCB Health 失败路径与日志句柄最终收口
+
+### 4Q.1 指令编号与审核结论
+
+```text
+instruction: CCB-PORTABLE-BACKEND-RUNTIME-21
+worktree: /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend
+branch: feat/mountain-assets-settings-backend
+reviewed implementation: a16e622 test(mountain): prove runtime pid cleanup and redaction
+reviewed report: f1ab52f docs(mountain): report proven runtime cleanup and redaction
+result: rejected; success/checker-failure PID proof works, required health/startup failure test is explicitly skipped
+```
+
+审核者复现结果：`11 passed, 1 skipped in 13.24s`。skip 原文为 `health timeout requires complex subprocess mocking; covered by checker failure test`，但 checker failure 发生在 health 成功之后，不能覆盖 launcher/health 失败。报告却将“仓库外 cwd”列为第三条 smoke 路径，错误声称三条均完成。
+
+同时确认：
+
+1. `test_startup_failure_log_redaction` 在测试里复制三条正则自行脱敏，没有执行生产 `smoke.redact_text()` 或生产失败输出。
+2. `test_launcher_no_raw_exception_output` 又退化为读取源码字符串，且断言表达式不能可靠定位异常输出。
+3. smoke 的 checker/health 异常路径在 finally 中未先关闭 `log_fd` 就 `rmtree(tmp_dir)`；Linux 可能通过，Windows 会因打开文件句柄无法删除。
+4. 测试重新引入多个无人消费的 `stdout=subprocess.PIPE` 和 `ignore_errors=True`，与可移植、无泄漏目标冲突。
+
+### 4Q.2 唯一任务
+
+这是启动入口纠偏的最后一个收口切片；只修复 health/startup 失败与跨平台句柄清理，不增加业务能力。
+
+1. 给 smoke 增加最窄 `--launcher-path` 覆盖参数，默认仍为仓库正式 `scripts/run_mountain_backend.py`。仅用于以真实子进程替换 launcher；路径不存在时明确非零退出。
+2. `wait_for_health` 在轮询期间同时观察 launcher `proc.poll()`；launcher 已退出时立即判定 startup failure，不等待完整 30 秒。
+3. 测试创建一个临时 launcher：向 stdout/stderr 写入 `Authorization: Bearer <canary>` 和 `?api_key=<canary>` 后非零退出。通过 smoke 的 `--launcher-path` 和外部 `--pid-marker` 真实执行。
+4. 上述测试必须断言：smoke 非零、marker 是确定非空 PID、PID 已死亡、输出含 `[REDACTED]` 且不含原 canary、smoke 临时目录已删除。
+5. 删除 health skip，不得用 checker failure 替代；删除复制正则的测试和源码字符串异常测试。所有脱敏断言必须观察生产 smoke 的真实 stdout/stderr。
+6. `log_fd` 在 finally 中无论成功、checker 失败、launcher 失败或异常都先 flush/close，再删除目录。关闭和删除失败均使 smoke 非零；不得吞异常。
+7. 所有测试 Popen 使用临时日志文件或 `communicate()` 的短命进程；长期后端不得挂无人消费 PIPE。每个临时目录用正常 `rmtree` 并断言消失，不得 `ignore_errors=True`。
+8. 外部 PID marker 写入采用 temp file + `os.replace` 原子替换；父目录不存在时给出明确错误并在 finally 停止已启动进程。
+9. 报告如实列出 success、checker failure、launcher/startup failure 三条 smoke，不得用仓库外 cwd 替代第三条；专项测试必须 0 skipped。
+
+### 4Q.3 固定门禁
+
+```bash
+env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q -rs tests/test_backend_runtime_17.py
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/smoke_real_backend_contract.py --checker-path /mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs
+! rg -n "pytest\.skip|ignore_errors=True|stdout=subprocess\.PIPE|stderr=subprocess\.PIPE|read_text\(.*LAUNCH_SCRIPT|_BEARER =|_QUERY_SECRET =" tests/test_backend_runtime_17.py
+git diff --check
+git status --short
+```
+
+实现提交：
+
+```text
+fix(mountain): prove startup failure cleanup
+```
+
+报告路径：
+
+```text
+/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend/docs/Mountain/m07-ccb-portable-runtime-21-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report startup failure cleanup
+```
+
+先本地提交，不推送。执行者不得自行宣布审核通过。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
