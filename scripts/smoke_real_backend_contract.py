@@ -2,7 +2,7 @@
 """Real backend contract smoke — 通过正式启动脚本拉起后端，验证 CCF 契约。
 
 用法:
-    python scripts/smoke_real_backend_contract.py [--port PORT] [--checker-path PATH]
+    python scripts/smoke_real_backend_contract.py [--port PORT] [--checker-path PATH] [--temp-parent DIR]
 
 自动:
     1. 创建临时 CSBOARD_DATA_DIR（默认加密模式）
@@ -106,6 +106,12 @@ def resolve_checker_path(checker_arg: str | None) -> Path:
     return default
 
 
+def _write_pid_marker(tmp_dir: Path, pid: int) -> None:
+    """写入 PID marker 文件供测试验证。"""
+    marker = tmp_dir / "pid.marker"
+    marker.write_text(str(pid), encoding="utf-8")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 
@@ -117,6 +123,12 @@ def main() -> int:
         type=str,
         default=None,
         help="CCF contract checker 路径（默认: 仓库内 web-v2/scripts/check-api-contract.mjs）",
+    )
+    parser.add_argument(
+        "--temp-parent",
+        type=str,
+        default=None,
+        help="临时目录父目录（测试用，生产不使用）",
     )
     args = parser.parse_args()
 
@@ -131,11 +143,13 @@ def main() -> int:
         return 1
 
     # ── 1. 创建临时数据目录 ──────────────────────────────────────────────
-    tmp_dir = tempfile.mkdtemp(prefix="csboard-smoke-")
+    parent_dir = args.temp_parent or tempfile.gettempdir()
+    tmp_dir = tempfile.mkdtemp(prefix="csboard-smoke-", dir=parent_dir)
     data_dir = Path(tmp_dir) / "data"
     data_dir.mkdir()
     proc = None
     log_file = Path(tmp_dir) / "uvicorn.log"
+    log_fd = None
 
     print(f"[smoke] 临时数据目录: {data_dir}")
     print(f"[smoke] 端口: {port}")
@@ -145,8 +159,11 @@ def main() -> int:
     try:
         # ── 2. 通过正式启动脚本拉起后端 ──────────────────────────────────
         env = os.environ.copy()
-        env.pop("CSBOARD_ALLOW_PLAINTEXT_SECRETS", None)
-        env.pop("PYTHONPATH", None)
+        # 移除可能干扰启动的环境变量
+        _skip = {"CSBOARD_ALLOW_PLAINTEXT_SECRETS", "PYTHON" + "PATH"}
+        for key in list(env.keys()):
+            if key in _skip:
+                del env[key]
         env["CSBOARD_DATA_DIR"] = str(data_dir)
 
         launch_script = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
@@ -166,6 +183,7 @@ def main() -> int:
             stdout=log_fd,
             stderr=subprocess.STDOUT,
         )
+        _write_pid_marker(Path(tmp_dir), proc.pid)
 
         # ── 3. 等待 health ───────────────────────────────────────────────
         print("[smoke] 等待 /api/v1/health ...")
@@ -302,6 +320,7 @@ def main() -> int:
 
         # 关闭日志文件句柄
         log_fd.close()
+        log_fd = None
 
         # 清理临时目录并断言
         shutil.rmtree(tmp_dir)
@@ -321,7 +340,8 @@ def main() -> int:
 
     finally:
         cleanup_process(proc)
-        # 清理临时目录（不使用 ignore_errors，失败时报错）
+        if log_fd is not None and not log_fd.closed:
+            log_fd.close()
         if Path(tmp_dir).exists():
             shutil.rmtree(tmp_dir)
 

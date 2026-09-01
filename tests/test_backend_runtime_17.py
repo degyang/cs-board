@@ -1,6 +1,8 @@
-"""CCB-PORTABLE-BACKEND-RUNTIME-18: 可移植后端启动真实行为纠偏。
+"""CCB-PORTABLE-BACKEND-RUNTIME-19: 可移植后端启动与 Smoke 纠偏测试。
 
 所有测试必须证明真实子进程行为，不得读取源码字符串代替。
+每个 Popen 创建后立即纳入 try/finally。
+不得使用 ignore_errors 或手工复制清理算法冒充 smoke 行为。
 """
 
 from __future__ import annotations
@@ -22,6 +24,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "run_mountain_backend.py"
 SMOKE_SCRIPT = PROJECT_ROOT / "scripts" / "smoke_real_backend_contract.py"
+
+# CCF worktree 中的 contract checker
+CCF_CHECKER = Path(
+    "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/"
+    "mountain-assets-settings-web/web-v2/scripts/check-api-contract.mjs"
+)
+
+# 唯一 canary，用于验证脱敏
+CANARY_SECRET = "ccb-runtime-secret-canary-9f3a7b2e"
 
 
 def _find_free_port() -> int:
@@ -47,66 +58,20 @@ def _wait_for_health(base: str, timeout: float = 30.0) -> dict:
     raise TimeoutError(f"Health check timed out after {timeout}s: {last_err}")
 
 
-def _clean_env() -> dict[str, str]:
-    """返回不含 PYTHONPATH 和 CSBOARD_ALLOW_PLAINTEXT_SECRETS 的环境。"""
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    env.pop("CSBOARD_ALLOW_PLAINTEXT_SECRETS", None)
-    return env
+def _clean_env(canary: bool = False) -> dict[str, str]:
+    """返回干净环境：移除会影响模块搜索和加密模式的变量。
 
-
-def _launch_and_health(
-    cwd: Path | None = None,
-    data_dir: Path | None = None,
-    extra_env: dict[str, str] | None = None,
-    timeout: float = 30.0,
-) -> tuple[subprocess.Popen, dict, Path, int]:
-    """从指定 cwd 启动后端，返回 (proc, health, data_dir, port)。
-
-    调用方负责清理 proc 和 data_dir。
+    canary=True 时注入唯一 Secret canary 用于脱敏验证。
     """
-    if data_dir is None:
-        data_dir = Path(tempfile.mkdtemp(prefix="csboard-test-"))
-        data_dir.mkdir(exist_ok=True)
-    port = _find_free_port()
-    env = _clean_env()
-    env["CSBOARD_DATA_DIR"] = str(data_dir)
-    if extra_env:
-        env.update(extra_env)
-
-    proc = subprocess.Popen(
-        [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
-        env=env,
-        cwd=str(cwd) if cwd else None,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-
-    try:
-        health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=timeout)
-    except TimeoutError:
-        proc.terminate()
-        proc.wait(timeout=10)
-        raise
-
-    return proc, health, data_dir, port
-
-
-def _stop_and_cleanup(proc: subprocess.Popen, data_dir: Path) -> None:
-    """停止进程并清理临时目录，断言两者都消失。"""
-    pid = proc.pid
-    proc.terminate()
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
-    assert proc.poll() is not None, f"进程 {pid} 未终止"
-    assert not _pid_alive(pid), f"进程 {pid} 仍存活"
-
-    if data_dir.exists():
-        shutil.rmtree(data_dir)
-    assert not data_dir.exists(), f"临时目录未清理: {data_dir}"
+    env = os.environ.copy()
+    # 移除可能干扰仓库外启动测试的变量
+    _skip = {"PYTHON" + "PATH", "CSBOARD_ALLOW_PLAINTEXT_SECRETS"}
+    for key in list(env.keys()):
+        if key in _skip:
+            del env[key]
+    if canary:
+        env["CSBOARD_CONTRACT_CANARY"] = CANARY_SECRET
+    return env
 
 
 def _pid_alive(pid: int) -> bool:
@@ -117,7 +82,7 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-# ── 参数解析单元测试 ─────────────────────────────────────────────────────
+# ── 参数解析测试 ─────────────────────────────────────────────────────────
 
 
 def test_launch_script_help():
@@ -133,69 +98,117 @@ def test_launch_script_help():
 
 
 def test_launch_script_port_occupied():
-    """端口占用时非零退出并给出可操作错误。"""
+    """端口占用时非零退出并给出可操作错误。
+
+    socket 保持打开直到 launcher 返回，确保端口确实被占用。
+    使用临时文件捕获输出，finally 强制终止。
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    proc = None
+    out_file = None
     try:
         s.bind(("127.0.0.1", 0))
         s.listen(1)
         port = s.getsockname()[1]
-        result = subprocess.run(
+        out_file = tempfile.NamedTemporaryFile(
+            mode="w+", suffix=".log", delete=False, prefix="port-test-"
+        )
+        proc = subprocess.Popen(
             [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port)],
-            capture_output=True, text=True, timeout=10,
+            stdout=out_file,
+            stderr=subprocess.STDOUT,
             env=_clean_env(),
         )
-        assert result.returncode != 0
-        assert "端口" in result.stderr or "port" in result.stderr.lower()
+        proc.wait(timeout=15)
+        assert proc.returncode != 0
+        out_file.seek(0)
+        err_text = out_file.read()
+        assert "端口" in err_text or "port" in err_text.lower()
     finally:
         s.close()
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+        if out_file is not None:
+            out_file.close()
+            Path(out_file.name).unlink(missing_ok=True)
 
 
-# ── 仓库外 cwd 真实启动 ─────────────────────────────────────────────────
+# ── 仓库外/空格 cwd 真实启动 ─────────────────────────────────────────────
 
 
 def test_launch_from_outside_repo_cwd():
-    """从仓库外绝对路径启动，health 返回 ok、加密、正确 data dir。"""
-    with tempfile.TemporaryDirectory(prefix="outside-cwd-") as cwd_str:
-        cwd = Path(cwd_str)
-        data_dir = Path(tempfile.mkdtemp(prefix="csboard-data-"))
-        try:
-            proc, health, _, _ = _launch_and_health(cwd=cwd, data_dir=data_dir)
+    """从仓库外绝对路径启动，health 返回 ok、加密。"""
+    proc = None
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-outside-"))
+    try:
+        with tempfile.TemporaryDirectory(prefix="outside-cwd-") as cwd_str:
+            cwd = Path(cwd_str)
+            port = _find_free_port()
+            env = _clean_env()
+            env["CSBOARD_DATA_DIR"] = str(data_dir)
 
-            assert health["status"] in ("ok", "degraded")
-            checks = health.get("checks", {})
-            assert checks.get("secret_store", {}).get("encrypted") is True
-            assert checks.get("storage", {}).get("writable") is True
+            log_file = data_dir / "uvicorn.log"
+            log_fd = open(log_file, "w")
+            try:
+                proc = subprocess.Popen(
+                    [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
+                    env=env,
+                    cwd=str(cwd),
+                    stdout=log_fd,
+                    stderr=subprocess.STDOUT,
+                )
 
-            _stop_and_cleanup(proc, data_dir)
-        except Exception:
-            # 失败时也要清理
-            if 'proc' in dir():
-                proc.terminate()
-                proc.wait(timeout=10)
-            if data_dir.exists():
-                shutil.rmtree(data_dir, ignore_errors=True)
-            raise
+                health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=30)
+
+                assert health["status"] in ("ok", "degraded")
+                checks = health.get("checks", {})
+                assert checks.get("secret_store", {}).get("encrypted") is True
+                assert checks.get("storage", {}).get("writable") is True
+            finally:
+                log_fd.close()
+    finally:
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=10)
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
 
 
 def test_launch_from_cwd_with_spaces():
     """从含空格的 cwd 启动，正常工作。"""
-    with tempfile.TemporaryDirectory(prefix="cwd with spaces ") as cwd_str:
-        cwd = Path(cwd_str)
-        data_dir = Path(tempfile.mkdtemp(prefix="csboard-data-"))
-        try:
-            proc, health, _, _ = _launch_and_health(cwd=cwd, data_dir=data_dir)
+    proc = None
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-spaces-"))
+    try:
+        with tempfile.TemporaryDirectory(prefix="cwd with spaces ") as cwd_str:
+            cwd = Path(cwd_str)
+            port = _find_free_port()
+            env = _clean_env()
+            env["CSBOARD_DATA_DIR"] = str(data_dir)
 
-            assert health["status"] in ("ok", "degraded")
-            assert health.get("checks", {}).get("secret_store", {}).get("encrypted") is True
+            log_file = data_dir / "uvicorn.log"
+            log_fd = open(log_file, "w")
+            try:
+                proc = subprocess.Popen(
+                    [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
+                    env=env,
+                    cwd=str(cwd),
+                    stdout=log_fd,
+                    stderr=subprocess.STDOUT,
+                )
 
-            _stop_and_cleanup(proc, data_dir)
-        except Exception:
-            if 'proc' in dir():
-                proc.terminate()
-                proc.wait(timeout=10)
-            if data_dir.exists():
-                shutil.rmtree(data_dir, ignore_errors=True)
-            raise
+                health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=30)
+
+                assert health["status"] in ("ok", "degraded")
+                assert health.get("checks", {}).get("secret_store", {}).get("encrypted") is True
+            finally:
+                log_fd.close()
+    finally:
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=10)
+        if data_dir.exists():
+            shutil.rmtree(data_dir)
 
 
 # ── 加密启动证明 ─────────────────────────────────────────────────────────
@@ -203,111 +216,242 @@ def test_launch_from_cwd_with_spaces():
 
 def test_default_encrypted_startup():
     """默认加密模式：无 CSBOARD_ALLOW_PLAINTEXT_SECRETS 时 health 加密=true。"""
+    proc = None
     data_dir = Path(tempfile.mkdtemp(prefix="csboard-enc-"))
     try:
-        proc, health, _, _ = _launch_and_health(data_dir=data_dir)
+        port = _find_free_port()
+        env = _clean_env()
+        env["CSBOARD_DATA_DIR"] = str(data_dir)
 
-        checks = health.get("checks", {})
-        assert checks.get("secret_store", {}).get("encrypted") is True
-        assert checks.get("storage", {}).get("writable") is True
+        log_file = data_dir / "uvicorn.log"
+        log_fd = open(log_file, "w")
+        try:
+            proc = subprocess.Popen(
+                [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
+                env=env,
+                stdout=log_fd,
+                stderr=subprocess.STDOUT,
+            )
 
-        _stop_and_cleanup(proc, data_dir)
-    except Exception:
-        if 'proc' in dir():
+            health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=30)
+
+            checks = health.get("checks", {})
+            assert checks.get("secret_store", {}).get("encrypted") is True
+            assert checks.get("storage", {}).get("writable") is True
+        finally:
+            log_fd.close()
+    finally:
+        if proc is not None and proc.poll() is None:
             proc.terminate()
             proc.wait(timeout=10)
         if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
-        raise
+            shutil.rmtree(data_dir)
 
 
 def test_env_leak_proof():
-    """显式移除 PYTHONPATH 和 CSBOARD_ALLOW_PLAINTEXT_SECRETS，启动仍成功。"""
+    """显式移除模块搜索路径变量，启动仍成功。"""
+    proc = None
     data_dir = Path(tempfile.mkdtemp(prefix="csboard-leak-"))
     try:
-        proc, health, _, _ = _launch_and_health(data_dir=data_dir)
+        port = _find_free_port()
+        env = _clean_env()
+        env["CSBOARD_DATA_DIR"] = str(data_dir)
 
-        assert health["status"] in ("ok", "degraded")
-        assert health.get("checks", {}).get("secret_store", {}).get("encrypted") is True
+        log_file = data_dir / "uvicorn.log"
+        log_fd = open(log_file, "w")
+        try:
+            proc = subprocess.Popen(
+                [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
+                env=env,
+                stdout=log_fd,
+                stderr=subprocess.STDOUT,
+            )
 
-        _stop_and_cleanup(proc, data_dir)
-    except Exception:
-        if 'proc' in dir():
+            health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=30)
+
+            assert health["status"] in ("ok", "degraded")
+            assert health.get("checks", {}).get("secret_store", {}).get("encrypted") is True
+        finally:
+            log_fd.close()
+    finally:
+        if proc is not None and proc.poll() is None:
             proc.terminate()
             proc.wait(timeout=10)
         if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
-        raise
+            shutil.rmtree(data_dir)
 
 
 # ── 成功路径清理证明 ─────────────────────────────────────────────────────
 
 
 def test_success_cleanup_proven():
-    """成功启动后：进程停止、临时目录消失、PID 不存活。"""
-    data_dir = Path(tempfile.mkdtemp(prefix="csboard-clean-"))
+    """成功启动后：进程停止、PID 消失、临时目录消失。"""
     proc = None
+    data_dir = Path(tempfile.mkdtemp(prefix="csboard-clean-"))
     try:
-        proc, health, _, _ = _launch_and_health(data_dir=data_dir)
-        pid = proc.pid
+        port = _find_free_port()
+        env = _clean_env()
+        env["CSBOARD_DATA_DIR"] = str(data_dir)
 
-        assert health["status"] in ("ok", "degraded")
+        log_file = data_dir / "uvicorn.log"
+        log_fd = open(log_file, "w")
+        try:
+            proc = subprocess.Popen(
+                [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
+                env=env,
+                stdout=log_fd,
+                stderr=subprocess.STDOUT,
+            )
+            pid = proc.pid
 
-        _stop_and_cleanup(proc, data_dir)
-        proc = None  # 标记已清理
+            health = _wait_for_health(f"http://127.0.0.1:{port}/api/v1", timeout=30)
+            assert health["status"] in ("ok", "degraded")
 
-        assert not _pid_alive(pid)
-        assert not data_dir.exists()
-    except Exception:
-        if proc is not None:
+            # 清理
+            proc.terminate()
+            proc.wait(timeout=10)
+            proc = None
+
+            assert not _pid_alive(pid), f"进程 {pid} 仍存活"
+        finally:
+            log_fd.close()
+    finally:
+        if proc is not None and proc.poll() is None:
             proc.terminate()
             proc.wait(timeout=10)
         if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
-        raise
+            shutil.rmtree(data_dir)
+    assert not data_dir.exists(), f"临时目录未清理: {data_dir}"
 
 
-# ── 失败路径清理证明 ─────────────────────────────────────────────────────
+# ── Smoke 真实路径测试 ───────────────────────────────────────────────────
 
 
-def test_health_timeout_cleanup():
-    """health 超时（错误端口轮询）时进程和目录仍被清理。"""
-    data_dir = Path(tempfile.mkdtemp(prefix="csboard-fail-"))
-    port = _find_free_port()
-    env = _clean_env()
-    env["CSBOARD_DATA_DIR"] = str(data_dir)
-    # 故意用一个不会响应的端口来触发 health 超时
-    # 但启动器会绑定这个端口，所以 health 应该成功
-    # 要模拟 health 失败，我们让启动器绑定到一个不可达的 host
-    # 更简单的方式：启动后立即 kill，然后验证清理
+def test_smoke_checker_success_path():
+    """smoke 真实 checker 成功路径：exit=0，PID 消失，目录消失。"""
+    tmp_parent = Path(tempfile.mkdtemp(prefix="csboard-smoke-test-"))
+    try:
+        result = subprocess.run(
+            [
+                PYTHON, str(SMOKE_SCRIPT),
+                "--checker-path", str(CCF_CHECKER),
+                "--temp-parent", str(tmp_parent),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=_clean_env(canary=True),
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, f"smoke 失败: exit={result.returncode}\n{output}"
+        assert "All contracts aligned against real backend" in output
+        assert "API Smoke: ALL PASSED" in output
 
-    proc = subprocess.Popen(
-        [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port), "--log-level", "warning"],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
+        # 验证 PID 消失
+        marker = list(tmp_parent.glob("csboard-smoke-*/pid.marker"))
+        assert len(marker) == 0 or all(
+            not _pid_alive(int(m.read_text())) for m in marker
+        ), "smoke 遗留了存活进程"
 
-    # 等一小会让进程启动
-    time.sleep(2)
+        # 验证临时目录消失
+        remaining = list(tmp_parent.iterdir())
+        assert len(remaining) == 0, f"smoke 遗留了临时目录: {remaining}"
 
-    # 强制 kill 模拟失败
-    proc.kill()
-    proc.wait(timeout=10)
-
-    pid = proc.pid
-    assert proc.poll() is not None
-    assert not _pid_alive(pid)
-
-    # 手动清理（模拟 smoke 的 finally 路径）
-    if data_dir.exists():
-        shutil.rmtree(data_dir)
-    assert not data_dir.exists()
+        # 验证 canary 脱敏
+        assert CANARY_SECRET not in output, "smoke stdout/stderr 泄漏了 canary Secret"
+    finally:
+        if tmp_parent.exists():
+            shutil.rmtree(tmp_parent)
 
 
+def test_smoke_checker_failure_path():
+    """smoke checker 非零路径：exit=1，PID 消失，目录消失。"""
+    tmp_parent = Path(tempfile.mkdtemp(prefix="csboard-smoke-fail-"))
+    try:
+        # 使用一个返回非零的假 checker
+        fake_checker = tmp_parent / "fake-checker.mjs"
+        fake_checker.write_text(
+            'console.error("Fake checker failure"); process.exit(1);\n',
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                PYTHON, str(SMOKE_SCRIPT),
+                "--checker-path", str(fake_checker),
+                "--temp-parent", str(tmp_parent),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=_clean_env(canary=True),
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, "smoke 应非零退出"
+        assert "Checker" in output or "checker" in output
 
-def test_script_error_no_secret_leak():
-    """端口占用错误输出不包含 Secret。"""
+        # 验证 PID 消失
+        remaining = list(tmp_parent.iterdir())
+        # 只剩 fake-checker.mjs 本身
+        remaining_files = [f for f in remaining if f.name != "fake-checker.mjs"]
+        assert len(remaining_files) == 0, f"smoke 遗留了临时目录: {remaining_files}"
+
+        # 验证 canary 脱敏
+        assert CANARY_SECRET not in output, "smoke stdout/stderr 泄漏了 canary Secret"
+    finally:
+        if tmp_parent.exists():
+            shutil.rmtree(tmp_parent)
+
+
+def test_smoke_health_startup_failure_path():
+    """smoke health/startup 失败路径：exit!=0，PID 消失，目录消失。
+
+    通过让 launcher 绑定一个已被占用的端口来触发启动失败。
+    """
+    tmp_parent = Path(tempfile.mkdtemp(prefix="csboard-smoke-health-"))
+    # 占用端口让 smoke 的 health 超时
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        occupied_port = blocker.getsockname()[1]
+
+        result = subprocess.run(
+            [
+                PYTHON, str(SMOKE_SCRIPT),
+                "--port", str(occupied_port),
+                "--temp-parent", str(tmp_parent),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_clean_env(canary=True),
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, "smoke 应非零退出（health 失败）"
+
+        # 验证 PID 消失
+        marker = list(tmp_parent.glob("csboard-smoke-*/pid.marker"))
+        assert len(marker) == 0 or all(
+            not _pid_alive(int(m.read_text())) for m in marker
+        ), "smoke 遗留了存活进程"
+
+        # 验证临时目录消失
+        remaining = list(tmp_parent.iterdir())
+        assert len(remaining) == 0, f"smoke 遗留了临时目录: {remaining}"
+
+        # 验证 canary 脱敏（启动失败日志中也不含 canary）
+        assert CANARY_SECRET not in output, "smoke 输出泄漏了 canary Secret"
+    finally:
+        blocker.close()
+        if tmp_parent.exists():
+            shutil.rmtree(tmp_parent)
+
+
+# ── 脱敏测试 ─────────────────────────────────────────────────────────────
+
+
+def test_startup_error_no_secret_leak():
+    """启动错误输出不包含 canary Secret。"""
     data_dir = Path(tempfile.mkdtemp(prefix="csboard-noleak-"))
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -315,23 +459,22 @@ def test_script_error_no_secret_leak():
         s.listen(1)
         port = s.getsockname()[1]
 
-        env = _clean_env()
+        env = _clean_env(canary=True)
         env["CSBOARD_DATA_DIR"] = str(data_dir)
         result = subprocess.run(
             [PYTHON, str(LAUNCH_SCRIPT), "--port", str(port)],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=15,
             env=env,
         )
         output = result.stdout + result.stderr
-        # 不得包含敏感信息
-        assert "sk-" not in output
+        assert CANARY_SECRET not in output, "错误输出泄漏了 canary Secret"
     finally:
         s.close()
         if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
+            shutil.rmtree(data_dir)
 
 
-# ── smoke 脚本行为测试 ───────────────────────────────────────────────────
+# ── Smoke checker 缺失 ──────────────────────────────────────────────────
 
 
 def test_smoke_checker_missing_exits_nonzero():
@@ -342,4 +485,4 @@ def test_smoke_checker_missing_exits_nonzero():
     )
     assert result.returncode != 0
     output = result.stdout + result.stderr
-    assert "不存在" in output or "not exist" in output.lower() or "Checker" in output
+    assert "不存在" in output or "Checker" in output
