@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
-from csboard.application.service_resolver import STAGE_CAPABILITY_MAP
-from csboard.domain.execution_plan import CANONICAL_STAGES
 
 
 # The illustration work order deliberately has no executable native command.
@@ -14,6 +12,18 @@ from csboard.domain.execution_plan import CANONICAL_STAGES
 # executable until its external candidate gate exists.
 _EXTERNAL_STAGE = "generate-illustrations"
 _EXTERNAL_GATE_CODE = "EXTERNAL_STAGE_GATE_REQUIRED"
+
+# This is intentionally not inferred from the one-capability stage resolver
+# map: clone-voice builds three adapters in its executor. Keeping the full
+# requirements here makes the read-only UI projection match execution.
+WHITEBOARD_STAGE_REQUIREMENTS = {
+    "generate-visual-anchors": ("text_generation",),
+    "clone-voice": ("speech_synthesis", "speech_alignment", "media"),
+    "plan-storyboard": ("text_generation",),
+    "generate-illustrations": ("image_generation",),
+    "render-visuals": ("rendering",),
+    "compose-video": ("media",),
+}
 
 
 class CapabilityService:
@@ -25,21 +35,20 @@ class CapabilityService:
     def snapshot(self) -> dict[str, Any]:
         providers: dict[str, dict[str, Any]] = {}
         unavailable: list[str] = []
-        capability_status: dict[str, bool] = {}
+        services_by_capability: dict[str, list[str]] = {}
 
         for service in self._registry.list_services():
             status = self._service_status(service)
             providers[service.service_id] = status
+            services_by_capability.setdefault(service.capability, []).append(service.service_id)
             if not status["available"]:
                 unavailable.append(service.service_id)
 
-        for stage in CANONICAL_STAGES:
-            capability = STAGE_CAPABILITY_MAP[stage]
-            capability_status[capability] = self._capability_available(stage, providers)
-
-        all_available = all(
-            capability_status[STAGE_CAPABILITY_MAP[stage]]
-            for stage in CANONICAL_STAGES
+        missing = self._missing_requirements(providers, services_by_capability)
+        all_available = not missing
+        reason_code = None if all_available else (
+            _EXTERNAL_GATE_CODE if set(missing) == {"image_generation"}
+            else "CAPABILITY_NOT_AVAILABLE"
         )
         return {
             "items": [
@@ -48,7 +57,7 @@ class CapabilityService:
                     "visual_source": "preset",
                     "supported": all_available,
                     "pipeline_id": "mountain-av-v1",
-                    "reason_code": None if all_available else "CAPABILITY_NOT_AVAILABLE",
+                    "reason_code": reason_code,
                 },
                 {
                     "engine": "whiteboard",
@@ -72,22 +81,27 @@ class CapabilityService:
             },
         }
 
-    def _capability_available(self, stage: str, providers: dict[str, dict[str, Any]]) -> bool:
-        if stage == _EXTERNAL_STAGE:
-            return False
-        capability = STAGE_CAPABILITY_MAP[stage]
-        return any(
-            status["available"]
-            for service, status in providers.items()
-            if self._registry.get_service(service).capability == capability
-        )
+    @staticmethod
+    def _missing_requirements(
+        providers: dict[str, dict[str, Any]],
+        services_by_capability: dict[str, list[str]],
+    ) -> set[str]:
+        missing = set()
+        for stage, capabilities in WHITEBOARD_STAGE_REQUIREMENTS.items():
+            for capability in capabilities:
+                if stage == _EXTERNAL_STAGE:
+                    missing.add(capability)
+                elif not any(providers[service_id]["available"]
+                             for service_id in services_by_capability.get(capability, [])):
+                    missing.add(capability)
+        return missing
 
     def _service_status(self, service: Any) -> dict[str, Any]:
         if not service.enabled:
             return self._status(service.service_id, False, "SERVICE_DISABLED")
         if not self._registry.has_required_secrets(service):
             return self._status(service.service_id, False, "SECRET_NOT_CONFIGURED")
-        if service.capability == STAGE_CAPABILITY_MAP[_EXTERNAL_STAGE]:
+        if service.capability == "image_generation":
             return self._status(service.service_id, False, _EXTERNAL_GATE_CODE)
 
         probe = self._registry.get_cached_probe(service.service_id)
