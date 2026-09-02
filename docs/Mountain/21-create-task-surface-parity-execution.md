@@ -128,7 +128,7 @@ git status --short
 
 ## CCF 实际交付报告
 
-- 实现 commit：`ec160bb`（`web-v2/src/pages/CreateTaskPage.tsx`、`web-v2/src/styles/app.css`）。新增六 Tab（任务介绍、视频文案、声音生成、输出类型、视觉设置、成片设置），真实 styles/voices loading/empty/error/success 状态，`style` 名称提交，reference multipart 校验，字数与 10 字校验，双提交保护、创建后同 task 重试及安全错误渲染；未调用 start、未提交未冻结字段。
+- 实现 commits：`ec160bb`、`c721646`（`web-v2/src/pages/CreateTaskPage.tsx`、`web-v2/src/styles/app.css`）。新增六 Tab（任务介绍、视频文案、声音生成、输出类型、视觉设置、成片设置），真实 styles/voices loading/empty/error/success 状态，`style` 名称提交，reference multipart 校验，字数与 10 字校验，双提交保护、创建后同 task 重试及安全错误渲染；底部 action bar sticky；未调用 start、未提交未冻结字段。
 - 证据脚本 commit：`9e79aa2`（扩展 `web-v2/scripts/capture-parity-evidence.mjs`，加入六张 create surface/validation 路径；脚本不创建 Task）。因真实后端不可达，本轮未生成或伪造截图，故无 SHA-256 可报告。
 - 门禁摘要：`npm --prefix web-v2 run build` 通过（TypeScript + Vite）；`git diff --check` 通过；`! rg -n 'Project|project_id|/projects' web-v2/src` 通过。`MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs` 在 10 秒内无响应并超时。既有 `tests/create-task.test.tsx` 仍针对旧单页表面/可选 reference 假设，运行结果为 16 failed、1 passed，需按本执行单补写六 Tab 测试后复验。
 - 截止报告时工作树状态：见同提交后的 `git status --short`；未推送。
