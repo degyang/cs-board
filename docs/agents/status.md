@@ -79,6 +79,9 @@
 - 先前 CORE Reviewer 启动失败但留下短期 working runtime，造成待审核任务存在而面板随后显示 idle。CEO 已
   注册真实 `/root/core_runtime_reviewer_live` 并启动 CORE 独立审核；Reviewer WIP=1，MEDIA 与刚交付
   `PROTOTYPE-GOLDEN-005@069ace1` 明确排队，不再用运行态冒充并行审核。
+- PROTOTYPE Reviewer 的首次恢复同样只写入 runtime、没有创建真实会话；该伪 working 已被替换为已确认
+  存活的 `/root/prototype_golden_reviewer_live`。当前优先审核关键路径 golden，随后才处理 CORE attempt 3
+  与 MEDIA；后续只有会话启动成功后才能写 Reviewer working。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - `MEDIA-PREFLIGHT-004` 的 idle runtime 对应已完成而非遗失执行：实现 `d9f3a41` 与报告交付 `8532302`
