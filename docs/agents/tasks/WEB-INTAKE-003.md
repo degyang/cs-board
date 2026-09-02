@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: REVIEW_READY
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -115,3 +115,25 @@ Codex CLI 会话。本任务关闭前不得领取或实现 `WEB-WO-003`。
 - State: `REVIEW_READY`
 
 Worker 已提交并推送真实浏览器报告、三张截图与 manifest；等待独立 Reviewer，不代表 CEO 批准。
+
+## Attempt 2 bounded correction
+
+- Review: `docs/agents/reviews/WEB-INTAKE-003.md`
+- Verdict: `CHANGES_REQUESTED`
+- Correction base: `672f820`
+
+只执行独立评审列出的有界纠正：
+
+1. 将交付报告中的 `/tmp`、`/home`、`/mnt` 绝对路径替换为脱敏占位符，并补齐
+   `VITE_API_BASE_URL=/api/v1` 同源代理及 API/Vite 生命周期命令形状；
+2. 为 API contract checker 的真实请求加入内部 deadline/abort，让无响应后端由 checker 自身形成
+   violation 并 exit 1；增加受控无响应服务测试，证明非零退出与子进程清理；
+3. 保留现有真实后端成功路径和已通过的 intake 截图、manifest，不重新生成浏览器证据。
+
+Allowed correction surfaces 仅限 `web-v2/scripts/check-api-contract.mjs`、必要的
+`web-v2/scripts/contract-checker-core.mjs`、聚焦 checker 的既有测试，以及
+`docs/agents/reports/WEB-INTAKE-003.md`。禁止修改产品页面、API/DTO、截图、manifest、
+`WEB-PARITY-004` 或 `WEB-WO-003`。
+
+完成后运行 review 中列出的全部 attempt 2 命令，提交并推送，将本任务置为 `REVIEW_READY` 并通知 PM；
+不得自行批准或领取下一项 WEB 工作。
