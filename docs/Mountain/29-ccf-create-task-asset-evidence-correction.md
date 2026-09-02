@@ -88,3 +88,13 @@ fix(web): wait for create task asset evidence states
 ```
 
 完成后申请 PM 复审，不自行宣布通过，不进入任务工作台功能。
+
+## CCF 实际交付报告（待 PM 复审）
+
+- 变更文件：`web-v2/scripts/capture-parity-evidence.mjs`、新增 `web-v2/scripts/capture-parity-evidence-helpers.mjs` 与 `web-v2/tests/capture-evidence-assets.test.ts`；另修复经真实 StrictMode 浏览器行为证明的 `CreateTaskPage` mounted ref 重置问题，使真实资产空态可达。
+- 资产保护测试：9 项通过，覆盖 loading 未结束不可截图、success/empty/error 终态、超时非零和无终态失败。
+- 门禁：`npm --prefix web-v2 run build` 通过；全量测试 `16 files / 347 tests passed`，无 React/act/unhandled warning。
+- 真实证据：后端隔离临时目录监听 8000，前端 `VITE_API_BASE_URL=/api/v1`、严格监听 5275，curl 使用 `--noproxy '*'`；contract checker 原始结论 `All contracts aligned against real backend ✓`；截图脚本原始结论 `Captured 21 real-backend screenshots; console errors/warnings: 0; failed API requests: 0`。
+- 六张新图均为 1440×900、非空，人工检查无 404/loading/error/空白；`create-voice.png` 为真实“暂无可用音色”终态，`create-visual.png` 为真实风格卡片终态。最新 SHA-256 已写入 evidence README。
+- cleanup：本轮后端、前端进程已终止，临时数据目录和日志已精确清理；未创建 Task、未填写用户真实文案、未上传音频。工作树 clean。
+- 本报告不宣布审核通过，申请 PM 复审。

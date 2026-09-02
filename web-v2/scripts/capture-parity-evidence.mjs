@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { chromium } from '@playwright/test'
+import { waitForAssetTerminal } from './capture-parity-evidence-helpers.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const evidence = path.join(root, 'docs/Mountain/webui-parity-evidence')
@@ -105,6 +106,8 @@ for (const [route, file, tab, scrollTo] of shots) {
     }
     await page.locator('.loading, .spinner').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {})
   }
+  if (file === 'tasks/create-voice.png') await waitForAssetTerminal(page, 'voice')
+  if (file === 'tasks/create-visual.png') await waitForAssetTerminal(page, 'visual')
   if (route === '/tasks/new' && file === 'tasks/create-validation.png') {
     await page.getByRole('button', { name: '创建并保存' }).click()
     if (!await page.locator('[role="alert"]').first().isVisible()) fail('create validation message missing')

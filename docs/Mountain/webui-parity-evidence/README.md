@@ -50,3 +50,18 @@
 e1af2457372218bcf6069e554e1cd06358b96dcfa256353c85777c5e56053f9d  tasks/create-visual.png
 8cdbf763aa823e08e2d08b8c9b13c5a5dfbc02188f68d8268278c7cf3acb18c4  tasks/create-voice.png
 ```
+
+### 资产终态等待纠偏（2026-09-02）
+
+`capture-parity-evidence.mjs` 现对新建任务声音/视觉页等待对应 loading 文案消失，并断言真实 success/empty/error 终态；相关行为测试覆盖终态与超时。使用真实后端 8000、Vite 代理端口 5275 和指定 Chromium 重跑后，21 张截图全部成功，console error/warning=0、failed API=0。新的资产截图显示真实空态：`create-voice.png` 为“暂无可用音色”，`create-visual.png` 为真实风格卡片；两图均无“正在加载”。
+
+最新六张 create 图 SHA-256：
+
+```text
+20c66939127ac8f4cf37a5edf89b6aad33f297a6ce2f79e5418c31377a590bc8  tasks/create-final.png
+27ac0835026bf0792d67217f1173f05c012281dcb4b47ee9ab6b180be7579c16  tasks/create-intro.png
+58b97ab6602af471b3b53ae194ec793011fc6b0d11c3b2936ee0a1f8d1132abf  tasks/create-script.png
+40d6d7e27400716a7faa106ecaec29dd767a67b870d48359bfa767f39ca7998b  tasks/create-validation.png
+6b8b936d8b4660960847d3e27bd49f35108073fbce8d2586bdea14481e77d2aa  tasks/create-visual.png
+6671147c338390d4d9602cea9e99af29123e3b03ac616d926763ece44b96d529  tasks/create-voice.png
+```
