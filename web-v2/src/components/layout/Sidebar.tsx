@@ -24,29 +24,28 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
 
   return (
     <aside className="sidebar">
-      <button className="pin-btn" onClick={onTogglePin} title={pinned ? '取消固定' : '固定侧栏'}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path
-            d="M11.5 1.5L14.5 4.5L10 9L9 14L8 14L7 9L2.5 4.5L5.5 1.5L8 3L11.5 1.5Z"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            fill={pinned ? 'currentColor' : 'none'}
-          />
-        </svg>
-      </button>
-
       <div className="brand">
         <div className="brand-row">
-          <div className="brand-mark">M</div>
-          <div>
+          <div className="brand-mark">山</div>
+          <div className="brand-text">
             <p className="brand-name">山野小读</p>
-            <p className="brand-sub">Video Pipeline</p>
+            <p className="brand-sub">Mountain Studio</p>
           </div>
+          <button className="pin-btn" onClick={onTogglePin} title={pinned ? '取消固定' : '固定侧栏'} aria-label={pinned ? '取消固定侧栏' : '固定侧栏'}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M11.5 1.5L14.5 4.5L10 9L9 14L8 14L7 9L2.5 4.5L5.5 1.5L8 3L11.5 1.5Z" stroke="currentColor" strokeWidth="1.2" fill={pinned ? 'currentColor' : 'none'} />
+            </svg>
+          </button>
         </div>
       </div>
 
       <nav className="nav">
-        <p className="nav-group-label">任务</p>
+        <NavLink to="/tasks/new">
+          <span className="nav-ico">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </span>
+          <span>新建任务</span>
+        </NavLink>
         <NavLink to="/" end>
           <span className="nav-ico">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -55,16 +54,6 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
           </span>
           <span>任务队列</span>
         </NavLink>
-        <NavLink to="/tasks/new">
-          <span className="nav-ico">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 3v12M3 9h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </span>
-          <span>新建任务</span>
-        </NavLink>
-
-        <p className="nav-group-label">素材</p>
         <NavLink to="/assets">
           <span className="nav-ico">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -75,7 +64,6 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
           <span>资产管理</span>
         </NavLink>
 
-        <p className="nav-group-label">系统</p>
         <NavLink to="/settings">
           <span className="nav-ico">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

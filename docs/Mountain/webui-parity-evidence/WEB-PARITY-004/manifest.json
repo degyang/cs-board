@@ -1,0 +1,51 @@
+{
+  "task": "WEB-PARITY-004",
+  "viewport": {
+    "width": 1366,
+    "height": 900,
+    "dpr": 1
+  },
+  "generation_commit": "51656c91bb378d3a62ce5668d9d1c8b861de4847",
+  "golden_source": "docs/Mountain/webui-prototype-baseline/screenshots/settings",
+  "route_mappings": [
+    {
+      "name": "brand-shell",
+      "production": "/",
+      "golden": "prototype visual reference"
+    },
+    {
+      "name": "task-queue",
+      "production": "/",
+      "golden": "prototype visual reference"
+    },
+    {
+      "name": "task-create-six-tabs",
+      "production": "/tasks/new",
+      "golden": "prototype visual reference"
+    },
+    {
+      "name": "settings",
+      "production": "/settings/models",
+      "golden": "settings/01-models.png"
+    },
+    {
+      "name": "assets",
+      "production": "/assets",
+      "golden": "prototype visual reference"
+    }
+  ],
+  "screenshots": [
+    "actual/brand-shell.png",
+    "actual/task-queue.png",
+    "actual/task-create-six-tabs.png",
+    "actual/settings.png",
+    "actual/assets.png"
+  ],
+  "real_api": "http://127.0.0.1:8000/api/v1",
+  "browser_counters": {
+    "console_errors": 0,
+    "page_errors": 0,
+    "failed_requests": 0,
+    "http_errors": 0
+  }
+}

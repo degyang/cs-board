@@ -26,7 +26,7 @@ a { color: var(--nt-primary-700); }
   overflow-y: auto; overflow-x: hidden;
   z-index: 30;
 }
-.brand { padding: 24px 22px 18px; border-bottom: 1px solid var(--nt-border); }
+.brand { padding: 24px 18px 18px; border-bottom: 1px solid var(--nt-border); }
 .brand-row { display: flex; align-items: center; gap: 12px; }
 .brand-text { min-width: 0; }
 .brand-mark {
@@ -42,6 +42,7 @@ a { color: var(--nt-primary-700); }
   font-family: var(--nt-font-display); font-size: 10px; letter-spacing: .18em;
   text-transform: uppercase; color: var(--nt-text-muted); margin-top: 2px;
 }
+.brand-row { position: relative; }
 
 .nav { padding: 14px 12px; flex: 1; }
 .nav-group-label {
@@ -79,7 +80,7 @@ a { color: var(--nt-primary-700); }
 
 /* ---------------- 内容区 ---------------- */
 .main { overflow-y: auto; display: flex; flex-direction: column; grid-column: 2; grid-row: 1; }
-.page { padding: 28px 40px 80px; max-width: 1360px; width: 100%; margin: 0 auto; min-width: 0; }
+.page { padding: 28px 40px 80px; max-width: 920px; width: 100%; margin: 0 auto; min-width: 0; }
 .page-narrow { max-width: 920px; }
 .page-head { margin-bottom: 20px; }
 .page-title { font-family: var(--nt-font-display); font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
@@ -299,7 +300,7 @@ a { color: var(--nt-primary-700); }
 @keyframes pulse { 0%,100%{opacity:.6}50%{opacity:1} }
 
 .pin-btn {
-  position: absolute; top: 16px; right: 16px;
+  position: absolute; top: 0; right: 0;
   background: none; border: none; cursor: pointer; color: var(--nt-text-muted); opacity: .5;
 }
 .pin-btn:hover { opacity: 1; }
