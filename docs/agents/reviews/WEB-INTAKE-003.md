@@ -60,6 +60,13 @@ exit 0
 CORS allowlist 而在创建时失败；改为交付报告所称的 `/api` 同源代理后稳定通过。这不是产品缺陷，
 但暴露出交付报告缺少真实 Vite 启动参数，无法仅按报告命令复现成功运行。
 
+另一个负向门禁未通过：在 API 服务未启动时执行契约列出的 `check-api-contract.mjs`，进程超过
+60 秒仍未非零退出，Reviewer 手动发送 SIGINT 后退出 130。`contract-checker-core.mjs` 当前每个
+请求直接调用无 signal/deadline 的 `fetch`，并串行遍历多个静态、动态与错误端点；现有网络失败测试
+只覆盖本机端口 1 的立即拒绝，没有覆盖连接无响应或长连接超时。契约先把该 checker 列为 gate，紧接着
+要求自动化脚本在“依赖缺失、服务未启动或 API 错误”时非零退出，因此这一失败属于本任务范围，不能用
+外层 `timeout` 的 124 退出冒充脚本通过。
+
 ## 必须纠正
 
 1. `docs/agents/reports/WEB-INTAKE-003.md` 把实际 `/tmp/...` data dir 和
@@ -68,18 +75,31 @@ CORS allowlist 而在创建时失败；改为交付报告所称的 `/api` 同源
 2. 报告应补充启动真实服务所需的脱敏命令形状，明确 Vite 使用
    `VITE_API_BASE_URL=/api/v1` 同源代理以及测试后停止 API/Vite。当前只记录端口和 E2E 调用，
    没有记录决定复验成败的 Vite 启动参数。
+3. 为 `check-api-contract.mjs` 的真实后端请求增加内部有界 deadline/abort，并让超时形成 violation 后
+   由 CLI 自身 exit 1；不得依赖外层 `timeout`，也不得把超时降级为 fixture 成功。增加受控的无响应
+   HTTP server/subprocess 行为测试，证明 CLI 在测试规定的上限内自行非零退出并清理子进程，同时保留
+   现有真实后端成功路径。
 
 ## 有界返工范围
 
-只修改 `docs/agents/reports/WEB-INTAKE-003.md`，不改产品代码、测试、截图、manifest 或任务契约。
+只修改 `web-v2/scripts/check-api-contract.mjs`、必要时的
+`web-v2/scripts/contract-checker-core.mjs`、聚焦 checker 的既有测试文件，以及
+`docs/agents/reports/WEB-INTAKE-003.md`。不改产品页面、API/DTO、截图、manifest 或任务契约。
 完成后执行：
 
 ```text
 ! rg -n '/tmp/|/home/|/mnt/' docs/agents/reports/WEB-INTAKE-003.md
 rg -n 'VITE_API_BASE_URL=/api/v1|<temporary-data-dir>|<installed-chromium>' \
   docs/agents/reports/WEB-INTAKE-003.md
+npm --prefix web-v2 test -- --run tests/contract-checker-exec.test.ts
+npm --prefix web-v2 test -- --run
+MOUNTAIN_API_BASE=http://127.0.0.1:<live-api-port> node web-v2/scripts/check-api-contract.mjs
 git diff --check 672f820...HEAD
 ```
+
+新增测试必须观察 checker 子进程自身的非零退出码；测试框架的超时或外层 `timeout` 只可作为失败清理，
+不得写成通过断言。无需重跑或重生成 Playwright 截图，因为 intake 正向浏览器行为已经独立通过且该范围
+不触碰页面或 E2E 脚本。
 
 Worker 提交并推送有界报告修正后，等待 CEO 再次安排独立复核。本 verdict 不批准任务、不合并，
 也不触碰 `WEB-PARITY-004` 或 `WEB-WO-003`。
