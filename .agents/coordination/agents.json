@@ -1,16 +1,50 @@
 {
   "schema_version": 1,
   "agents": {
+    "CEO": {
+      "role_type": "ceo",
+      "transport": "systemd_timer",
+      "thread": "cs-board-ceo.timer",
+      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
+      "branch": "integration/mountain-v2",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["goal-governance", "stall-detection", "resource-allocation"]
+    },
     "PM": {
+      "role_type": "pm",
       "transport": "codex_cli",
       "thread": "01a0609f-501f-7742-a40e-94beda42941f",
       "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
       "branch": "integration/mountain-v2",
       "model": "gpt-5.6-terra",
       "reasoning_effort": "medium",
-      "capabilities": ["planning", "review", "integration"]
+      "capabilities": ["planning", "task-contracts", "final-review", "integration"]
+    },
+    "WEB_TESTER": {
+      "role_type": "tester",
+      "domain": "web",
+      "transport": "codex_exec",
+      "thread": "systemd:cs-board-agent-web-tester.service",
+      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
+      "branch": "integration/mountain-v2",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["browser-e2e", "visual-evidence", "frontend-gates"]
+    },
+    "CORE_TESTER": {
+      "role_type": "tester",
+      "domain": "core",
+      "transport": "codex_exec",
+      "thread": "systemd:cs-board-agent-core-tester.service",
+      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
+      "branch": "integration/mountain-v2",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["backend-tests", "cli-subprocess", "runtime-gates"]
     },
     "WEB": {
+      "role_type": "worker",
       "transport": "codex_exec",
       "thread": "systemd:cs-board-agent-web.service",
       "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity",
@@ -20,6 +54,7 @@
       "capabilities": ["webui", "frontend-contracts", "browser-evidence"]
     },
     "MEDIA": {
+      "role_type": "worker",
       "transport": "codex_exec",
       "thread": "systemd:cs-board-agent-media.service",
       "worktree": "/mnt/d/workstation/projects/cs-board-media",
@@ -27,15 +62,6 @@
       "model": "gpt-5.6-terra",
       "reasoning_effort": "medium",
       "capabilities": ["skills", "tts", "illustration", "ffmpeg", "artifact-e2e"]
-    },
-    "REVIEWER": {
-      "transport": "codex_exec",
-      "thread": "systemd:cs-board-agent-reviewer.service",
-      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
-      "branch": "integration/mountain-v2",
-      "model": "gpt-5.6-terra",
-      "reasoning_effort": "medium",
-      "capabilities": ["independent-review", "gate-reproduction", "verdict"]
     }
   }
 }

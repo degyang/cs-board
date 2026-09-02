@@ -148,12 +148,15 @@
 
 ## 队列规则
 
+标准状态机：`READY → WORKING → TEST_READY → TESTING → PM_DECISION → APPROVED`；失败验证由 PM
+判为 `CHANGES_REQUESTED` 后返回 `READY`，外部依赖不足进入 `BLOCKED`。旧状态只为历史兼容，不用于新任务。
+
 1. 优先级按任务契约中的 `Priority`，同优先级按依赖拓扑排序；
 2. `BACKLOG` 只有在全部 `Depends on` 均为 `APPROVED` 后才能由 PM 改成 `READY`；
 3. Worker 同一时间只领取一项 `DISPATCHED` 任务；返工沿用原任务并递增 attempt；
-4. PM 审核写入 Git 后，必须在同一轮计算并派发下一个满足依赖的 `READY` 任务；
+4. Tester 提交验证证据后置为 `PM_DECISION`；PM 只核对证据、写最终状态，并在同一轮决定是否创建或派发下一个任务；
 5. Dashboard 心跳只表示有限租约内的真实活动，不表示 Agent 能跨会话自行运行。
 6. 每个 Owner 的 WIP 上限为 1；BACKLOG 不设硬长度上限，按真实里程碑风险滚动维护跨角色后续链；
-7. Reviewer 不设伪造的常驻忙碌任务，只在 Worker 提交 `REVIEW_READY` 事件后生成独立评审工作。
+7. 不再设置 Reviewer；WEB/CORE 使用固定领域 Tester，其他领域 Tester 按需生成并超时回收；
 8. CEO 每个有事件的调度周期先读取 `docs/agents/agreements.md` 最新 `ACTIVE` 时间线节点；用户范围变更只追加新节点，历史不得删除。
 8. M1 期间只派发里程碑契约列出的直接任务；其他想法仅可记为 `POST-M1`，不得占用当前 Worker。
