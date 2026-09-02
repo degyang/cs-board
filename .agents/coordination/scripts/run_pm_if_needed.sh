@@ -25,7 +25,7 @@ if [[ "${registration[0]}" != "codex_cli" || -z "${registration[1]}" ]]; then
   exit 0
 fi
 
-prompt="Use pos-magents as the independent CEO/PM. Read docs/agents/status.md and the tracked contracts. Process exactly one short coordination cycle for this event. Prioritize stale active-work recovery over new dispatch, never overlap work for one owner, commit only when tracked state changes, and stop without running long product gates. Event: $event_json"
+prompt="Use pos-magents as the independent CEO/PM. Read docs/agents/status.md and the tracked contracts. Process exactly one short coordination cycle for this event. Prioritize stale active-work recovery over new dispatch, never overlap work for one owner, and commit only when tracked state changes. To start a codex_cli Worker, call .agents/coordination/scripts/dispatch_cli_agent.sh only after committing its DISPATCHED state; never run codex exec resume synchronously from the CEO cycle. Stop without waiting for Worker gates. Event: $event_json"
 if codex exec resume --dangerously-bypass-approvals-and-sandbox "${registration[1]}" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
   python3 "$probe" ack --project "$project_root" --signature "$signature"

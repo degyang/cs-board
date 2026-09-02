@@ -27,6 +27,10 @@
 且 `.agents/coordination/agents.json` 中 PM 注册为 `transport=codex_cli`、`thread=<真实 CLI UUID>` 时，
 才执行一次 `codex exec resume`；成功后才 ack，失败会保留事件供人工恢复。每次最多处理一个 PM 周期。
 
+CEO 派发 CLI Worker 时只能调用 `.agents/coordination/scripts/dispatch_cli_agent.sh`。该脚本用独立
+`cs-board-agent-<role>.service` 启动 Worker 并立即返回；unit active 时拒绝重叠启动。CEO 不得在自身
+oneshot 中同步等待 Worker 的产品门禁，否则会再次阻塞调度入口。
+
 当前 CEO 由 `codex exec --json` 启动，注册表保存其 `thread.started` 返回的真实 UUID；UUID 只用于
 `codex exec resume`，不是在线心跳。由于当前项目位于 WSL `/mnt/d`，CLI 的 `workspace-write` sandbox
 实际返回 `EROFS`；wrapper 因此用 CLI 的无 sandbox resume 模式恢复当前 CEO session。它的动作权限仍
