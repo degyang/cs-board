@@ -853,13 +853,17 @@ class MountainCommands:
         run = self.repository.get_run(task_id, run_id)
         for key, expected in {"task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage}.items():
             if key in result and result[key] != expected:
-                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [{"ok": False, "error": "STAGE_RESPONSE_IDENTITY_CONFLICT"}], "next_stage": None, "next_action": {"code": "FIX_STAGE_RESULT"}}
+                safe = {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "error": "STAGE_RESPONSE_IDENTITY_CONFLICT"}
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [safe], "next_stage": None, "next_action": {"code": "FIX_STAGE_RESULT"}}
         state = result.get("result")
         successful = bool(result.get("ok")) and state in {"succeeded", "skipped"}
         if successful and not self._exit_artifacts_valid(task_id, run_id, stage):
             return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_OUTPUT_INVALID"}}
         if successful:
-            self.mark_gate_waiting(task_id, run_id, stage)
+            try:
+                self.mark_gate_waiting(task_id, run_id, stage)
+            except Exception:
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_GATE_PERSIST_FAILED"}}
             gate = self.get_gate(task_id, run_id, stage)
             if gate["status"] != GATE_WAITING:
                 return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_GATE_PERSIST_FAILED"}}
