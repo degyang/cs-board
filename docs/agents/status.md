@@ -18,7 +18,7 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
-| `DASH-STATS-003` | DASH | READY | `docs/agents/tasks/DASH-STATS-003.md` | pending | original 4317 dashboard micro-adjustment |
+| `DASH-STATS-003` | DASH | DISPATCHED | `docs/agents/tasks/DASH-STATS-003.md` | pending | dispatched to `/root/dashboard_stats` |
 
 ## 当前决策
 

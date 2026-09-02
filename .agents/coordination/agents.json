@@ -36,6 +36,15 @@
       "model": "gpt-5.6-terra",
       "reasoning_effort": "medium",
       "capabilities": ["skills", "tts", "illustration", "ffmpeg", "artifact-e2e"]
+    },
+    "DASH": {
+      "transport": "orchestrator",
+      "thread": "/root/dashboard_stats",
+      "worktree": "/mnt/d/Workstation/Projects/POS-agent-coordination/00-System/Skills/skills-pos-magents/pos-magents/scripts/team-dashboard",
+      "branch": "feat/pos-codex-agent-coordination",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["dashboard", "runtime-accounting", "ui-contracts"]
     }
   }
 }

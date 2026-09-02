@@ -1,7 +1,7 @@
 # DASH-STATS-003：原团队看板统计横栏与动态成员证明
 
 - Owner: DASH
-- Status: READY
+- Status: DISPATCHED
 - Priority: P1
 - Depends on: `PM-AUTO-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/POS-agent-coordination/00-System/Skills/skills-pos-magents/pos-magents/scripts/team-dashboard`
