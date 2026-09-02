@@ -202,3 +202,12 @@ docs(mountain): prove create task flow against real backend
 ```
 
 两项提交完成后推送当前分支，再申请复审。CCF 不得自行宣布通过。
+
+## CCF 纠偏交付报告（待 PM 复审）
+
+- 实现/测试 commit：`387013d`，重写 `web-v2/tests/create-task.test.tsx` 为六 Tab 用户路径，覆盖九类行为；修复 `CreateTaskPage` 资产请求 reject 的 unmount 安全。
+- 测试证据：专项 `10 passed / 10`；全量 `15 files passed / 338 tests passed`。输出无 React warning、act warning 或 unhandled rejection。
+- 真实后端：按指定隔离临时数据目录启动；contract checker 返回 `All contracts aligned against real backend ✓`。后端进程已终止，精确临时目录已删除。
+- 前端：尝试固定 5175，但环境已有端口占用，Vite 自动落到 5180；该进程已终止。
+- 证据脚本/README：脚本增加六个 create 路径且不创建 Task；当前环境缺少 Playwright Chromium，安装下载失败，六张新截图和 SHA-256 无法生成。现存截图 15 张，未宣称 21 张完成。
+- 本报告不宣布审核通过，等待 PM 复审及可用浏览器环境下的截图复验。

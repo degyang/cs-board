@@ -27,3 +27,7 @@
 本轮新增的 `settings/models-secret.png` 固定使用 `openai-compatible-text`，将“Secret 管理”滚动至视口中央；脚本断言 password 输入为空并拒绝 key-like 明文。
 
 加载、空、错误和提交态由页面代码及现有 Vitest 覆盖；截图记录的是真实后端的正常可达状态。没有 fixture、mock 或 fallback 数据参与截图。
+
+### 新建任务纠偏证据（2026-09-02）
+
+专项测试已按真实六 Tab 用户路径重写并通过；隔离临时数据目录中的真实后端 contract checker 返回 `All contracts aligned against real backend ✓`。证据脚本已扩展六个 create 截图路径且不调用创建 Task API。当前环境缺少 Playwright Chromium，安装下载失败，因此六张新截图及 SHA-256 尚未生成；现存截图总数为 15，未冒充 21 张完成。
