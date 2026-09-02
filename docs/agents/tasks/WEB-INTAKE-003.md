@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: DISPATCHED
+- Status: IN_PROGRESS
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`

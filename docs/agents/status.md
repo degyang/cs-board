@@ -11,7 +11,7 @@
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | DISPATCHED | `docs/agents/tasks/WEB-INTAKE-003.md` | `0b99b50` | real CLI WEB resumes with approved backend `6699d20` |
+| `WEB-INTAKE-003` | WEB | IN_PROGRESS | `docs/agents/tasks/WEB-INTAKE-003.md` | `0b99b50` | independent WEB unit active with backend `6699d20` |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
