@@ -1,7 +1,7 @@
 # CORE-RUNTIME-007: full-suite input/start boundary diagnosis
 
 - Owner: WORKER_CORE
-- Status: BLOCKED
+- Status: TEST_READY
 - Priority: P0
 - Depends on: `CORE-RUNTIME-006=APPROVED`
 - Branch: `feat/mountain-core-runtime`

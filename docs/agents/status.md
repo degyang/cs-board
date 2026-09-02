@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | SUPERSEDED | `docs/agents/tasks/CEO-RECOVERY-002.md` | `38a98f8` | archived; replaced by independent CEO timer and separate PM |
 | `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `CORE-RUNTIME-007` | WORKER_CORE | BLOCKED | `docs/agents/tasks/CORE-RUNTIME-007.md` | pending | supervised dispatcher unavailable; bounded diagnosis for `MEDIA-PREFLIGHT-004` full-suite timeout |
+| `CORE-RUNTIME-007` | WORKER_CORE | TEST_READY | `docs/agents/tasks/CORE-RUNTIME-007.md` | `09009f103439d5d17e44fc6d30ebc1dfb1b1ec8e` | Tester pending |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WORKER_WEB | PM_DECISION | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | attempt 2 dispatched to fix the real browser Task flow and deliver passing browser evidence |
