@@ -65,9 +65,9 @@ def mountain_task_router(
         """Server-owned constraints for the six-tab create form."""
         return {"engines": [{"id": "whiteboard", "label": "白板动画", "available": True}],
                 "visual_sources": [{"id": "preset", "label": "预设风格", "available": True}, {"id": "custom-reference", "label": "自定义参考", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"}],
-                "voice_sources": [{"id": "voice-asset", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"}, {"id": "uploaded-reference", "available": True}],
-                "limits": {"script_min_chars": 10, "target_chars_min": 1, "target_chars_max": 500, "brand_text_max_chars": 12},
-                "defaults": {"engine": "whiteboard", "visual_source": "preset", "target_chars": 80, "shots_per_image": 1, "line_density": "detailed", "visual_anchor_enabled": True, "include_subtitles": True}}
+                "voice_sources": [{"id": "voice-asset", "label": "音色资产", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"}, {"id": "uploaded-reference", "label": "上传参考音频", "available": True}],
+                "limits": {"script_min_chars": 10, "target_chars_min": 5, "target_chars_max": 500, "brand_text_max_chars": 12},
+                "defaults": {"engine": "whiteboard", "visual_source": "preset", "target_chars": 45, "shots_per_image": 2, "line_density": "rich", "visual_anchor_enabled": True, "include_subtitles": True}}
 
     @router.post("/tasks")
     def create_task(payload: dict = Body(...)):
