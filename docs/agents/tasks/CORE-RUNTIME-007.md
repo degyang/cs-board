@@ -19,6 +19,9 @@
 - Recovery condition: restore the dispatcher and its supervised wrapper, then
   re-dispatch this unchanged P0 task. Until then, no Worker runtime, Tester
   handoff, or MEDIA resume decision is valid.
+- PM resolve-blocker event: `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`
+  reconfirmed this external dependency; no duplicate diagnosis task or Worker
+  dispatch is authorized while it remains unavailable.
 
 ## Goal
 
