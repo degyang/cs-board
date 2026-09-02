@@ -19,8 +19,9 @@ for line in (root/'docs/agents/status.md').read_text().splitlines():
  except (FileNotFoundError,json.JSONDecodeError): done={}
  if done.get('state')=='completed' and done.get('delivery')==delivery: continue
  domain=owner.removeprefix('WORKER_'); tester=f'TESTER_{domain}'
- cfg=agents.get(tester)
- if cfg: print('\n'.join((task,owner,tester,contract,delivery,cfg.get('worktree',''),cfg.get('model','gpt-5.6-terra'),cfg.get('reasoning_effort','medium')))); break
+ cfg=agents.get(tester); owner_cfg=agents.get(owner)
+ if cfg and owner_cfg and owner_cfg.get('worktree'):
+  print('\n'.join((task,owner,tester,contract,delivery,owner_cfg['worktree'],cfg.get('model','gpt-5.6-terra'),cfg.get('reasoning_effort','medium')))); break
 PY
 )
 [[ "${#task[@]}" -eq 8 ]] || exit 0

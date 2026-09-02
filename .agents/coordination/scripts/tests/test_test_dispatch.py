@@ -5,7 +5,8 @@ SOURCE=Path(__file__).parents[1]
 class TesterDispatchTest(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name); (self.root/'.agents/coordination/runtime').mkdir(parents=True); (self.root/'docs/agents/tasks').mkdir(parents=True)
-  (self.root/'.agents/coordination/agents.json').write_text(json.dumps({'agents':{'TESTER_WEB':{'domain':'web','worktree':str(self.root),'model':'terra','reasoning_effort':'medium'},'WORKER_WEB':{}}}))
+  self.owner=self.root/'worker'; self.owner.mkdir()
+  (self.root/'.agents/coordination/agents.json').write_text(json.dumps({'agents':{'TESTER_WEB':{'domain':'web','worktree':str(self.root),'model':'terra','reasoning_effort':'medium'},'WORKER_WEB':{'worktree':str(self.owner)}}}))
   (self.root/'docs/agents/status.md').write_text('| Task | Owner | Status | Contract | Delivery | Review |\n| --- | --- | --- | --- | --- | --- |\n| `WEB-1` | WORKER_WEB | TEST_READY | `docs/agents/tasks/WEB-1.md` | abc | pending |\n')
   (self.root/'docs/agents/tasks/WEB-1.md').write_text('# task\n'); self.bin=self.root/'bin'; self.bin.mkdir(); self.calls=self.root/'calls'; self.active=self.root/'active'
   for name,body in {'systemctl':f"[ -f '{self.active}' ]",'systemd-run':f"printf '%s\\n' \"$*\" > '{self.calls}'\ntouch '{self.active}'"}.items():
@@ -14,7 +15,7 @@ class TesterDispatchTest(unittest.TestCase):
  def test_routes_web_delivery_to_web_tester(self):
   env={**os.environ,'SYSTEMCTL_BIN':str(self.bin/'systemctl'),'SYSTEMD_RUN_BIN':str(self.bin/'systemd-run')}
   result=subprocess.run(['bash',str(SOURCE/'dispatch_test_agent.sh'),str(self.root)],env=env,capture_output=True,text=True)
-  self.assertEqual(result.returncode,0,result.stderr); call=self.calls.read_text(); self.assertIn('TESTER_WEB',call); self.assertIn('WEB-1',call); self.assertIn('run_test_agent.sh',call)
+  self.assertEqual(result.returncode,0,result.stderr); call=self.calls.read_text(); self.assertIn('TESTER_WEB',call); self.assertIn('WEB-1',call); self.assertIn('run_test_agent.sh',call); self.assertIn(str(self.owner),call)
  def test_does_not_repeat_completed_delivery(self):
   (self.root/'.agents/coordination/runtime/test-completed-WEB-1.json').write_text(json.dumps({'state':'completed','delivery':'abc'}))
   env={**os.environ,'SYSTEMCTL_BIN':str(self.bin/'systemctl'),'SYSTEMD_RUN_BIN':str(self.bin/'systemd-run')}
