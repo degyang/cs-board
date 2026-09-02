@@ -99,7 +99,7 @@ describe('TaskWorkbenchPage manual six-stage baseline', () => {
     for (const label of ['入口条件', '持久化输入', '预期输出', '出口条件', '人工 Gate']) {
       expect(screen.getAllByText(label, { exact: true }).length).toBeGreaterThanOrEqual(6)
     }
-    expect(screen.getAllByText('后端 Gate 契约正在收口，CCB-25 通过后启用', { exact: false })).toHaveLength(6)
+    expect(screen.getAllByText('后端人工 Gate 尚未就绪，当前操作不可用', { exact: false })).toHaveLength(6)
     expect(screen.getByText('未知阶段')).toBeInTheDocument()
     expect(screen.getByText('waiting-external')).toBeInTheDocument()
   })
@@ -138,6 +138,81 @@ describe('TaskWorkbenchPage manual six-stage baseline', () => {
     taskBRequest.resolve(taskB)
     await screen.findByText('任务 B')
     expect(screen.queryByText('任务 A')).toBeNull()
+  })
+
+  it('keeps every A marker out of the B page while B is pending and after it completes', async () => {
+    const taskA = {
+      ...task,
+      task: { ...task.task, task_id: 'task-a', title: '任务 A 完整标记' },
+      active_run: { ...task.active_run!, run_id: 'run-a', trace_id: 'trace-a' },
+      artifacts: [{ artifact_key: 'artifact-a', relative_path: 'a.json', sha256: 'a', size_bytes: 1, producer_stage: 'plan-storyboard', status: 'succeeded' }],
+    }
+    const taskB = {
+      ...task,
+      task: { ...task.task, task_id: 'task-b', title: '任务 B 完整标记' },
+      active_run: { ...task.active_run!, run_id: 'run-b', trace_id: 'trace-b' },
+      artifacts: [{ artifact_key: 'artifact-b', relative_path: 'b.json', sha256: 'b', size_bytes: 1, producer_stage: 'plan-storyboard', status: 'succeeded' }],
+    }
+    const taskBRequest = deferred<TaskDetail>()
+    vi.mocked(fetchTask).mockImplementation((id) => id === 'task-a' ? Promise.resolve(taskA) : taskBRequest.promise)
+    vi.mocked(fetchInputs).mockImplementation((id) => Promise.resolve({ ...inputs, task_id: id, inputs: { ...inputs.inputs!, script: id === 'task-a' ? '输入 A' : '输入 B' } }))
+    vi.mocked(fetchUnits).mockImplementation((id) => Promise.resolve({ items: [{ unit_id: id === 'task-a' ? 'unit-a' : 'unit-b', order: 0, text: id === 'task-a' ? '单元 A' : '单元 B' }] }))
+    vi.mocked(fetchEvents).mockImplementation((id) => Promise.resolve({ items: [{ event_type: id === 'task-a' ? '事件 A' : '事件 B', timestamp: '2026-09-02T00:00:00Z', sequence: 1 }], next_cursor: 1 }))
+    vi.mocked(fetchLogs).mockImplementation((id) => Promise.resolve({ items: [{ level: 'INFO', message: id === 'task-a' ? '日志 A' : '日志 B', timestamp: '2026-09-02T00:00:00Z' }] }))
+    render(
+      <MemoryRouter initialEntries={['/tasks/task-a']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Route path="/tasks/:taskId" element={<><NavigateTo taskId="task-b" /><TaskWorkbenchPage /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('任务 A 完整标记')
+    await screen.findByText('artifact-a')
+    await screen.findByText('单元 A')
+    await screen.findByText('事件 A')
+    await screen.findByText('日志 A')
+    await userEvent.setup().click(screen.getByRole('button', { name: '切换任务' }))
+    expect(screen.queryByText(/任务 A 完整标记|artifact-a|单元 A|事件 A|日志 A|输入 A/)).toBeNull()
+    taskBRequest.resolve(taskB)
+    await screen.findByText('任务 B 完整标记')
+    await screen.findByText('artifact-b')
+    await screen.findByText('单元 B')
+    await screen.findByText('事件 B')
+    await screen.findByText('日志 B')
+    expect(screen.queryByText(/任务 A 完整标记|artifact-a|单元 A|事件 A|日志 A|输入 A/)).toBeNull()
+  })
+
+  it('lets B win when A resources are still pending and A later rejects', async () => {
+    const taskA = { ...task, task: { ...task.task, task_id: 'task-a', title: '任务 A 延迟' }, active_run: { ...task.active_run!, run_id: 'run-a' } }
+    const taskB = { ...task, task: { ...task.task, task_id: 'task-b', title: '任务 B 先完成' }, active_run: null, stages: [], artifacts: [] }
+    const aInputs = deferred<InputsReadback>()
+    const aUnits = deferred<{ items: Array<Record<string, unknown>> }>()
+    const aEvents = deferred<{ items: Record<string, unknown>[]; next_cursor: number }>()
+    const aLogs = deferred<{ items: Record<string, unknown>[] }>()
+    const bRequest = deferred<TaskDetail>()
+    vi.mocked(fetchTask).mockImplementation((id) => id === 'task-a' ? Promise.resolve(taskA) : bRequest.promise)
+    vi.mocked(fetchInputs).mockImplementation((id) => id === 'task-a' ? aInputs.promise : Promise.resolve({ ...inputs, task_id: 'task-b' }))
+    vi.mocked(fetchUnits).mockImplementation((id) => id === 'task-a' ? aUnits.promise : Promise.resolve({ items: [] }))
+    vi.mocked(fetchEvents).mockImplementation((id) => id === 'task-a' ? aEvents.promise : Promise.resolve({ items: [], next_cursor: 0 }))
+    vi.mocked(fetchLogs).mockImplementation((id) => id === 'task-a' ? aLogs.promise : Promise.resolve({ items: [] }))
+    render(
+      <MemoryRouter initialEntries={['/tasks/task-a']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Route path="/tasks/:taskId" element={<><NavigateTo taskId="task-b" /><TaskWorkbenchPage /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('任务 A 延迟')
+    await userEvent.setup().click(screen.getByRole('button', { name: '切换任务' }))
+    bRequest.resolve(taskB)
+    await screen.findByText('任务 B 先完成')
+    aInputs.reject(new Error('late A inputs'))
+    aUnits.reject(new Error('late A units'))
+    aEvents.reject(new Error('late A events'))
+    aLogs.reject(new Error('late A logs'))
+    await Promise.resolve()
+    expect(screen.getByText('任务 B 先完成')).toBeInTheDocument()
+    expect(screen.queryByText(/late A/)).toBeNull()
   })
 
   it('uses an unavailable status for missing stages instead of fabricating pending or attempt zero', async () => {

@@ -63,7 +63,7 @@ export const STAGE_CONTRACTS: readonly StageContractMetadata[] = [
   },
 ]
 
-const GATE_UNAVAILABLE = '后端 Gate 契约正在收口，CCB-25 通过后启用'
+const GATE_UNAVAILABLE = '后端人工 Gate 尚未就绪，当前操作不可用'
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -174,11 +174,24 @@ export function TaskWorkbenchPage() {
   const [includeSubtitles, setIncludeSubtitles] = useState(false)
   const [penText, setPenText] = useState('')
   const [strokeDetail, setStrokeDetail] = useState('')
+  const inputsOwnerRef = useRef<string | null>(null)
 
   // Restore saved inputs when readback data arrives.
   // Only initializes on first load (inputsSaved is false) to avoid overwriting edits.
   useEffect(() => {
-    if (!inputsData?.saved || !inputsData.inputs || inputsSaved) return
+    if (!inputsData || inputsOwnerRef.current === taskId) return
+    inputsOwnerRef.current = taskId ?? null
+    if (!inputsData.saved || !inputsData.inputs) {
+      setScript('')
+      setStyle('')
+      setIncludeSubtitles(false)
+      setPenText('')
+      setStrokeDetail('')
+      setSavedAudioFilename(null)
+      setSavedAudioSize(null)
+      setInputsSaved(false)
+      return
+    }
     setScript(inputsData.inputs.script)
     setStyle(inputsData.inputs.style)
     setIncludeSubtitles(inputsData.inputs.include_subtitles)
@@ -190,7 +203,7 @@ export function TaskWorkbenchPage() {
     }
     setInputsSaved(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputsData])
+  }, [inputsData, taskId])
 
   // ── Action state ─────────────────────────────────────────────────────
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -354,7 +367,7 @@ export function TaskWorkbenchPage() {
       </div>
 
       {/* ── Inputs section ─────────────────────────────────────────────── */}
-      {activeRun && activeRun.status === 'pending' && (
+      {activeRun && activeRun.status === 'pending' && inputsOwnerRef.current === taskId && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 className="card-title">制作输入</h3>
           <p className="card-sub">配置视频文案、参考音频和视觉参数后保存</p>

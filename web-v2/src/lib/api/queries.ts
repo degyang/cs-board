@@ -13,6 +13,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], poll
   const [error, setError] = useState<string | null>(null)
   const [trigger, setTrigger] = useState(0)
   const previousDepsRef = useRef<unknown[] | null>(null)
+  const previousPollMsRef = useRef<number | undefined>(undefined)
   const loaderRef = useRef(loader)
   loaderRef.current = loader
 
@@ -24,6 +25,8 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], poll
     || deps.length !== previousDepsRef.current.length
     || deps.some((value, index) => !Object.is(value, previousDepsRef.current?.[index]))
   if (depsChanged) previousDepsRef.current = deps
+  const pollStopped = previousPollMsRef.current !== undefined && pollMs === undefined
+  previousPollMsRef.current = pollMs
 
   const refetch = useCallback(() => setTrigger((n) => n + 1), [])
 
@@ -33,10 +36,18 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], poll
 
     // Drop the previous identity's state before starting this request. The
     // render-time guard above covers the transition frame; this keeps it
-    // cleared while a slow successor is still pending.
-    setData(null)
-    setError(null)
-    setLoading(true)
+    // cleared while a slow successor is still pending. A poll stop is only a
+    // timer lifecycle change and must not trigger another network request.
+    if (depsChanged) {
+      setData(null)
+      setError(null)
+      setLoading(true)
+    }
+
+    if (pollStopped) return () => {
+      alive = false
+      if (timer) clearTimeout(timer)
+    }
 
     const load = async () => {
       try {
@@ -59,7 +70,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = [], poll
       if (timer) clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, trigger])
+  }, [...deps, trigger, pollMs])
 
   return {
     data: depsChanged ? null : data,
