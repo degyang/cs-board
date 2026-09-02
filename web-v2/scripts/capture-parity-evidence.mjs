@@ -46,6 +46,12 @@ const shots = [
   ['/', 'tasks/queue-mixed.png'],
   ['/', 'tasks/queue-filtered.png', '失败'],
   ['/', 'tasks/queue-empty.png', '待执行'],
+  ['/tasks/new', 'tasks/create-intro.png'],
+  ['/tasks/new', 'tasks/create-script.png', '视频文案'],
+  ['/tasks/new', 'tasks/create-voice.png', '声音生成'],
+  ['/tasks/new', 'tasks/create-visual.png', '视觉设置'],
+  ['/tasks/new', 'tasks/create-final.png', '成片设置'],
+  ['/tasks/new', 'tasks/create-validation.png', '成片设置'],
 ]
 await fs.mkdir(path.join(evidence, 'settings'), { recursive: true })
 await fs.mkdir(path.join(evidence, 'assets'), { recursive: true })
@@ -98,6 +104,10 @@ for (const [route, file, tab, scrollTo] of shots) {
       if (!await tabButton.evaluate((element) => element.getAttribute('aria-selected') === 'true')) fail(`task filter ${expectedStatus} is not active`)
     }
     await page.locator('.loading, .spinner').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {})
+  }
+  if (route === '/tasks/new' && file === 'tasks/create-validation.png') {
+    await page.getByRole('button', { name: '创建并保存' }).click()
+    if (!await page.locator('[role="alert"]').first().isVisible()) fail('create validation message missing')
   }
   // Scroll to a specific section heading if requested (e.g. "Secret 管理")
   if (scrollTo) {
