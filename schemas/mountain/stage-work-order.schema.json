@@ -1,20 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "stage-work-order.schema.json",
-  "type": "object",
+  "type": "object", "additionalProperties": false,
   "required": ["schema_version", "work_order_id", "identity", "revision", "input_fingerprint", "status", "scope", "input_artifacts", "parameters_path", "instructions_path", "output_directory", "expected_outputs", "commands", "next_action"],
+  "$defs": {
+    "relativePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+    "command": {"type": "object", "additionalProperties": false, "required": ["command_id", "argv", "idempotency_key", "preconditions"], "properties": {"command_id": {"type": "string", "minLength": 1}, "argv": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?![A-Za-z]:)(?!~)(?!.*(?:^|/)\\.\\.(?:/|$)).*$"}}, "idempotency_key": {"type": "string", "minLength": 1}, "preconditions": {"type": "array", "items": {"type": "string"}}}},
+    "artifact": {"type": "object", "additionalProperties": false, "required": ["artifact_key", "revision", "sha256", "status", "relative_path"], "properties": {"artifact_key": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1}, "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "status": {"const": "succeeded"}, "relative_path": {"$ref": "#/$defs/relativePath"}}}
+  },
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "work_order_id": {"type": "string", "pattern": "^wo-"},
-    "revision": {"type": "integer", "minimum": 1},
-    "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "schema_version": {"const": "1.0"}, "work_order_id": {"type": "string", "pattern": "^wo-[0-9a-f]+$"}, "revision": {"type": "integer", "minimum": 1}, "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "status": {"enum": ["ready", "waiting-manual-trigger", "running", "waiting-external-output", "validating", "waiting-acceptance", "succeeded", "failed", "stale"]},
-    "identity": {"type": "object", "required": ["task_id", "run_id", "stage", "skill", "pipeline_id", "engine"]},
-    "scope": {"type": "object", "properties": {"kind": {"const": "stage"}}, "required": ["kind"]},
-    "input_artifacts": {"type": "array"},
-    "parameters_path": {"type": "string"}, "instructions_path": {"type": "string"}, "output_directory": {"type": "string"},
-    "expected_outputs": {"type": "array"},
-    "commands": {"type": "object", "required": ["run", "import", "validate", "accept", "reject", "retry"]},
-    "next_action": {"type": "object", "required": ["code", "message"]}
+    "identity": {"type": "object", "additionalProperties": false, "required": ["task_id", "run_id", "stage", "skill", "pipeline_id", "engine"], "properties": {"task_id": {"type": "string", "minLength": 1}, "run_id": {"type": "string", "minLength": 1}, "stage": {"enum": ["generate-visual-anchors", "clone-voice", "plan-storyboard", "generate-illustrations", "render-visuals", "compose-video"]}, "skill": {"type": "string", "minLength": 1}, "pipeline_id": {"type": "string", "minLength": 1}, "engine": {"type": "string", "minLength": 1}}},
+    "scope": {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {"kind": {"const": "stage"}}},
+    "input_artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "parameters_path": {"$ref": "#/$defs/relativePath"}, "instructions_path": {"$ref": "#/$defs/relativePath"}, "output_directory": {"$ref": "#/$defs/relativePath"},
+    "expected_outputs": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["artifact_key", "status"], "properties": {"artifact_key": {"type": "string"}, "status": {"const": "succeeded"}}}},
+    "commands": {"type": "object", "additionalProperties": false, "required": ["run", "import", "validate", "accept", "reject", "retry"], "properties": {"run": {"type": "array", "items": {"$ref": "#/$defs/command"}}, "import": {"type": "array", "items": {"$ref": "#/$defs/command"}}, "validate": {"type": "array", "items": {"$ref": "#/$defs/command"}}, "accept": {"type": "array", "items": {"$ref": "#/$defs/command"}}, "reject": {"type": "array", "items": {"$ref": "#/$defs/command"}}, "retry": {"type": "array", "items": {"$ref": "#/$defs/command"}}}},
+    "next_action": {"type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": {"code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}}}
   }
 }
