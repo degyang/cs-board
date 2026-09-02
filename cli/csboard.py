@@ -288,7 +288,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             run_id = getattr(args, "run", None) or task.active_run_id
             if not run_id:
                 raise ValueError("generate-visual-anchors 需要 --run")
-            return commands.generate_visual_anchors(args.task, run_id)
+            return commands.stage_run(args.task, run_id, args.stage)
         elif args.stage == "clone-voice":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
@@ -300,21 +300,19 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             tts = IndexTTSAdapter(base_url=args.tts_url, mode=args.tts_mode)
             alignment = WhisperAlignmentAdapter(renderer_root=ROOT / "video_renderer")
             media = FFmpegMediaAdapter()
-            return commands.clone_voice(args.task, run_id, tts, alignment, media, reference_audio=args.reference)
+            return commands.stage_run(args.task, run_id, args.stage)
         elif args.stage == "plan-storyboard":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
             if not run_id:
                 raise ValueError("需要 --run 或任务有活跃运行")
-            text_model = commands._text_model_from_request(args.task)
-            return commands.plan_storyboard(args.task, run_id, text_model)
+            return commands.stage_run(args.task, run_id, args.stage)
         elif args.stage == "generate-illustrations":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
             if not run_id:
                 raise ValueError("需要 --run 或任务有活跃运行")
-            image_model = commands._image_model_from_request(args.task)
-            return commands.generate_illustrations(args.task, run_id, image_model)
+            return commands.stage_run(args.task, run_id, args.stage)
         elif args.stage == "render-visuals":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
@@ -322,7 +320,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 raise ValueError("需要 --run 或任务有活跃运行")
             from csboard.adapters.whiteboard.renderer_adapter import WhiteboardRendererAdapter
             renderer = WhiteboardRendererAdapter()
-            return commands.render_visuals(args.task, run_id, renderer)
+            return commands.stage_run(args.task, run_id, args.stage)
         elif args.stage == "compose-video":
             task = commands.repository.get_task(args.task)
             run_id = getattr(args, "run", None) or task.active_run_id
@@ -330,7 +328,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 raise ValueError("需要 --run 或任务有活跃运行")
             from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
             media = FFmpegMediaAdapter()
-            return commands.compose_video(args.task, run_id, media)
+            return commands.stage_run(args.task, run_id, args.stage)
         else:
             if args.stage not in commands.pipeline._executors:
                 raise DomainError("CAPABILITY_NOT_AVAILABLE", f"stage.run.{args.stage} 将在后续 Mountain PR 提供")
@@ -338,7 +336,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             run_id = getattr(args, "run", None) or task.active_run_id
             if not run_id:
                 raise ValueError("需要 --run 或任务有活跃运行")
-            return commands.pipeline_run(args.task, run_id, "targeted", args.stage)
+            return commands.stage_run(args.task, run_id, args.stage)
 
     if (args.resource, args.action) == ("stage", "retry"):
         task = commands.repository.get_task(args.task)

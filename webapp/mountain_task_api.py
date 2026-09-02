@@ -248,9 +248,7 @@ def mountain_task_router(
     def run_stage(task_id: str, run_id: str, stage: str):
         """运行指定阶段。"""
         try:
-            return commands.pipeline_run(
-                task_id, run_id, "targeted", stage, _context()
-            )
+            return commands.stage_run(task_id, run_id, stage, _context())
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:

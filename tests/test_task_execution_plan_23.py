@@ -22,7 +22,9 @@ from csboard.adapters.secrets.secret_store import PlaintextSecretStore
 from csboard.application.commands import MountainCommands
 from csboard.application.service_resolver import ServiceResolver
 from csboard.domain.errors import DomainError
+from csboard.domain.enums import StageStatus
 from csboard.domain.execution_plan import ExecutionPlan
+from csboard.domain.models import StageState
 from csboard.domain.service_definition import ServiceDefinition
 from webapp.error_contract import domain_error_response
 from webapp.mountain_server import create_app
@@ -46,11 +48,13 @@ def _task(client: TestClient, title: str = "执行计划验收任务") -> str:
 
 
 def _save(client: TestClient, task_id: str, script: str = SCRIPT_A,
-          plan: dict[str, object] = PLAN_A, reference: bytes | None = None) -> dict:
+          plan: dict[str, object] = PLAN_A, reference: bytes | None = None,
+          visual_anchor_enabled: bool = True) -> dict:
     response = client.post(
         f"/api/v1/tasks/{task_id}/inputs",
         data={"script": script, "execution_mode": plan["mode"],
-              "manual_stages": json.dumps(plan["manual_stages"])},
+              "manual_stages": json.dumps(plan["manual_stages"]),
+              "visual_anchor_enabled": str(visual_anchor_enabled).lower()},
         files={} if reference is None else {
             "reference": ("reference.wav", io.BytesIO(reference), "audio/wav")},
     )
@@ -103,7 +107,7 @@ def test_execution_plan_same_source_api_repository_and_cli_subprocess(tmp_path: 
     client = TestClient(create_app(tmp_path))
     task_id = _task(client)
     expected = {"mode": "selective", "manual_stages": ["generate-illustrations", "compose-video"]}
-    posted = _save(client, task_id, plan=PLAN_B)
+    posted = _save(client, task_id, plan=PLAN_B, visual_anchor_enabled=False)
     api_read = client.get(f"/api/v1/tasks/{task_id}/inputs").json()
     rebuilt = MountainCommands(tmp_path, repository=FilesystemTaskRepository(tmp_path)).get_inputs(task_id)
     completed = subprocess.run(
@@ -113,6 +117,12 @@ def test_execution_plan_same_source_api_repository_and_cli_subprocess(tmp_path: 
     assert api_read["execution_plan"] == expected
     assert rebuilt["execution_plan"] == expected
     assert json.loads(completed.stdout)["execution_plan"] == expected
+    expected_preparation = (FilesystemTaskRepository(tmp_path).read_json(
+        tmp_path / "tasks" / task_id / "task.json")["script_preparation"])
+    assert api_read["script_preparation"] == expected_preparation
+    assert rebuilt["script_preparation"] == expected_preparation
+    assert api_read["visual_anchor_enabled"] is False
+    assert rebuilt["visual_anchor_enabled"] is False
 
 
 def test_old_request_and_unsaved_inputs_default_auto_are_read_only(tmp_path: Path) -> None:
@@ -223,19 +233,67 @@ def test_auto_start_is_fast_and_does_not_enter_pipeline(tmp_path: Path) -> None:
 def test_selective_start_and_notfound_boundaries_are_side_effect_free(tmp_path: Path) -> None:
     client = TestClient(create_app(tmp_path))
     task_id = _task(client)
-    _save(client, task_id, plan=PLAN_B)
+    plan = {"mode": "selective", "manual_stages": ["generate-visual-anchors"]}
+    _save(client, task_id, plan=plan)
     task_dir = tmp_path / "tasks" / task_id
     run_id = FilesystemTaskRepository(tmp_path).get_task(task_id).active_run_id or ""
     before = _snapshot(task_dir)
     response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "EXECUTION_PLAN_NOT_READY"
-    assert response.json()["error"]["retryable"] is False
-    assert response.json()["error"]["details"]["suggestion"]
+    assert response.status_code == 200
+    assert response.json()["state"] == "waiting-manual-trigger"
+    assert response.json()["next_stage"] == "generate-visual-anchors"
+    assert response.json()["manual_stages"] == plan["manual_stages"]
     assert _snapshot(task_dir) == before
     assert client.post(f"/api/v1/tasks/{task_id}/runs/missing-run/start").status_code == 404
     other = _task(client, "另一个任务")
     assert client.post(f"/api/v1/tasks/{other}/runs/{run_id}/start").status_code == 404
+
+
+def test_cli_subprocess_observes_the_same_immediate_manual_decision(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path))
+    task_id = _task(client)
+    _save(client, task_id, plan={"mode": "selective", "manual_stages": ["generate-visual-anchors"]})
+    run_id = FilesystemTaskRepository(tmp_path).get_task(task_id).active_run_id or ""
+    completed = subprocess.run(
+        [sys.executable, "-m", "cli.csboard", "--data-dir", str(tmp_path), "pipeline", "run",
+         "--task", task_id, "--run", run_id, "--json"],
+        cwd=Path(__file__).parents[1], text=True, capture_output=True, check=True, timeout=30)
+    decision = json.loads(completed.stdout)
+    assert decision["state"] == "waiting-manual-trigger"
+    assert decision["next_stage"] == "generate-visual-anchors"
+
+
+def test_concurrent_pipeline_calls_do_not_duplicate_automatic_prefix(tmp_path: Path) -> None:
+    commands = MountainCommands(tmp_path, repository=FilesystemTaskRepository(tmp_path))
+    created = commands.create_task("并发执行计划")
+    task_id, run_id = created["task_id"], created["run_id"]
+    repository = commands.repository
+    repository.save_request(task_id, {"execution_plan": {
+        "mode": "selective", "manual_stages": ["clone-voice"]}})
+    calls: list[str] = []
+
+    def anchor_executor(executor_task: str, executor_run: str, context: object) -> dict:
+        calls.append(executor_run)
+        run = repository.get_run(executor_task, executor_run)
+        run.stages["generate-visual-anchors"] = StageState(StageStatus.SUCCEEDED, 1)
+        repository.save_run(run)
+        return {"ok": True, "stage": "generate-visual-anchors"}
+
+    commands.pipeline.register_stage("generate-visual-anchors", anchor_executor)
+    barrier = threading.Barrier(2)
+    decisions: list[dict] = []
+
+    def run_pipeline() -> None:
+        barrier.wait(timeout=10)
+        decisions.append(commands.pipeline_run(task_id, run_id))
+
+    left = threading.Thread(target=run_pipeline)
+    right = threading.Thread(target=run_pipeline)
+    left.start(); right.start(); left.join(timeout=30); right.join(timeout=30)
+    assert not left.is_alive() and not right.is_alive()
+    assert calls == [run_id]
+    assert all(item["state"] == "waiting-manual-trigger" for item in decisions)
+    assert all(item["next_stage"] == "clone-voice" for item in decisions)
 
 
 def test_api_cli_event_log_and_diagnostic_are_redacted(tmp_path: Path) -> None:

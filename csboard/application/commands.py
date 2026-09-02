@@ -372,8 +372,10 @@ class MountainCommands:
                     "size_bytes": ref_path.stat().st_size,
                 }
 
-        task = self.repository.get_task(task_id)
-        task_data = task.to_dict()
+        # Task is a stable domain DTO and intentionally ignores unknown JSON
+        # fields.  Input preparation is persisted alongside it, so read the
+        # stored document here rather than serializing the DTO back again.
+        task_data = self.repository.read_json(self.repository.task_dir(task_id) / "task.json")
         preparation = task_data.get("script_preparation")
         visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
 
@@ -415,14 +417,12 @@ class MountainCommands:
         if not request_data:
             raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
 
-        execution_plan = ExecutionPlan.from_dict(request_data.get("execution_plan", {}))
-        if execution_plan.mode == "selective":
-            raise DomainError(
-                "EXECUTION_PLAN_NOT_READY",
-                "selective 执行计划尚未启用手动阶段编排",
-                retryable=False,
-                details={"suggestion": "手动阶段编排尚未启用"},
-            )
+        execution_plan = self._execution_plan(task_id)
+        # An immediate manual gate is a decision, not an attempt to execute.
+        # Do not demand provider configuration merely to tell the caller which
+        # explicit stage trigger is required next.
+        if self.pipeline.get_next_stage(run) in execution_plan.manual_stages:
+            return self.pipeline_run(task_id, run_id, policy, context=context)
 
         # 检查 capability 可用性
         if self.service_resolver is not None:
@@ -780,54 +780,70 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Retry a stage, optionally scoped to a specific unit or visual."""
-        run = self.repository.get_run(task_id, run_id)
-        context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        with self.repository.task_lock(task_id):
+            run = self.repository.get_run(task_id, run_id)
+            context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
-        # Reset the stage status
-        stage_state = run.stages.get(stage)
-        if stage_state is None:
-            raise NotFoundError(f"阶段 {stage} 未在运行中注册")
-        if stage_state.status not in (StageStatus.FAILED, StageStatus.SUCCEEDED, StageStatus.STALE):
-            raise DomainError("INVALID_STATE", f"阶段 {stage} 当前状态为 {stage_state.status.value}，无法重试")
+            # Reset the stage status
+            stage_state = run.stages.get(stage)
+            if stage_state is None:
+                raise NotFoundError(f"阶段 {stage} 未在运行中注册")
+            if stage_state.status not in (StageStatus.FAILED, StageStatus.SUCCEEDED, StageStatus.STALE):
+                raise DomainError("INVALID_STATE", f"阶段 {stage} 当前状态为 {stage_state.status.value}，无法重试")
 
-        # Mark downstream stages as stale
-        from csboard.application.pipeline import STAGE_ORDER
-        try:
-            stage_idx = STAGE_ORDER.index(stage)
-        except ValueError:
-            raise DomainError("VALIDATION_ERROR", f"未知阶段: {stage}")
-        for downstream in STAGE_ORDER[stage_idx + 1:]:
-            if downstream in run.stages:
-                run.stages[downstream].status = StageStatus.STALE
+            # Mark downstream stages as stale
+            from csboard.application.pipeline import STAGE_ORDER
+            try:
+                stage_idx = STAGE_ORDER.index(stage)
+            except ValueError:
+                raise DomainError("VALIDATION_ERROR", f"未知阶段: {stage}")
+            for downstream in STAGE_ORDER[stage_idx + 1:]:
+                if downstream in run.stages:
+                    run.stages[downstream].status = StageStatus.STALE
 
-        # Reset target stage
-        run.stages[stage] = StageState(StageStatus.PENDING, stage_state.attempt)
-        run.status = RunStatus.RUNNING
-        run.command_ids.append(context.command_id)
-        self.repository.save_run(run)
+            # Reset target stage
+            run.stages[stage] = StageState(StageStatus.PENDING, stage_state.attempt)
+            run.status = RunStatus.RUNNING
+            run.command_ids.append(context.command_id)
+            self.repository.save_run(run)
 
-        self.telemetry.append_event(task_id, run_id, {
-            "event_type": "StageRetryRequested",
-            "stage": stage,
-            "unit_id": unit_id,
-            "visual_id": visual_id,
-        })
-        self.telemetry.append_audit(task_id, run_id, {
-            "action": "stage.retry",
-            "stage": stage,
-            "command_id": context.command_id,
-            "unit_id": unit_id,
-            "visual_id": visual_id,
-        })
+            self.telemetry.append_event(task_id, run_id, {
+                "event_type": "StageRetryRequested",
+                "stage": stage,
+                "unit_id": unit_id,
+                "visual_id": visual_id,
+            })
+            self.telemetry.append_audit(task_id, run_id, {
+                "action": "stage.retry",
+                "stage": stage,
+                "command_id": context.command_id,
+                "unit_id": unit_id,
+                "visual_id": visual_id,
+            })
 
-        # Execute the stage via pipeline
-        result = self.pipeline.run_pipeline(
-            task_id, run_id,
-            policy="targeted",
-            target_stage=stage,
-            context=context,
+            execution_plan = self._execution_plan(task_id)
+            return self.pipeline.run_pipeline(
+                task_id, run_id,
+                policy="targeted",
+                target_stage=stage,
+                context=context,
+                execution_plan=execution_plan,
+                manual_trigger_stage=stage if stage in execution_plan.manual_stages else None,
+            )
+
+    def stage_run(
+        self,
+        task_id: str,
+        run_id: str,
+        stage: str,
+        context: CommandContext | None = None,
+    ) -> dict[str, Any]:
+        """Explicitly trigger a stage, including a configured manual gate."""
+        execution_plan = self._execution_plan(task_id)
+        return self.pipeline_run(
+            task_id, run_id, "targeted", stage, context,
+            manual_trigger_stage=stage if stage in execution_plan.manual_stages else None,
         )
-        return result
 
     def pipeline_run(
         self,
@@ -836,6 +852,7 @@ class MountainCommands:
         policy: str = "auto",
         target_stage: str | None = None,
         context: CommandContext | None = None,
+        manual_trigger_stage: str | None = None,
     ) -> dict[str, Any]:
         """Run the pipeline with the given policy."""
         task = self.repository.get_task(task_id)
@@ -843,13 +860,20 @@ class MountainCommands:
             run_id = task.active_run_id
         if not run_id:
             raise NotFoundError("任务没有活跃的运行")
-        context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_audit(task_id, run_id, {
-            "action": "pipeline.run",
-            "policy": policy,
-            "command_id": context.command_id,
-        })
-        return self.pipeline.run_pipeline(task_id, run_id, policy, target_stage, context)
+        with self.repository.task_lock(task_id):
+            context = context or CommandContext(entrypoint=Entrypoint.CLI)
+            result = self.pipeline.run_pipeline(
+                task_id, run_id, policy, target_stage, context,
+                execution_plan=self._execution_plan(task_id),
+                manual_trigger_stage=manual_trigger_stage,
+            )
+            if result.get("state") != "waiting-manual-trigger" or result.get("stages_executed"):
+                self.telemetry.append_audit(task_id, run_id, {
+                    "action": "pipeline.run",
+                    "policy": policy,
+                    "command_id": context.command_id,
+                })
+            return result
 
     def pipeline_resume(
         self,
@@ -864,13 +888,24 @@ class MountainCommands:
             run_id = task.active_run_id
         if not run_id:
             raise NotFoundError("任务没有活跃的运行")
-        context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_audit(task_id, run_id, {
-            "action": "pipeline.resume",
-            "policy": policy,
-            "command_id": context.command_id,
-        })
-        return self.pipeline.resume_pipeline(task_id, run_id, policy, context)
+        with self.repository.task_lock(task_id):
+            context = context or CommandContext(entrypoint=Entrypoint.CLI)
+            result = self.pipeline.resume_pipeline(
+                task_id, run_id, policy, context,
+                execution_plan=self._execution_plan(task_id),
+            )
+            if result.get("state") != "waiting-manual-trigger" or result.get("stages_executed"):
+                self.telemetry.append_audit(task_id, run_id, {
+                    "action": "pipeline.resume",
+                    "policy": policy,
+                    "command_id": context.command_id,
+                })
+            return result
+
+    def _execution_plan(self, task_id: str) -> ExecutionPlan:
+        """Load the sole persisted execution decision source for every entrypoint."""
+        request = self.repository.get_request(task_id) or {}
+        return ExecutionPlan.from_dict(request.get("execution_plan", {}))
 
     # ── Stage executor wrappers ──────────────────────────────────────
 

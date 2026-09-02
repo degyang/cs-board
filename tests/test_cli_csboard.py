@@ -57,7 +57,7 @@ class CliCsboardTest(unittest.TestCase):
         task_json.write_text(json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8")
         code, segmented = self.invoke("stage", "run", "--task", task_id, "--run", created["run_id"], "--stage", "generate-visual-anchors", "--json")
         self.assertEqual(code, EXIT_OK)
-        self.assertEqual(segmented["artifacts"], ["planning.av-plan"])
+        self.assertEqual(segmented["results"][0]["artifacts"], ["planning.av-plan"])
         # Use an unregistered stage (custom-stage is not implemented)
         code, result = self.invoke("stage", "run", "--task", task_id, "--stage", "custom-stage", "--json")
         self.assertEqual(code, EXIT_VALIDATION)
