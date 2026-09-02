@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { chromium } from '@playwright/test'
 
@@ -10,8 +11,27 @@ const viewport = (process.env.GOLDEN_VIEWPORT ?? '1366x900').split('x').map(Numb
 if (viewport.length !== 2 || viewport.some((n) => !Number.isFinite(n))) throw new Error('GOLDEN_VIEWPORT must be WIDTHxHEIGHT')
 const evidence = path.join(root, 'docs/Mountain/webui-parity-evidence/WEB-PARITY-004')
 const actual = path.join(evidence, 'actual')
+const goldenManifestPath = path.join(evidence, 'golden-manifest.json')
 const issues = []
 const fail = (message) => { throw new Error(`Parity evidence assertion failed: ${message}`) }
+
+const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex')
+const pngSize = (bytes) => {
+  if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.readUInt32BE(12) !== 0x49484452) return null
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
+const approvedGolden = JSON.parse(await fs.readFile(goldenManifestPath, 'utf8'))
+if (approvedGolden.source?.commit !== '0f56e824c0d49ab5c090e7ea07086dc9d47f47a9') fail('golden source commit is not the approved immutable prototype')
+if (approvedGolden.capture?.viewport?.width !== viewport[0] || approvedGolden.capture?.viewport?.height !== viewport[1] || approvedGolden.capture?.dpr !== 1 || approvedGolden.capture?.zoom !== '100%') fail('golden capture settings do not match the contract')
+if (approvedGolden.goldens?.length !== 5) fail(`golden manifest contains ${approvedGolden.goldens?.length ?? 0} groups, expected five`)
+for (const item of approvedGolden.goldens) {
+  const file = path.join(evidence, 'golden', path.basename(item.golden_file))
+  const bytes = await fs.readFile(file)
+  const size = pngSize(bytes)
+  if (!size || size.width !== viewport[0] || size.height !== viewport[1]) fail(`golden ${item.id} is not ${viewport[0]}x${viewport[1]}`)
+  if (bytes.length !== item.bytes || sha256(bytes) !== item.sha256) fail(`golden ${item.id} hash or byte count differs from the approved manifest`)
+}
 
 const apiRoot = api.replace(/\/$/, '').endsWith('/api/v1') ? api.replace(/\/$/, '') : `${api.replace(/\/$/, '')}/api/v1`
 const health = await fetch(`${apiRoot}/tasks?limit=1`)
@@ -27,11 +47,11 @@ page.on('requestfailed', (request) => issues.push(`request:${request.method()} $
 page.on('response', (response) => { if (new URL(response.url()).pathname.startsWith('/api/') && response.status() >= 400) issues.push(`http:${response.status()} ${new URL(response.url()).pathname}`) })
 
 const captures = [
-  { name: 'brand-shell', route: '/' },
-  { name: 'task-queue', route: '/' },
-  { name: 'task-create-six-tabs', route: '/tasks/new' },
-  { name: 'settings', route: '/settings/models' },
-  { name: 'assets', route: '/assets' },
+  { name: 'brand-shell', route: '/help', golden: '01-brand-shell.png', prototypeRoute: '/help' },
+  { name: 'task-queue', route: '/', golden: '02-task-queue.png', prototypeRoute: '/projects' },
+  { name: 'task-create-six-tabs', route: '/tasks/new', golden: '03-create-six-tabs.png', prototypeRoute: '/create' },
+  { name: 'settings', route: '/settings/models', golden: '04-settings.png', prototypeRoute: '/settings' },
+  { name: 'assets', route: '/assets', golden: '05-assets.png', prototypeRoute: '/assets' },
 ]
 for (const capture of captures) {
   await page.goto(`${web}${capture.route}`, { waitUntil: 'networkidle' })
@@ -47,14 +67,40 @@ for (const capture of captures) {
 }
 if (issues.length) fail(issues.join('\n'))
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+const screenshotRecords = []
+for (const capture of captures) {
+  const actualFile = path.join(actual, `${capture.name}.png`)
+  const actualBytes = await fs.readFile(actualFile)
+  const size = pngSize(actualBytes)
+  if (!size || size.width !== viewport[0] || size.height !== viewport[1]) fail(`actual ${capture.name} is not ${viewport[0]}x${viewport[1]}`)
+  const goldenItem = approvedGolden.goldens.find((item) => item.golden_file.endsWith(`/${capture.golden}`))
+  if (!goldenItem) fail(`no approved golden mapping for ${capture.name}`)
+  screenshotRecords.push({
+    name: capture.name,
+    production_route: capture.route,
+    prototype_route: capture.prototypeRoute,
+    golden: `golden/${capture.golden}`,
+    actual: `actual/${capture.name}.png`,
+    golden_sha256: goldenItem.sha256,
+    actual_sha256: sha256(actualBytes),
+    width: size.width,
+    height: size.height,
+    dpr: 1,
+  })
+}
 const manifest = {
   task: 'WEB-PARITY-004', viewport: { width: viewport[0], height: viewport[1], dpr: 1 },
+  zoom: '100%',
   generation_commit: commit,
-  golden_source: 'docs/Mountain/webui-prototype-baseline/screenshots/settings',
-  route_mappings: captures.map(({ name, route }) => ({ name, production: route, golden: name === 'settings' ? 'settings/01-models.png' : 'prototype visual reference' })),
-  screenshots: captures.map(({ name }) => `actual/${name}.png`),
+  golden_source: approvedGolden.source,
+  route_mappings: screenshotRecords,
   real_api: apiRoot,
-  browser_counters: { console_errors: 0, page_errors: 0, failed_requests: 0, http_errors: 0 },
+  browser_counters: {
+    console_errors: issues.filter((issue) => issue.startsWith('console:')).length,
+    page_errors: issues.filter((issue) => issue.startsWith('pageerror:')).length,
+    failed_requests: issues.filter((issue) => issue.startsWith('request:')).length,
+    http_errors: issues.filter((issue) => issue.startsWith('http:')).length,
+  },
 }
 await fs.writeFile(path.join(evidence, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 await browser.close()

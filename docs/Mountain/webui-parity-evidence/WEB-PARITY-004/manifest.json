@@ -5,41 +5,76 @@
     "height": 900,
     "dpr": 1
   },
-  "generation_commit": "51656c91bb378d3a62ce5668d9d1c8b861de4847",
-  "golden_source": "docs/Mountain/webui-prototype-baseline/screenshots/settings",
+  "zoom": "100%",
+  "generation_commit": "d7819d234b292e1014d61b25fe976b8dc5f6628d",
+  "golden_source": {
+    "kind": "git-tracked prototype",
+    "commit": "0f56e824c0d49ab5c090e7ea07086dc9d47f47a9",
+    "path": "prototypes/webui",
+    "origin": "http://127.0.0.1:5182",
+    "mode": "loopback read-only preview"
+  },
   "route_mappings": [
     {
       "name": "brand-shell",
-      "production": "/",
-      "golden": "prototype visual reference"
+      "production_route": "/help",
+      "prototype_route": "/help",
+      "golden": "golden/01-brand-shell.png",
+      "actual": "actual/brand-shell.png",
+      "golden_sha256": "a33f02db0b429b3617a717279d926588cadd1c65debbe19c5c02a7c10836117a",
+      "actual_sha256": "0934f7d0acf7c1c92efcf896a9f6181b4a2f21d006ad4e1b0e8725831f09288a",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1
     },
     {
       "name": "task-queue",
-      "production": "/",
-      "golden": "prototype visual reference"
+      "production_route": "/",
+      "prototype_route": "/projects",
+      "golden": "golden/02-task-queue.png",
+      "actual": "actual/task-queue.png",
+      "golden_sha256": "2d6f574ec828a2742747a4c767572d0a089797b9c464f9e529905c7b344b47f5",
+      "actual_sha256": "a707e6e14871e2842a43d746a2bbd76b5ba04a95e285b55f20a255330d35d17e",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1
     },
     {
       "name": "task-create-six-tabs",
-      "production": "/tasks/new",
-      "golden": "prototype visual reference"
+      "production_route": "/tasks/new",
+      "prototype_route": "/create",
+      "golden": "golden/03-create-six-tabs.png",
+      "actual": "actual/task-create-six-tabs.png",
+      "golden_sha256": "993d4f8ee3d4490586c8f26e39d119366d67245a459e495d44a150a7c0bed545",
+      "actual_sha256": "0ba4dbb4b57e9ad708771145240c570b613777fda9e3f0c7fbd14fa928c3ff7e",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1
     },
     {
       "name": "settings",
-      "production": "/settings/models",
-      "golden": "settings/01-models.png"
+      "production_route": "/settings/models",
+      "prototype_route": "/settings",
+      "golden": "golden/04-settings.png",
+      "actual": "actual/settings.png",
+      "golden_sha256": "c4049516bb0e945e02b2ff6c1f3cd128186a02bd83e6001e2ce94de23c36ac3f",
+      "actual_sha256": "cf9138bfd44e46422bcddfa3d98fa4c43c9d290d0846b5e4f4a55ce75fa4ffd5",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1
     },
     {
       "name": "assets",
-      "production": "/assets",
-      "golden": "prototype visual reference"
+      "production_route": "/assets",
+      "prototype_route": "/assets",
+      "golden": "golden/05-assets.png",
+      "actual": "actual/assets.png",
+      "golden_sha256": "0b42a9ab01306819137ae08343b04632b7b7b757db6e7dec592429488969b0c1",
+      "actual_sha256": "892829df54cae848de84043c4a0429d5a2a7a1e15d12eacb4f930de311f3726f",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1
     }
-  ],
-  "screenshots": [
-    "actual/brand-shell.png",
-    "actual/task-queue.png",
-    "actual/task-create-six-tabs.png",
-    "actual/settings.png",
-    "actual/assets.png"
   ],
   "real_api": "http://127.0.0.1:8000/api/v1",
   "browser_counters": {

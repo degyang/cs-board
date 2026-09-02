@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "git-tracked prototype",
+    "commit": "0f56e824c0d49ab5c090e7ea07086dc9d47f47a9",
+    "path": "prototypes/webui",
+    "origin": "http://127.0.0.1:5182",
+    "mode": "loopback read-only preview"
+  },
+  "capture": {
+    "viewport": {
+      "width": 1366,
+      "height": 900
+    },
+    "dpr": 1,
+    "zoom": "100%",
+    "browser": "Playwright Chromium",
+    "browser_issues": {
+      "console_error": 0,
+      "pageerror": 0,
+      "failed_request": 0,
+      "http_gte_400": 0
+    }
+  },
+  "goldens": [
+    {
+      "id": "01-brand-shell",
+      "purpose": "品牌壳",
+      "prototype_route": "/help",
+      "golden_file": "docs/Mountain/webui-prototype-baseline/screenshots/WEB-PARITY-004/golden/01-brand-shell.png",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1,
+      "sha256": "a33f02db0b429b3617a717279d926588cadd1c65debbe19c5c02a7c10836117a",
+      "bytes": 173408
+    },
+    {
+      "id": "02-task-queue",
+      "purpose": "任务队列（历史 Project 路由的视觉映射；正式产品对应 /tasks）",
+      "prototype_route": "/projects",
+      "golden_file": "docs/Mountain/webui-prototype-baseline/screenshots/WEB-PARITY-004/golden/02-task-queue.png",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1,
+      "sha256": "2d6f574ec828a2742747a4c767572d0a089797b9c464f9e529905c7b344b47f5",
+      "bytes": 154796
+    },
+    {
+      "id": "03-create-six-tabs",
+      "purpose": "六 Tab 新建任务映射（历史 Project 创建页的视觉映射；正式产品对应 /tasks/new）",
+      "prototype_route": "/create",
+      "golden_file": "docs/Mountain/webui-prototype-baseline/screenshots/WEB-PARITY-004/golden/03-create-six-tabs.png",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1,
+      "sha256": "993d4f8ee3d4490586c8f26e39d119366d67245a459e495d44a150a7c0bed545",
+      "bytes": 87886
+    },
+    {
+      "id": "04-settings",
+      "purpose": "设置",
+      "prototype_route": "/settings",
+      "golden_file": "docs/Mountain/webui-prototype-baseline/screenshots/WEB-PARITY-004/golden/04-settings.png",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1,
+      "sha256": "c4049516bb0e945e02b2ff6c1f3cd128186a02bd83e6001e2ce94de23c36ac3f",
+      "bytes": 154049
+    },
+    {
+      "id": "05-assets",
+      "purpose": "资产",
+      "prototype_route": "/assets",
+      "golden_file": "docs/Mountain/webui-prototype-baseline/screenshots/WEB-PARITY-004/golden/05-assets.png",
+      "width": 1366,
+      "height": 900,
+      "dpr": 1,
+      "sha256": "0b42a9ab01306819137ae08343b04632b7b7b757db6e7dec592429488969b0c1",
+      "bytes": 265580
+    }
+  ]
+}
