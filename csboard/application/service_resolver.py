@@ -43,10 +43,7 @@ class ServiceResolver:
 
         无可用服务时抛出 CAPABILITY_NOT_AVAILABLE。
         """
-        services = [
-            service for service in self._registry.list_services(capability=capability, enabled=True)
-            if self._registry.has_required_secrets(service)
-        ]
+        services = self._registry.list_services(capability=capability, enabled=True)
         if not services:
             raise DomainError(
                 "CAPABILITY_NOT_AVAILABLE",
