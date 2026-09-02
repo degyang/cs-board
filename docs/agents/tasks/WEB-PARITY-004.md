@@ -1,7 +1,7 @@
 # WEB-PARITY-004：WebUI 原型逐页对齐审计与修复
 
 - Owner: WEB
-- Status: BLOCKED
+- Status: CHANGES_REQUESTED
 - Priority: P0
 - Depends on: `WEB-INTAKE-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -136,3 +136,16 @@ CEO 必须先提供以下任一 Git 可验证、不可变输入，才能解除�
 
 WEB 分支已推送且报告记录全部契约门禁正常退出；本节只登记独立审核入口，不代表 CEO、用户、发布或
 合并批准。Reviewer 必须以 attempt 2 交付与已批准 golden 为边界独立复核。
+
+## Attempt 2 independent review
+
+- Review: `docs/agents/reviews/WEB-PARITY-004.md`
+- Review commit: `de37fe1`
+- Verdict: `CHANGES_REQUESTED`
+
+五组 golden/actual、hash/manifest、视觉抽查、build、349 tests 与 diff check 均通过；唯一失败是 verifier
+源码新增 legacy `/projects` 字面量，触发既定 forbidden-pattern gate。attempt 3 只允许从 verifier 源码
+移除该旧契约引用，同时把已批准 prototype-to-Task 视觉映射保留在 evidence/manifest；重新运行全部原
+门禁。不得修改 prototype、backend、Work Order 或领取 `WEB-WO-003`。
+
+- Attempt 3 dispatch state: not dispatched

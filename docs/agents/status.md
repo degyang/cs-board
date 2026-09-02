@@ -18,10 +18,10 @@
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `WEB-PARITY-004` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-PARITY-004.md` | `cdda872` | attempt 2 delivered; independent review pending |
+| `WEB-PARITY-004` | WEB | CHANGES_REQUESTED | `docs/agents/tasks/WEB-PARITY-004.md` | `cdda872` | attempt 3 verifier legacy `/projects` removal; not dispatched |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | attempt 2 controlled 4xx/full-suite correction dispatched |
+| `MEDIA-PREFLIGHT-004` | MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -134,6 +134,13 @@
 - `MEDIA-PREFLIGHT-004` attempt 2 已按纠正优先级异步派发，沿用 `gpt-5.6-terra + medium`；提交
   tracked `DISPATCHED` 后仅调用 supervised dispatcher，由 wrapper 独占发布 Worker runtime。PM 不等待
   长门禁，`MEDIA-E2E-003` 继续阻塞。
+- `MEDIA-PREFLIGHT-004@4610cbb` 已补齐 controlled 4xx 且 focused/Skills 门禁通过，但注册 Worker 的
+  全量 pytest 再次在 180 秒以 124 结束；交付报告明确为 `BLOCKED`，不能按 record-review-ready 标签
+  伪记通过。超时位于 `test_inputs_and_start_boundary` 且超出 MEDIA 允许面，后续需独立 runtime 诊断；
+  `MEDIA-E2E-003` 继续阻塞。
+- `WEB-PARITY-004@cdda872` attempt 2 独立评审提交 `de37fe1` 结论为 `CHANGES_REQUESTED`：五组视觉
+  证据与工程门禁均通过，唯一缺口是 verifier 源码新增 `/projects` 字面量触发 forbidden scan。CEO 记录
+  仅移除 verifier legacy 引用的 bounded attempt 3，本轮不派发，`WEB-WO-003` 不得越过。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

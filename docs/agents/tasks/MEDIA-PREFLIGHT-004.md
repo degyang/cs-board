@@ -1,7 +1,7 @@
 # MEDIA-PREFLIGHT-004：真实媒体依赖 fail-closed 预检
 
 - Owner: MEDIA
-- Status: DISPATCHED
+- Status: BLOCKED
 - Priority: P0
 - Depends on: `MEDIA-SKILLS-003=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-media`
@@ -99,3 +99,14 @@ pytest 自身正常 exit 0，或诊断 delivery 相关回归并准确修正报�
 可继续如实 nonzero。`MEDIA-E2E-003` 继续阻塞。
 
 - Attempt 2 dispatch state: `DISPATCHED`
+
+## Attempt 2 blocked handoff
+
+- Delivery: `4610cbb`
+- Report: `docs/agents/reports/MEDIA-PREFLIGHT-004.md`
+- State: `BLOCKED`
+
+受控 HTTP 404/503、focused 6 passed、Skills validation、diff 与报告扫描均通过；但注册 Worker 再次运行
+全量 pytest 时在 180 秒 cleanup-only watchdog 下 exit 124，未获得 pytest 自身正常退出证据。该超时发生
+在 `test_inputs_and_start_boundary`，超出本任务允许修改面；不得登记 `REVIEW_READY`，也不得派发
+`MEDIA-E2E-003`。需要 CEO 后续建立独立有界 runtime 诊断契约后再决定恢复路径。
