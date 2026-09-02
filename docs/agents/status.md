@@ -125,6 +125,8 @@
 - `PROTOTYPE-GOLDEN-005@b4287d9` attempt 2 独立评审提交 `2dd4e99` 结论为 `APPROVED`：连续复验五张
   golden 与 manifest 字节稳定、默认 fail closed、显式 `--update` 才更新，且无 `web-v2`/视觉源码越界。
   CEO 据此批准并解除 WEB golden blocker，立即派发 `WEB-PARITY-004` attempt 2；不构成用户验收或发布批准。
+- PROTOTYPE 唯一任务已批准且 WEB blocker 已解除，CEO 已按动态角色规则回收其当前注册和瞬时 runtime；
+  历史任务、golden、报告与审核保留，后续确有新原型任务时再按适中能力重新注册。
 - `PROTOTYPE-GOLDEN-005` attempt 2 实现 `7db041b` 与报告交付 `b4287d9` 已提交推送且分支干净；本轮
   仅登记 `REVIEW_READY`，不解除 WEB blocker。`MEDIA-PREFLIGHT-004@8532302` 独立评审提交 `a8a4aca`
   结论为 `CHANGES_REQUESTED`：缺少 controlled 4xx 证据，且全量 pytest 未能在评审中复现正常退出；
