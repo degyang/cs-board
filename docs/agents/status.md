@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | pending | P0 independent backend/runtime gate |
-| `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0 dispatched asynchronously ahead of WEB-WO-003 |
+| `WEB-PARITY-004` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | committed delivery; independent visual/contract review pending |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | pending | P0 independent fail-closed readiness gate |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
@@ -60,6 +60,9 @@
   `WEB-WO-003` 保持 `READY` 但排在其后。本决策不构成用户、发布或合并审核批准。
 - `WEB-PARITY-004` 已固定在 WEB 分支 `feat/mountain-webui-surface-parity`、交付基线 `51656c9`，并按
   P0 顺序异步派发；PM 不等待其长门禁，`WEB-WO-003` 不得并发领取。
+- WEB 已提交并推送 `WEB-PARITY-004@d7819d2`，分支与远端一致且报告存在；本轮只记录
+  `REVIEW_READY` handoff。五组 golden/actual 配对、真实视觉对齐和全部门禁仍需独立 Reviewer 核验，
+  不提前批准或派发同 Owner 的 `WEB-WO-003`。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
