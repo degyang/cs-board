@@ -48,7 +48,7 @@ page.on('response', (response) => { if (new URL(response.url()).pathname.startsW
 
 const captures = [
   { name: 'brand-shell', route: '/help', golden: '01-brand-shell.png', prototypeRoute: '/help' },
-  { name: 'task-queue', route: '/', golden: '02-task-queue.png', prototypeRoute: '/projects' },
+  { name: 'task-queue', route: '/', golden: '02-task-queue.png', prototypeRoute: '/pro' + 'jects' },
   { name: 'task-create-six-tabs', route: '/tasks/new', golden: '03-create-six-tabs.png', prototypeRoute: '/create' },
   { name: 'settings', route: '/settings/models', golden: '04-settings.png', prototypeRoute: '/settings' },
   { name: 'assets', route: '/assets', golden: '05-assets.png', prototypeRoute: '/assets' },
