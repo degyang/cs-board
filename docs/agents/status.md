@@ -82,4 +82,5 @@
 5. Dashboard 心跳只表示有限租约内的真实活动，不表示 Agent 能跨会话自行运行。
 6. 每个 Owner 的 WIP 上限为 1；BACKLOG 不设硬长度上限，按真实里程碑风险滚动维护跨角色后续链；
 7. Reviewer 不设伪造的常驻忙碌任务，只在 Worker 提交 `REVIEW_READY` 事件后生成独立评审工作。
+8. CEO 每个有事件的调度周期先读取 `docs/agents/agreements.md` 最新 `ACTIVE` 时间线节点；用户范围变更只追加新节点，历史不得删除。
 8. M1 期间只派发里程碑契约列出的直接任务；其他想法仅可记为 `POST-M1`，不得占用当前 Worker。
