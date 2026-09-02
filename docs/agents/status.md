@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | SUPERSEDED | `docs/agents/tasks/CEO-RECOVERY-002.md` | `38a98f8` | archived; replaced by independent CEO timer and separate PM |
 | `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `WEB-PARITY-004` | WORKER_WEB | PM_DECISION | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | attempt 3 delivered; awaits TESTER_WEB |
+| `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WORKER_WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | WORKER_MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
@@ -148,6 +148,10 @@
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。
+- `WEB-PARITY-004@9db741f` 的 TESTER_WEB 结果为 `PASS`：精确交付 checkout 上的 build、349 tests、
+  真实 API、五组浏览器 parity、diff 与 forbidden-pattern gates 均通过，且报告记录十张截图的目视核验与
+  临时进程清理。PM 据此批准任务。M1 仍需要既有后续任务 `WEB-WO-003`；本 review-only 事件不派发它，
+  留待独立 PM dispatch 事件处理。
 
 ## 队列规则
 
