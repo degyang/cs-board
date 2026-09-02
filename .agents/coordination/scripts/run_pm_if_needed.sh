@@ -32,10 +32,22 @@ flock -n 9 || exit 0
 event_json="$(python3 "$probe" probe --project "$project_root" --max-actions 1)"
 [[ -n "$event_json" ]] || exit 0
 pm_task="$(python3 -c 'import json,sys; event=json.load(sys.stdin); print(event["actions"][0].get("task_id", "COORDINATION"))' <<<"$event_json")"
+event_kind="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["actions"][0]["kind"])' <<<"$event_json")"
 
 "$node_bin" "$teamctl" agent --project "$project_root" \
   --role PM --state working --task "$pm_task" \
   --cycle 调度 --attempt 1 --lease-seconds 180 >/dev/null
+
+if [[ "$event_kind" == "record-test-ready" || "$event_kind" == "record-test-result" ]]; then
+  python3 "$project_root/.agents/coordination/scripts/apply_pm_transition.py" --project "$project_root" --kind "$event_kind" --task "$pm_task"
+  git -C "$project_root" add docs/agents/status.md "docs/agents/tasks/$pm_task.md"
+  git -C "$project_root" commit -m "docs(agents): advance $pm_task handoff"
+  git -C "$project_root" push origin integration/mountain-v2
+  signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
+  python3 "$probe" ack --project "$project_root" --signature "$signature"
+  pm_result=0
+  exit 0
+fi
 
 readarray -t registration < <(python3 - "$project_root/.agents/coordination/agents.json" <<'PY'
 import json, sys
