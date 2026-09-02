@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: REVIEW_READY
+- Status: CHANGES_REQUESTED
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -145,3 +145,19 @@ Allowed correction surfaces 仅限 `web-v2/scripts/check-api-contract.mjs`、必
 - State: `REVIEW_READY`
 
 Worker 已提交并推送有界 checker/report 纠正；等待新的独立复核，不代表 CEO 批准。
+
+## Attempt 3 bounded correction
+
+- Review: `docs/agents/reviews/WEB-INTAKE-003.md`
+- Verdict: `CHANGES_REQUESTED`
+- Correction base: `0dbbf4e`
+- Dispatch state: not dispatched
+
+只执行独立复审列出的 timeout-strategy、回归测试与报告纠正：默认 checker deadline 必须大于 fresh
+后端 voice-alignment endpoint 的合法近 5 秒边界，同时 silent backend 仍由 checker 自身有界非零退出。
+保留 `AbortController`、silent-server subprocess 的 `signal=null`、自身非零退出与清理断言；增加合法近
+5 秒响应不会被默认 deadline 错杀的测试，并在 fresh 临时 data dir、无 timeout override 条件下修正和
+重跑 live gate 报告。
+
+允许范围仅限两个 checker 脚本、聚焦 checker 测试和交付报告；禁止修改后端 probe、产品页面、API/DTO、
+E2E、截图、manifest、`WEB-PARITY-004` 或 `WEB-WO-003`。本轮仅记录返工状态，尚未派发 Worker。
