@@ -6,12 +6,65 @@ Verdict: `CHANGES_REQUESTED`
 
 - 契约基线：`7dc2a9388faf7d79e991bda0056cca956f1e74ba`；
 - 交付提交：`672f820eef848592d893de931227139d9518b589`；
+- attempt 2 交付：`0dbbf4e9f2759d11200b5c05435c809a2a51ec2c`；
 - 评审差异：`git diff 7dc2a93...672f820`；
+- attempt 2 差异：`git diff 672f820...0dbbf4e`；
 - 交付分支 `feat/mountain-webui-surface-parity` 干净，HEAD 与同名远端分支一致。
 
 任务新增的 intake 脚本、报告和三张证据位于允许范围；其余 Python 变更来自契约明确允许消费的
 `CORE-CAP-004` 和 `CORE-CAP-005` 交付。未修改 Work Order 页面，浏览器请求也未进入 Start、
 Pipeline 或 Stage run/retry。
+
+## Attempt 2 独立复核
+
+attempt 2 严格只修改报告、`check-api-contract.mjs`、`contract-checker-core.mjs` 和既有 checker
+执行测试，符合上轮有界范围。以下纠正已经通过：
+
+- 报告不再包含 `/tmp`、`/home` 或 `/mnt` 绝对路径，并明确记录
+  `VITE_API_BASE_URL=/api/v1`、临时 data dir、API/Vite 端口和测试后停止的命令形状；
+- 实现使用内部 `AbortController`，CLI 允许受控覆盖 deadline；
+- silent backend 测试启动真实本地无响应 HTTP server 和 checker 子进程。独立运行观察到测试的
+  kill timer 未触发、checker 自身退出码非零、`signal=null`，不存在外层 timeout 假通过；
+- focused `16/16`、全量前端 `348/348`、production build、diff、范围和 forbidden scans 均正常退出。
+
+但 fresh 临时 data dir 的真实 Mountain API 正向门禁失败：
+
+```text
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+Voice alignment: Request timed out after 5000ms
+1 contract violation(s) found
+exit 1
+```
+
+API 日志显示同次检查的 services、assets、toolchain、storage、diagnostics 和动态 service 端点均返回
+200；`/settings/voice-alignment` 未能在 checker 的 5 秒 deadline 内完成。该 endpoint 在无缓存时会
+调用 IndexTTS 的真实 probe，而 backend probe 自身就是 5 秒超时，因此 checker 默认 5 秒与被测端点
+形成确定性的边界竞态。报告声称未设置 timeout override 的 live gate 已通过，与 fresh 独立复验不符。
+
+### Attempt 2 当前必须纠正
+
+1. 调整 checker 的内部 timeout 策略，使 fresh data dir 的真实后端正向 gate 在不设置
+   `MOUNTAIN_API_REQUEST_TIMEOUT_MS` 时正常 exit 0，同时 silent backend 仍由 checker 自身有界
+   exit 1。可以使用大于后端单 endpoint 上限的请求 deadline 配合首个 timeout fail-fast，或等价的
+   总体 deadline；不得删除 AbortController、依赖外层 `timeout`，也不得预热/伪造 probe cache。
+2. 增加回归测试，证明一个合法但耗时接近 5 秒边界的响应不会被默认 deadline 错杀，并保留现有
+   silent-server subprocess 的 `signal=null`、自身非零退出和清理断言。
+3. 修正报告的 live gate 证据，并在 fresh 临时 data dir 上按报告命令（无 timeout override）重跑；
+   保持既有路径脱敏和同源生命周期说明。
+
+当前返工仍只允许修改两个 checker 脚本、聚焦 checker 测试和交付报告；不得修改后端 probe、产品页面、
+API/DTO、E2E 脚本、截图、manifest、`WEB-PARITY-004` 或 `WEB-WO-003`。复核命令：
+
+```text
+npm --prefix web-v2 test -- --run tests/contract-checker-exec.test.ts
+npm --prefix web-v2 test -- --run
+npm --prefix web-v2 run build
+MOUNTAIN_API_BASE=http://127.0.0.1:<fresh-api-port> node web-v2/scripts/check-api-contract.mjs
+git diff --check 0dbbf4e...HEAD
+```
+
+真实 API 必须由 fresh 临时 data dir 启动，不能用已有 probe cache 掩盖 5 秒竞态。Worker 提交并推送
+后再次等待独立复核；本 verdict 不批准任务或派发任何后续 WEB 工作。
 
 ## 已通过行为
 
@@ -67,7 +120,7 @@ CORS allowlist 而在创建时失败；改为交付报告所称的 `/api` 同源
 要求自动化脚本在“依赖缺失、服务未启动或 API 错误”时非零退出，因此这一失败属于本任务范围，不能用
 外层 `timeout` 的 124 退出冒充脚本通过。
 
-## 必须纠正
+## Attempt 1 必须纠正（attempt 2 已完成）
 
 1. `docs/agents/reports/WEB-INTAKE-003.md` 把实际 `/tmp/...` data dir 和
    `/home/ubuntu/.../chrome` 写入了提交证据，违反契约“绝对路径不得进入证据”。将它们分别改为
@@ -80,7 +133,7 @@ CORS allowlist 而在创建时失败；改为交付报告所称的 `/api` 同源
    HTTP server/subprocess 行为测试，证明 CLI 在测试规定的上限内自行非零退出并清理子进程，同时保留
    现有真实后端成功路径。
 
-## 有界返工范围
+## Attempt 1 有界返工范围（历史）
 
 只修改 `web-v2/scripts/check-api-contract.mjs`、必要时的
 `web-v2/scripts/contract-checker-core.mjs`、聚焦 checker 的既有测试文件，以及
@@ -101,5 +154,5 @@ git diff --check 672f820...HEAD
 不得写成通过断言。无需重跑或重生成 Playwright 截图，因为 intake 正向浏览器行为已经独立通过且该范围
 不触碰页面或 E2E 脚本。
 
-Worker 提交并推送有界报告修正后，等待 CEO 再次安排独立复核。本 verdict 不批准任务、不合并，
-也不触碰 `WEB-PARITY-004` 或 `WEB-WO-003`。
+上述 attempt 1 范围已由 `0dbbf4e` 交付；当前剩余范围以本文 “Attempt 2 当前必须纠正” 为准。
+本 verdict 不批准任务、不合并，也不触碰 `WEB-PARITY-004` 或 `WEB-WO-003`。
