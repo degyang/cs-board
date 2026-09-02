@@ -21,7 +21,7 @@
 | `CORE-RUNTIME-007` | WORKER_CORE | BLOCKED | `docs/agents/tasks/CORE-RUNTIME-007.md` | pending | supervised dispatcher unavailable; bounded diagnosis for `MEDIA-PREFLIGHT-004` full-suite timeout |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
-| `WEB-WO-003` | WORKER_WEB | CHANGES_REQUESTED | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | TESTER_WEB FAIL: required browser Task-flow evidence failed; bounded attempt 2 required |
+| `WEB-WO-003` | WORKER_WEB | DISPATCHED | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | attempt 2 dispatched to fix the real browser Task flow and deliver passing browser evidence |
 | `MEDIA-PREFLIGHT-004` | WORKER_MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
 | `MEDIA-E2E-003` | WORKER_MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
@@ -186,6 +186,9 @@
   浏览器 Task-flow 证据已记录 POST `/tasks` 超时和 `Failed to fetch`，且无浏览器通过证据。PM 判定
   `CHANGES_REQUESTED`。M1 仍需要该既有任务的有界 attempt 2 来修复真实浏览器流程并交付证据；不创建或
   派发任何后续任务，`MEDIA-E2E-003` 继续等待 `WEB-WO-003=APPROVED` 与 `MEDIA-PREFLIGHT-004=APPROVED`。
+- `WEB-WO-003` 已按该有界返工决定置为 `DISPATCHED` 并交由 `WORKER_WEB` 的受监督 dispatcher 异步执行；
+  attempt 2 仅修复真实浏览器 Task 创建流程并提交通过证据，沿用默认适中配置。当前 Owner 仍有此非终态任务，
+  不生成或派发后续 WEB 工作；`MEDIA-E2E-003` 继续等待既有依赖。
 
 ## 队列规则
 

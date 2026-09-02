@@ -1,7 +1,7 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WORKER_WEB
-- Status: CHANGES_REQUESTED
+- Status: DISPATCHED
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -45,3 +45,11 @@
   `WEB-WO-003` to make the real browser Task flow pass and provide its required browser evidence;
   do not create or dispatch a later task while this owner has this non-terminal work. `MEDIA-E2E-003`
   remains blocked on this approval and `MEDIA-PREFLIGHT-004`.
+
+## Attempt 2 dispatch
+
+- `2026-09-02T18:30:00+08:00` — Dispatched to `WORKER_WEB` after the bound `TESTER_WEB` failure.
+  Scope is limited to making the real browser Task creation flow complete successfully and adding the
+  required passing browser evidence. Preserve the approved API/DTO boundary and all passing gates;
+  do not add orchestration, mocks, backend changes, or a later task. Execution uses the default
+  moderate configuration. Worker must return a verified handoff for `TEST_READY`.
