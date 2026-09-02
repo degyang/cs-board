@@ -15,6 +15,9 @@
 smoke 结束后不得残留 uvicorn、子进程或监听端口。定位并修复真实挂起、skip 或生命周期缺陷；不得只延长
 timeout 或把“未观察到失败”写成通过。
 
+本任务直接服务 `docs/agents/milestone-m1-manual-skills-closure.md`：它只消除人工 Skills 闭环开始前的
+后端挂起、冷启动和脏进程风险，不扩展产品或编排范围。
+
 ## Allowed surfaces
 
 - `tests/` 中聚焦全量退出、真实 launcher、冷启动、API 错误边界和进程清理的测试；
@@ -63,4 +66,3 @@ git diff --check 7ac3cb0...HEAD
 
 提交并推送当前 CORE 分支；报告记录逐门禁真实终态。全部 acceptance 满足才置为 `REVIEW_READY` 并通知
 PM；若真实环境或缺陷阻止正常门禁，置为 `BLOCKED` 并提交可复现证据。不得自行批准或等待 Reviewer。
-

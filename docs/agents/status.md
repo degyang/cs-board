@@ -1,6 +1,7 @@
 # CS Board Agent Coordination
 
-近期目标：用户通过新 WebUI 创建 Task，系统形成六阶段可执行工作单，Codex 按 Skills 完成阶段并生成可播放视频。
+近期唯一目标：完成 `docs/agents/milestone-m1-manual-skills-closure.md` 的人工 Codex Skills 视频闭环；
+工程交付后进入 `USER_ACCEPTANCE`，停止新增开发和自动派工，等待用户从正式 WebUI 创建真实 Task 验收。
 
 | Task | Owner | Status | Contract | Delivery | Review |
 | --- | --- | --- | --- | --- | --- |
@@ -20,7 +21,7 @@
 | `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0 dispatched asynchronously ahead of WEB-WO-003 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | pending | P0 independent fail-closed readiness gate |
-| `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
+| `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
 ## 当前决策
@@ -61,6 +62,9 @@
   P0 顺序异步派发；PM 不等待其长门禁，`WEB-WO-003` 不得并发领取。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
+- 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
+  task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
+  auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。
 
 ## 队列规则
 
@@ -71,3 +75,4 @@
 5. Dashboard 心跳只表示有限租约内的真实活动，不表示 Agent 能跨会话自行运行。
 6. 每个 Owner 的 WIP 上限为 1；BACKLOG 不设硬长度上限，按真实里程碑风险滚动维护跨角色后续链；
 7. Reviewer 不设伪造的常驻忙碌任务，只在 Worker 提交 `REVIEW_READY` 事件后生成独立评审工作。
+8. M1 期间只派发里程碑契约列出的直接任务；其他想法仅可记为 `POST-M1`，不得占用当前 Worker。

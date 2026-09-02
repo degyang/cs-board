@@ -13,6 +13,8 @@
 在不运行六阶段链、不生成付费内容的前提下，为后续 `MEDIA-E2E-003` 建立机器可运行的真实 preflight：
 检查 FFmpeg/ffprobe、Node/Whisper 本地入口、配置的 IndexTTS/Whisper 服务、所需模型/目录和临时工件目录，
 明确区分 ready/unavailable/misconfigured，并在必需依赖缺失、无响应或输出不可写时 fail closed、清理干净。
+同时确认当前 Codex Worker 能访问项目七个 Skills 与 Codex image generation 能力，冻结后续人工
+`generate-illustrations` gate 的唯一图片生成路径；本任务不实际生成图片。
 
 ## Allowed surfaces
 
@@ -45,13 +47,17 @@
 6. 在当前机器实际运行 live preflight 并记录每项 ready/unavailable 与版本摘要。若外部服务当前未启动，
    如实保留 nonzero readiness 结果，但只要检测器的正负门禁均通过可进入评审；`MEDIA-E2E-003` 在 live
    readiness 全绿前仍不得派发；
-7. 报告不得包含 Secret 值、Authorization、完整用户路径或素材；清理后无 preflight HTTP/Node/Python
+7. 实际 Codex Worker 会话必须确认七个项目 `SKILL.md` 可读、`validate_skill_contracts.py` 正常退出，
+   且会话暴露 Codex image generation 能力；报告记录能力名称和后续人工调用/gate 边界，不调用生成，
+   不允许配置脚本、Fake/PIL 或其他 provider 作为 `generate-illustrations` 替代路径；
+8. 报告不得包含 Secret 值、Authorization、完整用户路径或素材；清理后无 preflight HTTP/Node/Python
    child、监听端口或临时工件残留。
 
 ## Gates
 
 ```bash
 /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_media_preflight.py
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/validate_skill_contracts.py
 /mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/check_media_preflight.py --json
 /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
 git diff --check 6fc2924...HEAD
@@ -67,3 +73,5 @@ git diff --check 6fc2924...HEAD
 提交并推送当前 MEDIA 分支，报告给出实现门禁与 live readiness 两类结果并清理所有 probe 资源；置为
 `REVIEW_READY` 后通知 PM。不得自行批准、启动外部服务或进入 `MEDIA-E2E-003`。
 
+本任务只为 `docs/agents/milestone-m1-manual-skills-closure.md` 的人工闭环做前置验证，不授权自动或
+selective 编排。

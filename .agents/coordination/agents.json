@@ -29,8 +29,8 @@
       "capabilities": ["domain", "api", "cli", "persistence", "telemetry"]
     },
     "MEDIA": {
-      "transport": "orchestrator",
-      "thread": "/root/media",
+      "transport": "codex_cli",
+      "thread": "01a06114-4c68-7313-99f0-d83e727e8a8c",
       "worktree": "/mnt/d/workstation/projects/cs-board-media",
       "branch": "feat/mountain-media-work-orders",
       "model": "gpt-5.6-terra",
