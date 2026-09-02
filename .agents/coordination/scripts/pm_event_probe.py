@@ -32,7 +32,13 @@ def read_tasks(root: Path) -> dict[str, dict[str, str]]:
 
 
 ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "BLOCKED"}
-ACTION_ORDER = {"recover-stale": 0, "review": 1, "promote-ready": 2, "dispatch": 3}
+ACTION_ORDER = {
+    "recover-stale": 0,
+    "record-review-ready": 1,
+    "review": 2,
+    "promote-ready": 3,
+    "dispatch": 4,
+}
 COORDINATOR_OWNERS = {"PM"}
 
 
@@ -68,13 +74,29 @@ def recovery_reason(root: Path, task: dict[str, str], now: datetime, lease_secon
     return None
 
 
+def runtime_state(root: Path, owner: str) -> str | None:
+    try:
+        runtime = json.loads(
+            (root / ".agents/coordination/runtime" / f"{owner}.json").read_text(encoding="utf-8")
+        )
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    return runtime.get("state")
+
+
 def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600) -> list[dict[str, object]]:
     tasks = read_tasks(root)
     current_time = now or datetime.now(timezone.utc)
     busy_owners = {task["owner"] for task in tasks.values() if task["status"] in ACTIVE_STATUSES}
     actions: list[dict[str, object]] = []
     for task in tasks.values():
-        if task["status"] == "IN_PROGRESS" and task["owner"] not in COORDINATOR_OWNERS:
+        if (
+            task["status"] in {"DISPATCHED", "IN_PROGRESS"}
+            and task["owner"] not in COORDINATOR_OWNERS
+            and runtime_state(root, task["owner"]) == "review"
+        ):
+            actions.append({"kind": "record-review-ready", **task})
+        elif task["status"] == "IN_PROGRESS" and task["owner"] not in COORDINATOR_OWNERS:
             reason = recovery_reason(root, task, current_time, lease_seconds)
             if reason:
                 actions.append({"kind": "recover-stale", "reason": reason, **task})

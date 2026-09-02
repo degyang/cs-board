@@ -103,6 +103,17 @@ class PMEventProbeTest(unittest.TestCase):
         actions = json.loads(self.probe())["actions"]
         self.assertEqual(actions, [{"kind": "review", "task_id": "WEB-1", "owner": "WEB", "status": "REVIEW_READY"}])
 
+    def test_worker_review_runtime_requests_tracked_review_ready(self) -> None:
+        for status in ("DISPATCHED", "IN_PROGRESS"):
+            with self.subTest(status=status):
+                self.write_status([f"| `WEB-1` | WEB | {status} | pending | abc | pending |"])
+                self.write_runtime("WEB", state="review", task_id="WEB-1")
+                actions = json.loads(self.probe())["actions"]
+                self.assertEqual(
+                    actions,
+                    [{"kind": "record-review-ready", "task_id": "WEB-1", "owner": "WEB", "status": status}],
+                )
+
     def test_missing_runtime_emits_recovery(self) -> None:
         self.write_status(["| `CORE-1` | CORE | IN_PROGRESS | pending | pending | pending |"])
         action = json.loads(self.probe())["actions"][0]
