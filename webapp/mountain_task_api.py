@@ -240,7 +240,24 @@ def mountain_task_router(
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            return domain_error_response(error, status_code=409 if error.code == "STAGE_GATE_REQUIRED" else 400)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/gates")
+    def get_gates(task_id: str, run_id: str):
+        try: return commands.list_gates(task_id, run_id)
+        except NotFoundError as error: return domain_error_response(error, status_code=404)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/stages/{stage}/gate")
+    def get_gate(task_id: str, run_id: str, stage: str):
+        try: return commands.get_gate(task_id, run_id, stage)
+        except NotFoundError as error: return domain_error_response(error, status_code=404)
+        except DomainError as error: return domain_error_response(error, status_code=400)
+
+    @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/gate")
+    def decide_gate(task_id: str, run_id: str, stage: str, payload: dict = Body(...)):
+        try: return commands.decide_gate(task_id, run_id, stage, str(payload.get("decision", "")), str(payload.get("actor", "")), payload.get("note"), payload.get("evidence"))
+        except NotFoundError as error: return domain_error_response(error, status_code=404)
+        except DomainError as error: return domain_error_response(error, status_code=409 if error.code in {"GATE_DECISION_CONFLICT", "INVALID_STATE"} else 400)
 
     # ── Stage Operations ──────────────────────────────────────────────────
 
@@ -252,7 +269,7 @@ def mountain_task_router(
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            return domain_error_response(error, status_code=409 if error.code == "STAGE_GATE_REQUIRED" else 400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/retry")
     def retry_stage(

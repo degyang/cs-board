@@ -23,7 +23,8 @@ from csboard.domain.script_preparation import prepare_script
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.models import Task, Run, StageState
-from csboard.domain.execution_plan import ExecutionPlan
+from csboard.domain.execution_plan import ExecutionPlan, CANONICAL_STAGES
+from csboard.domain.stage_gate import StageGate, GATE_APPROVED, GATE_WAITING, GATE_REJECTED, GATE_REDO
 from csboard.ports.providers import AlignmentPort, ImageModelPort, MediaPort, RendererPort, TextModelPort, TextToSpeechPort
 
 
@@ -840,11 +841,39 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Explicitly trigger a stage, including a configured manual gate."""
+        if stage not in CANONICAL_STAGES: raise DomainError("VALIDATION_ERROR", "未知 Stage")
+        gates = self.repository.get_gates(task_id, run_id)
+        blocked = [gate.stage_id for gate in gates[:CANONICAL_STAGES.index(stage)] if gate.status != GATE_APPROVED]
+        if blocked: raise DomainError("STAGE_GATE_REQUIRED", "上游 Stage Gate 尚未批准", details={"unapproved_stages": blocked})
         execution_plan = self._execution_plan(task_id)
-        return self.pipeline_run(
+        result = self.pipeline_run(
             task_id, run_id, "targeted", stage, context,
             manual_trigger_stage=stage if stage in execution_plan.manual_stages else None,
         )
+        if result.get("ok") and result.get("result") == "succeeded": self.mark_gate_waiting(task_id, run_id, stage)
+        return result
+
+    def list_gates(self, task_id: str, run_id: str) -> dict[str, Any]: return {"items": [gate.to_dict() for gate in self.repository.get_gates(task_id, run_id)]}
+    def get_gate(self, task_id: str, run_id: str, stage: str) -> dict[str, Any]:
+        if stage not in CANONICAL_STAGES: raise DomainError("VALIDATION_ERROR", "未知 Stage")
+        return next(gate.to_dict() for gate in self.repository.get_gates(task_id, run_id) if gate.stage_id == stage)
+    def mark_gate_waiting(self, task_id: str, run_id: str, stage: str) -> None:
+        run, gates = self.repository.get_run(task_id, run_id), self.repository.get_gates(task_id, run_id)
+        changed = [StageGate(**{**gate.to_dict(), "status": GATE_WAITING, "attempt": run.stages[stage].attempt if stage in run.stages else gate.attempt, "revision": gate.revision + 1}) if gate.stage_id == stage else gate for gate in gates]
+        self.repository.save_gates(task_id, run_id, changed)
+    def decide_gate(self, task_id: str, run_id: str, stage: str, decision: str, actor: str, note: str | None = None, evidence: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        if stage not in CANONICAL_STAGES or decision not in {"approve", "reject", "redo"} or not actor.strip(): raise DomainError("VALIDATION_ERROR", "Gate 决定、Stage 和 actor 无效")
+        gates = self.repository.get_gates(task_id, run_id); gate = next(item for item in gates if item.stage_id == stage)
+        wanted = {"approve": GATE_APPROVED, "reject": GATE_REJECTED, "redo": GATE_REDO}[decision]
+        clean = [{"logical_key": str(item.get("logical_key", "")), "sha256": str(item.get("sha256", ""))} for item in (evidence or [])]
+        if gate.status == wanted and gate.actor == actor and list(gate.evidence) == clean: return gate.to_dict()
+        if gate.status == GATE_APPROVED: raise DomainError("GATE_DECISION_CONFLICT", "已批准的 Gate 不能被静默覆盖")
+        if gate.status != GATE_WAITING: raise DomainError("INVALID_STATE", "当前 Gate 尚不可决定")
+        replacement = StageGate(**{**gate.to_dict(), "status": wanted, "decision": decision, "actor": actor.strip(), "decided_at": utc_now(), "revision": gate.revision + 1, "evidence": tuple(clean)})
+        self.repository.save_gates(task_id, run_id, [replacement if item.stage_id == stage else item for item in gates])
+        payload = {"stage": stage, "decision": decision, "actor": actor.strip(), "attempt": replacement.attempt, "revision": replacement.revision, "evidence": clean}
+        self.telemetry.append_event(task_id, run_id, {"event_type": "StageGateDecided", **payload}); self.telemetry.append_audit(task_id, run_id, {"action": "stage.gate", **payload})
+        return replacement.to_dict()
 
     def pipeline_run(
         self,

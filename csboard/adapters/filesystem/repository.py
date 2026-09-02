@@ -10,6 +10,8 @@ from pathlib import Path
 from csboard.application.context import utc_now
 from csboard.domain.errors import NotFoundError
 from csboard.domain.models import Task, Run
+from csboard.domain.stage_gate import StageGate
+from csboard.domain.execution_plan import CANONICAL_STAGES
 
 
 class FilesystemTaskRepository:
@@ -72,6 +74,18 @@ class FilesystemTaskRepository:
     def save_run(self, run: Run) -> None:
         with self.task_lock(run.task_id):
             self._write_json(self.run_dir(run.task_id, run.run_id) / "run.json", run.to_dict())
+
+    def get_gates(self, task_id: str, run_id: str) -> list[StageGate]:
+        run = self.get_run(task_id, run_id)
+        path = self.run_dir(task_id, run_id) / "gates.json"
+        if not path.exists(): return [StageGate.initial(task_id, run_id, run.trace_id, stage) for stage in CANONICAL_STAGES]
+        saved = {item["stage_id"]: StageGate.from_dict(item) for item in self._read_json(path).get("items", [])}
+        return [saved.get(stage, StageGate.initial(task_id, run_id, run.trace_id, stage)) for stage in CANONICAL_STAGES]
+
+    def save_gates(self, task_id: str, run_id: str, gates: list[StageGate]) -> None:
+        with self.task_lock(task_id):
+            self.get_run(task_id, run_id)
+            self._write_json(self.run_dir(task_id, run_id) / "gates.json", {"schema_version": 1, "items": [gate.to_dict() for gate in gates]})
 
     def save_request(self, task_id: str, data: dict) -> None:
         """原子写入 request.json"""
