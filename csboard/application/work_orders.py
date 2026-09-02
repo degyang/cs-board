@@ -20,12 +20,12 @@ STAGE_INPUTS = {
     "compose-video": ("audio.voice-manifest", "timing.timeline", "render.manifest"),
 }
 STAGE_OUTPUTS = {
-    "generate-visual-anchors": "planning.av-plan",
-    "clone-voice": "audio.voice-manifest",
-    "plan-storyboard": "planning.storyboard",
-    "generate-illustrations": "illustrations.manifest",
-    "render-visuals": "render.manifest",
-    "compose-video": "output.final-manifest",
+    "generate-visual-anchors": ("planning.av-plan",),
+    "clone-voice": ("audio.voice-manifest", "timing.timeline"),
+    "plan-storyboard": ("planning.storyboard",),
+    "generate-illustrations": ("illustrations.manifest",),
+    "render-visuals": ("render.manifest",),
+    "compose-video": ("output.final-video", "output.final-manifest"),
 }
 
 
@@ -51,13 +51,13 @@ class WorkOrderService:
                     self.repository.save(current.transition("stale"), {}, "stale: dependency no longer ready\n")
                 raise DomainError("DEPENDENCY_NOT_READY", "工作单上游 Artifact 尚未就绪",
                                   details={"stage": stage, "missing_artifact_keys": missing})
-            if current and current.input_fingerprint == payload["input_fingerprint"]:
+            if current and current.input_fingerprint == payload["input_fingerprint"] and current.status != "stale":
                 return current.to_dict()
             if current:
                 self.repository.save(current.transition("stale"), {}, "stale: input fingerprint changed\n")
             revision = (current.revision + 1) if current else 1
             work_order_id = "wo-" + hashlib.sha256(
-                f"{task_id}:{run_id}:{stage}:{payload['input_fingerprint']}".encode()).hexdigest()[:24]
+                f"{task_id}:{run_id}:{stage}:{payload['input_fingerprint']}:{revision}".encode()).hexdigest()[:24]
             work_order = StageWorkOrder(**self._envelope(payload, revision, work_order_id))
             instructions = (
                 f"# {stage}\n\nRead parameters from `{work_order.parameters_path}`. "
@@ -121,5 +121,5 @@ class WorkOrderService:
                            else {"code": "RUN_AVAILABLE", "message": "可使用 run command 执行"})
         return {**payload, "revision": revision, "work_order_id": work_order_id,
                 "output_directory": output,
-                "expected_outputs": [{"artifact_key": STAGE_OUTPUTS[stage], "status": "succeeded"}],
+                "expected_outputs": [{"artifact_key": key, "status": "succeeded"} for key in STAGE_OUTPUTS[stage]],
                 "commands": commands, "next_action": next_action}
