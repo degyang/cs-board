@@ -1,7 +1,7 @@
 # CORE-CAP-005：修复 capabilities 的集成基线缺口
 
 - Owner: CORE
-- Status: IN_PROGRESS
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `CORE-CAP-004=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-core-cap-repair`
