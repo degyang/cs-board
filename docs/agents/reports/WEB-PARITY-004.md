@@ -47,3 +47,5 @@ The prior independent review requested immutable five-page golden inputs, per-fi
 | forbidden-pattern audit from the contract | 0 | PASS, no matches |
 
 The live backend used an isolated `/tmp/cs-board-web-parity-data` directory and the WebUI used `VITE_API_BASE_URL=/api/v1` with the Vite proxy. Both temporary servers were stopped after evidence capture; no backend or prototype files were changed. Implementation/evidence delivery commit: `cdda8725e7c23ad8dfa9b3d6548d8d7e4323bd1c`. Branch: `feat/mountain-webui-surface-parity`.
+
+Worktree state at handoff: all tracked task files are committed and pushed; the only untracked path is the dashboard’s ephemeral `.agents/coordination/runtime/` lease files created for this worker session.
