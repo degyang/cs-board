@@ -1,0 +1,6 @@
+[Unit]
+Description=CS Board event-gated Codex PM recovery
+
+[Service]
+Type=oneshot
+ExecStart=/mnt/d/workstation/projects/cs-board-mountain-v2/.agents/coordination/scripts/run_pm_if_needed.sh /mnt/d/workstation/projects/cs-board-mountain-v2
