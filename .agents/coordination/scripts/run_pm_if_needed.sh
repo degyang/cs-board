@@ -9,6 +9,7 @@ node_bin="${NODE_BIN:-/home/ubuntu/.local/share/mise/installs/node/24/bin/node}"
 codex_bin="${CODEX_BIN:-/home/ubuntu/.local/share/mise/installs/node/24/bin/codex}"
 teamctl="$dashboard_dir/teamctl.mjs"
 test_dispatch="$project_root/.agents/coordination/scripts/dispatch_test_agent.sh"
+worker_dispatch="$project_root/.agents/coordination/scripts/dispatch_tracked_worker.sh"
 pm_task=""
 pm_result=1
 mkdir -p "$runtime"
@@ -46,6 +47,7 @@ if [[ "$event_kind" == "record-test-ready" || "$event_kind" == "record-test-resu
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
   python3 "$probe" ack --project "$project_root" --signature "$signature"
   pm_result=0
+  "$worker_dispatch" "$project_root" || true
   exit 0
 fi
 
@@ -82,6 +84,7 @@ if timeout --signal=TERM --kill-after=5s 90s \
   python3 "$probe" ack --project "$project_root" --signature "$signature"
   printf '{"state":"completed","signature":"%s"}\n' "$signature" >"$runtime/pm-scheduler.json"
   pm_result=0
+  "$worker_dispatch" "$project_root" || true
   [[ ! -x "$test_dispatch" ]] || "$test_dispatch" "$project_root" || true
 else
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
@@ -92,6 +95,7 @@ else
     python3 "$probe" ack --project "$project_root" --signature "$signature"
     printf '{"state":"completed-after-timeout","signature":"%s"}\n' "$signature" >"$runtime/pm-scheduler.json"
     pm_result=0
+    "$worker_dispatch" "$project_root" || true
     exit 0
   fi
   printf '{"state":"failed","reason":"PM process failed without a tracked transition"}\n' >"$runtime/pm-scheduler.json"
