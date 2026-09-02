@@ -6,7 +6,7 @@
 
 ## Delivery
 
-- 上一轮已审核交付 `672f820` 保持不变；本轮只完成评审列出的 attempt 2 有界纠正。
+- 上一轮已审核交付 `672f820` 与 attempt 2 纠正 `0dbbf4e` 保持不变；本轮只完成评审列出的 attempt 3 有界纠正。
 - 修正涉及 `web-v2/scripts/check-api-contract.mjs`、
   `web-v2/scripts/contract-checker-core.mjs` 和
   `web-v2/tests/contract-checker-exec.test.ts`。
@@ -25,22 +25,25 @@
   `4aaaa812cdbdf24ea8f378fbb0226b38522f94f246a3b6a367a42542dfc9b1f5`，长度 `45`。
 - 浏览器请求未包含 `/start`、`/pipeline/` 或 stage `run/retry`；console error/warning、pageerror、failed request 和 HTTP >=400 均为 `0`。
 
-## Attempt 2 gates
+## Attempt 3 gates
 
 每项最终执行均正常退出（exit `0`）：
 
 ```text
 npm --prefix web-v2 test -- --run tests/contract-checker-exec.test.ts
-  ✓ 16 tests passed; silent-backend subprocess exited non-zero within the test deadline
+  ✓ 17 tests passed; silent-backend subprocess exits non-zero and near-boundary valid response passes
 
 npm --prefix web-v2 test -- --run
-  ✓ 16 files / 348 tests passed
+  ✓ 16 files / 349 tests passed
 
 npm --prefix web-v2 run build
   ✓ Vite production build
 
 MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
   ✓ All contracts aligned against real backend
+
+git diff --check 0dbbf4e...HEAD
+  ✓ exit 0
 
 report-path redaction scan
   ✓ exit 0; no absolute paths
@@ -51,18 +54,17 @@ rg -n 'VITE_API_BASE_URL=/api/v1|<temporary-data-dir>|<installed-chromium>' docs
 Previously accepted browser command shape:
 `WEBUI_BASE=http://127.0.0.1:<web-port> MOUNTAIN_API_BASE=http://127.0.0.1:<api-port> PLAYWRIGHT_CHROMIUM_EXECUTABLE=<installed-chromium> node web-v2/scripts/verify-task-intake-e2e.mjs`
 
-git diff --check 672f820...HEAD
-  ✓ exit 0
-
-The live checker uses its internal five-second per-request abort deadline by default;
+The live checker uses its internal seven-second per-request abort deadline by default;
 `MOUNTAIN_API_REQUEST_TIMEOUT_MS` provides a bounded test override. The focused test
 starts a silent local HTTP server, runs the checker CLI with a 25 ms deadline, observes
-the CLI's own non-zero exit, and cleans up the child process and server.
+the CLI's own non-zero exit, and cleans up the child process and server. A second real
+local server delays one valid response by 5.5 seconds and the checker CLI passes without
+an override, proving the default does not kill the backend's legal probe boundary.
 ```
 
 The original attempt-1 browser evidence remains the accepted positive path. Review
-explicitly bounded attempt 2 to checker/report corrections, so no browser run or evidence
-regeneration was performed in this correction.
+explicitly bounded attempt 3 to checker/test/report corrections, so no browser run or
+evidence regeneration was performed in this correction.
 
 ## Evidence manifest
 
@@ -75,5 +77,5 @@ Manifest: `docs/Mountain/webui-parity-evidence/tasks/intake-manifest.json`
 
 ## Final state
 
-- Report and evidence from `672f820` remain unchanged; this correction is ready to commit and push.
+- Report and evidence from `672f820` remain unchanged; attempt 2 corrections remain intact; this attempt 3 correction is ready to commit and push.
 - No known product gaps remain for this contract.

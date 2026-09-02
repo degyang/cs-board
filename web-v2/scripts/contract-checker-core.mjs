@@ -39,7 +39,7 @@ export const ERROR_ENDPOINT = {
   description: 'Unified error response',
 }
 
-export const DEFAULT_REQUEST_TIMEOUT_MS = 5_000
+export const DEFAULT_REQUEST_TIMEOUT_MS = 7_000
 
 export const FIXTURE_MAP = [
   { fixture: 'service-list.json', interface: 'ServiceListResponse' },

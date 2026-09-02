@@ -453,6 +453,65 @@ describe('contract checker execution: silent backend deadline', () => {
   })
 })
 
+describe('contract checker execution: near-boundary valid response', () => {
+  it('does not reject a valid response arriving just after the backend probe limit', async () => {
+    const server = http.createServer((req, res) => {
+      const respond = () => {
+        const result = successHandler(req, '')
+        res.writeHead(result.status, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(result.body))
+      }
+      if (req.url === '/api/v1/settings/voice-alignment') {
+        setTimeout(respond, 5_500)
+      } else {
+        respond()
+      }
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()))
+    const addr = server.address() as { port: number }
+    const base = 'http://127.0.0.1:' + addr.port + '/api/v1'
+    const script = path.join(ROOT, 'scripts/check-api-contract.mjs')
+    const env = {
+      ...process.env,
+      MOUNTAIN_API_BASE: base,
+      MOUNTAIN_CONTRACT_SERVICE_ID: 'test-svc',
+    }
+    delete env.MOUNTAIN_API_REQUEST_TIMEOUT_MS
+    let timedOut = false
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; output: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [script], {
+        cwd: ROOT,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let output = ''
+      child.stdout.on('data', chunk => { output += chunk.toString() })
+      child.stderr.on('data', chunk => { output += chunk.toString() })
+      const cleanupTimer = setTimeout(() => {
+        timedOut = true
+        child.kill('SIGKILL')
+      }, 15_000)
+      child.on('error', error => {
+        clearTimeout(cleanupTimer)
+        reject(error)
+      })
+      child.on('close', (code, signal) => {
+        clearTimeout(cleanupTimer)
+        resolve({ code, signal, output })
+      })
+    })
+
+    if (typeof server.closeAllConnections === 'function') server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+
+    expect(timedOut).toBe(false)
+    expect(result.code).toBe(0)
+    expect(result.signal).toBeNull()
+    expect(result.output).toContain('All contracts aligned against real backend')
+  }, 15_000)
+})
+
 describe('contract checker execution: non-JSON 404', () => {
   it('fails when 404 has no JSON body', async () => {
     const server = http.createServer((_req, res) => {
