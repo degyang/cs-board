@@ -1,7 +1,7 @@
 # CORE-RUNTIME-006：后端全量门禁、冷启动边界与进程清理
 
 - Owner: CORE
-- Status: CHANGES_REQUESTED
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: `CORE-CAP-005=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-core-cap-repair`
@@ -92,7 +92,7 @@ Worker 已提交并推送有界 zero-skip 返工，分支干净且与远端一�
 - Review commit: `33544e1`
 - Verdict: `CHANGES_REQUESTED`
 - Correction base: `eb1a248`
-- Dispatch state: not dispatched
+- Dispatch state: `DISPATCHED`（返工 attempt 3）
 
 只纠正真实 launcher/server 正常停止后同一端口不能立即复用的 lifecycle 缺陷，并增加两个 fresh data dir
 在同一端口顺序冷启动的真实测试：必须观察两次 child return code、停止后立即 bind 成功和临时目录清理。
