@@ -1,7 +1,7 @@
 # CORE-CAP-004：Native Mountain capabilities API
 
 - Owner: CORE
-- Status: IN_PROGRESS
+- Status: CHANGES_REQUESTED
 - Priority: P0
 - Depends on: none（仅等待 CORE 当前单任务容量）
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
@@ -61,3 +61,13 @@ git diff --check <dispatch-base>...HEAD
 
 CORE-WO-003 尚未批准或 CORE 仍工作时不得领取。派发后只完成本端点、提交推送并唤醒 `/root/pm`；
 不替 WEB 生成浏览器证据。
+
+## Attempt 1 review
+
+- Delivery: `1cec1dc`
+- Verdict: `CHANGES_REQUESTED`
+- Review: `docs/agents/reviews/CORE-CAP-004.md`
+
+Attempt 2 只纠正 capability 必需依赖图及补齐行为测试。`clone-voice` 必须反映真实执行器所需的
+`speech_synthesis + speech_alignment + media`；保留 external illustration gate、动态服务、只读缓存与
+脱敏边界。不得借机修改 WebUI、Pipeline、Work Order 或旧 Provider router。
