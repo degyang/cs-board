@@ -1,56 +1,17 @@
 ---
 name: illustration-generator
-description: Generate illustrations for each Visual Item based on the storyboard. Use for the image generation stage of the standard pipeline.
+description: Produce or inspect Mountain illustration stage results from persisted storyboard inputs.
 ---
 
-## 输入与输出
+# Illustration Generator
 
-- 输入：Storyboard、风格/人物参考 Artifact、图片模型 profile；
-- 输出：每个 Visual Item 的 source image、本地后处理 image 和 `illustrations.manifest`。
+从 WebUI 已保存的 `task_id`、`run_id` 执行 `generate-illustrations`。只读取持久化参数、run-root 相对路径、结构化结果、事件和 Artifact；不从聊天或日志猜输入。
 
-## 强制规则
+输入 Artifact：`planning.storyboard`、`style.snapshot`。正式输出 Artifact：`illustrations.manifest`。图片 source 与 processed 成果必须分层；单个 Visual 重做只使其 clip 和最终成片失效。
 
-- 图片模型不得生成中文、Logo 或水印；
-- source 与本地后处理结果分开保存；
-- 单图重生成只使该 `visual_id` 的 clip 和 final 失效；
-- 素材必须通过 Artifact Store 读取；
-- 不根据 `web|skill` 入口改变 prompt 或 Provider profile。
-
-## CLI 命令
+当前外部 candidate Gate 尚未由 CORE 实现：不得把候选文件、手工出图或聊天附件当作正式 `illustrations.manifest`，也不得宣称 import、validate、accept、reject 或 retry 命令可执行。在该 Gate 落地前，只能报告结构化 Stage 结果或明确的能力缺口。
 
 ```bash
-# 运行插画生成
-python -m cli.csboard stage run --task <id> --run <run-id> --stage generate-illustrations --json
-
-# 重试特定 Visual
-python -m cli.csboard stage retry --task <id> --run <run-id> --stage generate-illustrations --visual visual-003-01 --json
-
-# 查看插画清单
-python -m cli.csboard artifact show --task <id> --run <run-id> --key illustrations.manifest --json
+python -m cli.csboard stage run --task <task-id> --run <run-id> --stage generate-illustrations --json
+python -m cli.csboard stage retry --task <task-id> --run <run-id> --stage generate-illustrations --visual <visual-id> --json
 ```
-
-## 输出格式
-
-成功时返回：
-
-```json
-{
-  "ok": true,
-  "command": "stage.run",
-  "stage": "generate-illustrations",
-  "result": "succeeded",
-  "artifacts": ["illustrations.manifest"],
-  "next_stage": "render-visuals"
-}
-```
-
-## 与其他 Skill 的协作
-
-- **上游**：storyboard-planner 生成 storyboard
-- **下游**：visual-renderer 使用 illustrations 生成视频片段
-
-## 错误处理
-
-- storyboard 缺失 → 先运行 plan-storyboard
-- 图片模型不可用 → `IMAGE_SERVICE_UNAVAILABLE`（可重试）
-- 单图生成失败 → 可独立重试，不影响其他 Visual
