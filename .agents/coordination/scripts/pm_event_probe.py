@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -41,6 +42,8 @@ def task_delivery(root: Path, task_id: str) -> str:
 
 ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "WORKING", "TEST_READY", "TESTING", "PM_DECISION", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
 ACTION_ORDER = {
+    "recover-delivery": 0,
+    "recover-dispatch": 0,
     "recover-stale": 0,
     "resolve-blocker": 4,
     "record-test-ready": 1,
@@ -51,6 +54,71 @@ ACTION_ORDER = {
     "retire-agent": 6,
 }
 COORDINATOR_OWNERS = {"PM"}
+
+
+def registry_agent(root: Path, owner: str) -> dict[str, object]:
+    try:
+        registry = json.loads((root / ".agents/coordination/agents.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    agent = registry.get("agents", {}).get(owner, {})
+    return agent if isinstance(agent, dict) else {}
+
+
+def git_output(worktree: Path, *args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(worktree), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return ""
+    return result.stdout.strip()
+
+
+def discover_delivery(root: Path, task: dict[str, str]) -> dict[str, object] | None:
+    """Find a committed task report in the registered owner's real worktree."""
+    if task_delivery(root, task["task_id"]) not in {"", "pending"}:
+        return None
+    agent = registry_agent(root, task["owner"])
+    worktree_value = agent.get("worktree")
+    if not isinstance(worktree_value, str) or not worktree_value:
+        return None
+    worktree = Path(worktree_value)
+    report_rel = f"docs/agents/reports/{task['task_id']}.md"
+    report = worktree / report_rel
+    if not report.is_file():
+        return None
+    delivery = git_output(worktree, "log", "-1", "--format=%H", "--", report_rel)
+    if not delivery or git_output(worktree, "status", "--short", "--", report_rel):
+        return None
+    return {
+        "kind": "recover-delivery",
+        **task,
+        "delivery": delivery,
+        "report": report_rel,
+        "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+        "worktree": str(worktree),
+        "registered_branch": str(agent.get("branch", "")),
+        "actual_branch": git_output(worktree, "branch", "--show-current"),
+    }
+
+
+def dispatcher_evidence(root: Path, task_id: str) -> dict[str, object] | None:
+    contract = root / "docs/agents/tasks" / f"{task_id}.md"
+    try:
+        text = contract.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    names = ("dispatch_cli_agent.sh", "run_worker_agent.sh")
+    if not all(name in text for name in names):
+        return None
+    paths = [root / ".agents/coordination/scripts" / name for name in names]
+    states = {path.name: path.is_file() and bool(path.stat().st_mode & 0o111) for path in paths}
+    return {"dispatcher_ready": all(states.values()), "dispatcher_files": states}
 
 
 def parse_instant(value: str) -> datetime | None:
@@ -154,7 +222,19 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
     actions: list[dict[str, object]] = []
     for task in tasks.values():
         if task["status"] == "BLOCKED":
-            actions.append({"kind": "resolve-blocker", **task})
+            delivery = discover_delivery(root, task)
+            if delivery:
+                actions.append(delivery)
+                continue
+            evidence = dispatcher_evidence(root, task["task_id"])
+            if evidence and evidence["dispatcher_ready"]:
+                actions.append({"kind": "recover-dispatch", **task, **evidence})
+                continue
+            blocker_facts = {
+                "delivery": task_delivery(root, task["task_id"]),
+                **(evidence or {}),
+            }
+            actions.append({"kind": "resolve-blocker", **task, "blocker_facts": blocker_facts})
             continue
         if (
             task["status"] in {"DISPATCHED", "IN_PROGRESS"}

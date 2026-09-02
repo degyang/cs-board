@@ -193,6 +193,42 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(action["kind"], "resolve-blocker")
         self.assertEqual(action["task_id"], "MEDIA-1")
 
+    def test_blocked_task_discovers_committed_report_in_registered_worktree(self) -> None:
+        owner = self.root / "owner"
+        owner.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "worker"], cwd=owner, check=True)
+        report = owner / "docs/agents/reports/CORE-1.md"
+        report.parent.mkdir(parents=True)
+        report.write_text("# CORE-1 report\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=owner, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "delivery"],
+            cwd=owner,
+            check=True,
+        )
+        delivery = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=owner, text=True).strip()
+        (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": {
+            "PM": {"transport": "codex_exec"},
+            "WORKER_CORE": {"worktree": str(owner), "branch": "worker"},
+        }}))
+        self.write_status(["| `CORE-1` | WORKER_CORE | BLOCKED | pending | pending | stale blocker |"])
+        action = json.loads(self.probe())["actions"][0]
+        self.assertEqual(action["kind"], "recover-delivery")
+        self.assertEqual(action["delivery"], delivery)
+        self.assertEqual(action["actual_branch"], "worker")
+
+    def test_blocked_dispatch_dependency_is_revalidated_from_filesystem(self) -> None:
+        contract = self.root / "docs/agents/tasks/CORE-1.md"
+        contract.write_text("needs dispatch_cli_agent.sh and run_worker_agent.sh\n", encoding="utf-8")
+        for name in ("dispatch_cli_agent.sh", "run_worker_agent.sh"):
+            path = self.root / ".agents/coordination/scripts" / name
+            path.write_text("#!/bin/sh\n", encoding="utf-8")
+            path.chmod(0o755)
+        self.write_status(["| `CORE-1` | WORKER_CORE | BLOCKED | pending | pending | dispatcher missing |"])
+        action = json.loads(self.probe())["actions"][0]
+        self.assertEqual(action["kind"], "recover-dispatch")
+        self.assertTrue(action["dispatcher_ready"])
+
     def test_completed_test_handoff_is_not_starved_by_a_blocker(self) -> None:
         self.write_status([
             "| `MEDIA-1` | WORKER_MEDIA | BLOCKED | pending | m | timeout |",
@@ -358,6 +394,22 @@ class PMEventProbeTest(unittest.TestCase):
         result = subprocess.run(["bash", str(SOURCE / "run_pm_if_needed.sh"), str(self.root)], env=environment)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(self.probe())["actions"][0]["task_id"], "CORE-1")
+
+    def test_wrapper_acknowledges_stable_blocker_without_repeating_it(self) -> None:
+        self.write_status(["| `CORE-1` | CORE | BLOCKED | pending | pending | external |"])
+        (self.root / ".agents/coordination/agents.json").write_text(
+            json.dumps({"agents": {"PM": {"transport": "codex_exec"}}}), encoding="utf-8"
+        )
+        fake_codex = self.root / "codex"
+        fake_codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake_codex.chmod(0o755)
+        environment = os.environ.copy()
+        environment["CODEX_BIN"] = str(fake_codex)
+        result = subprocess.run(["bash", str(SOURCE / "run_pm_if_needed.sh"), str(self.root)], env=environment)
+        self.assertEqual(result.returncode, 0)
+        state = json.loads((self.root / ".agents/coordination/runtime/pm-scheduler.json").read_text())
+        self.assertEqual(state["state"], "stable-blocker")
+        self.assertEqual(self.probe(), "")
 
 
 if __name__ == "__main__":

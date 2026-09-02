@@ -39,15 +39,21 @@ event_kind="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["actions"]
   --role PM --state working --task "$pm_task" \
   --cycle 调度 --attempt 1 --lease-seconds 180 >/dev/null
 
-if [[ "$event_kind" == "record-test-ready" || "$event_kind" == "record-test-result" ]]; then
-  python3 "$project_root/.agents/coordination/scripts/apply_pm_transition.py" --project "$project_root" --kind "$event_kind" --task "$pm_task"
+if [[ "$event_kind" == "record-test-ready" || "$event_kind" == "record-test-result" || "$event_kind" == "recover-delivery" || "$event_kind" == "recover-dispatch" ]]; then
+  transition=(python3 "$project_root/.agents/coordination/scripts/apply_pm_transition.py" --project "$project_root" --kind "$event_kind" --task "$pm_task")
+  if [[ "$event_kind" == "recover-delivery" ]]; then
+    delivery="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["actions"][0]["delivery"])' <<<"$event_json")"
+    transition+=(--delivery "$delivery")
+  fi
+  "${transition[@]}"
   git -C "$project_root" add docs/agents/status.md "docs/agents/tasks/$pm_task.md"
-  git -C "$project_root" commit -m "docs(agents): advance $pm_task handoff"
+  git -C "$project_root" commit -m "docs(agents): $event_kind $pm_task"
   git -C "$project_root" push origin integration/mountain-v2
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
   python3 "$probe" ack --project "$project_root" --signature "$signature"
   pm_result=0
   "$worker_dispatch" "$project_root" || true
+  [[ ! -x "$test_dispatch" ]] || "$test_dispatch" "$project_root" || true
   exit 0
 fi
 
@@ -68,6 +74,7 @@ prompt="Act only as the bounded PM for this single event. Read only docs/agents/
 prompt="$prompt Model governance: default every new task to a moderate model and reasoning effort. Only after three failed rework attempts may the CEO propose escalation. Never assign gpt-5.6-sol with high, xhigh, max, or ultra unless docs/agents/agreements.md records explicit user approval for that exact task and level."
 prompt="$prompt Tester execution is owned exclusively by dispatch_test_agent.sh and its supervised service. Tester provides evidence but never a verdict."
 prompt="$prompt A resolve-blocker event requires a concrete bounded diagnosis/recovery task or an explicit external dependency record; do not merely repeat that the task is blocked."
+prompt="$prompt Treat blocker_facts as verified scheduler evidence. Never append or commit the same blocker decision when those facts have not changed. A recover-delivery or recover-dispatch event is handled deterministically before this model turn."
 prompt="$prompt Worker execution is owned exclusively by dispatch_cli_agent.sh and run_worker_agent.sh. Never create an orchestrator Worker or write working runtime yourself. After committing DISPATCHED, invoke the dispatcher asynchronously; only its supervised wrapper may publish working, review, or blocked."
 prompt="$prompt A retire-agent action is executable policy: recheck that the non-protected owner has only terminal tasks, no active service/lease, and exceeded the reported retention. Then remove only its current registry entry and transient runtime, preserve all history, commit and push. Under capacity pressure process the oldest timed-out candidate first."
 
@@ -78,6 +85,12 @@ if timeout --signal=TERM --kill-after=5s 90s \
   remaining="$(python3 "$probe" probe --project "$project_root" --max-actions 1)"
   remaining_signature="$(python3 -c 'import json,sys; data=sys.stdin.read().strip(); print(json.loads(data)["signature"] if data else "")' <<<"$remaining")"
   if [[ "$remaining_signature" == "$signature" ]]; then
+    if [[ "$event_kind" == "resolve-blocker" ]]; then
+      python3 "$probe" ack --project "$project_root" --signature "$signature"
+      printf '{"state":"stable-blocker","signature":"%s","reason":"facts acknowledged; wait for evidence change"}\n' "$signature" >"$runtime/pm-scheduler.json"
+      pm_result=0
+      exit 0
+    fi
     printf '{"state":"incomplete","signature":"%s","reason":"actionable state unchanged"}\n' "$signature" >"$runtime/pm-scheduler.json"
     exit 1
   fi
