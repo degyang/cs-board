@@ -14,7 +14,7 @@
 | `WEB-INTAKE-003` | WEB | IN_PROGRESS | `docs/agents/tasks/WEB-INTAKE-003.md` | `e573dea` | resumed after CORE-CAP-004 approval |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
-| `CEO-RECOVERY-002` | PM | READY | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | pending |
+| `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 
@@ -25,7 +25,8 @@
 - WEB 与 MEDIA 各增加一个不依赖 Work Order 生产 DTO 的真实并行切片；它们不改变原三个 BACKLOG 的依赖关系。
 - WEB intake 自动化已真实发现 native Mountain Server 缺少 `/api/v1/capabilities`；前端保持阻塞，后端修复已进入 READY，不允许 WEB 吞掉 404。
 - MEDIA Skills 主体方向正确，但首阶段 Artifact 映射和未实现 illustration retry 说明矛盾，进入有界 attempt 2。
-- PM 协调线程为 `/root/pm`。Worker 完成后必须按注册表直接唤醒 PM，而不是只通知 `/root` 或等待用户追问。
+- CEO/PM 协调线程为注册表中的真实 Codex CLI UUID。Worker 完成后必须按注册表直接唤醒 CEO，
+  而不是只通知 `/root` 或等待用户追问。
 - `CORE-CAP-004` attempt 2 已补齐真实依赖图并获批准；同一 `WEB-INTAKE-003` 已恢复，先完成 intake
   浏览器证据，再领取 `WEB-WO-003`。
 - 当前 orchestrator 会话树已失效，`CEO-RECOVERY-002` 负责注册真实 CLI CEO、修复 stale work 检测，

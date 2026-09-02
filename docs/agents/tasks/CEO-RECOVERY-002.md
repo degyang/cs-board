@@ -1,7 +1,7 @@
 # CEO-RECOVERY-002：恢复常驻调度与停滞队列
 
 - Owner: PM（CEO 调度角色）
-- Status: READY
+- Status: IN_PROGRESS
 - Priority: P0
 - Depends on: `PM-AUTO-001=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-mountain-v2`

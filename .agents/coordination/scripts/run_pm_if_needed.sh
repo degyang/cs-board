@@ -25,7 +25,7 @@ if [[ "${registration[0]}" != "codex_cli" || -z "${registration[1]}" ]]; then
   exit 0
 fi
 
-prompt="Use pos-magents as the independent PM. Read docs/agents/status.md and the tracked contracts. Process exactly one coordination cycle for this event, commit the decision, dispatch only dependency-ready work, then stop. Event: $event_json"
+prompt="Use pos-magents as the independent CEO/PM. Read docs/agents/status.md and the tracked contracts. Process exactly one short coordination cycle for this event. Prioritize stale active-work recovery over new dispatch, never overlap work for one owner, commit only when tracked state changes, and stop without running long product gates. Event: $event_json"
 if codex exec resume "${registration[1]}" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
   python3 "$probe" ack --project "$project_root" --signature "$signature"
