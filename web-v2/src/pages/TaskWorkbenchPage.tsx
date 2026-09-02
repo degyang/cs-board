@@ -63,7 +63,7 @@ export const STAGE_CONTRACTS: readonly StageContractMetadata[] = [
   },
 ]
 
-const GATE_UNAVAILABLE = '后端 Gate 契约尚未提供'
+const GATE_UNAVAILABLE = '后端 Gate 契约正在收口，CCB-25 通过后启用'
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -75,11 +75,12 @@ export function TaskWorkbenchPage() {
   const taskLoader = useCallback(() => fetchTask(taskId!), [taskId])
   const { data: taskData, loading: taskLoading, error: taskError } = useAsync(taskLoader, [taskId], pollMs)
 
-  const task = taskData?.task
-  const activeRun = taskData?.active_run ?? null
-  const stages = taskData?.stages ?? []
-  const artifacts = taskData?.artifacts ?? []
-  const trace = taskData?.trace ?? null
+  const taskIdentityMatches = Boolean(taskId && taskData?.task.task_id === taskId)
+  const task = taskIdentityMatches ? taskData?.task : undefined
+  const activeRun = taskIdentityMatches ? taskData?.active_run ?? null : null
+  const stages = taskIdentityMatches ? taskData?.stages ?? [] : []
+  const artifacts = taskIdentityMatches ? taskData?.artifacts ?? [] : []
+  const trace = taskIdentityMatches ? taskData?.trace ?? null : null
   const runId = activeRun?.run_id
 
   // Stop polling on terminal state
@@ -101,7 +102,8 @@ export function TaskWorkbenchPage() {
     if (!taskId) return Promise.resolve(null)
     return fetchInputs(taskId)
   }, [taskId])
-  const { data: inputsData } = useAsync(inputsLoader, [taskId])
+  const { data: inputsDataRaw } = useAsync(inputsLoader, [taskId])
+  const inputsData = inputsDataRaw?.task_id === taskId ? inputsDataRaw : null
 
   // ── Units (poll with task) ────────────────────────────────────────
   const unitsLoader = useCallback(() => {
@@ -115,16 +117,27 @@ export function TaskWorkbenchPage() {
   const [eventCursor, setEventCursor] = useState(0)
   const [allEvents, setAllEvents] = useState<Record<string, unknown>[]>([])
   const eventIdsRef = useRef(new Set<string>())
+  const eventIdentity = `${taskId ?? ''}:${runId ?? ''}`
+  const eventIdentityRef = useRef(eventIdentity)
+  const eventIdentityMatches = eventIdentityRef.current === eventIdentity
+
+  useEffect(() => {
+    if (eventIdentityRef.current === eventIdentity) return
+    eventIdentityRef.current = eventIdentity
+    setEventCursor(0)
+    setAllEvents([])
+    eventIdsRef.current.clear()
+  }, [eventIdentity])
 
   const eventsLoader = useCallback(() => {
     if (!taskId || !runId) return Promise.resolve({ items: [], next_cursor: 0 })
-    return fetchEvents(taskId, runId, eventCursor)
-  }, [taskId, runId, eventCursor])
-  const { data: eventsData } = useAsync(eventsLoader, [taskId, runId, eventCursor], pollMs)
+    return fetchEvents(taskId, runId, eventIdentityMatches ? eventCursor : 0)
+  }, [taskId, runId, eventCursor, eventIdentityMatches])
+  const { data: eventsData } = useAsync(eventsLoader, [taskId, runId, eventIdentityMatches ? eventCursor : 0], pollMs)
 
   // Append new events (dedup by sequence or index)
   useEffect(() => {
-    if (!eventsData?.items?.length) return
+    if (!eventIdentityMatches || !eventsData?.items?.length) return
     const newEvents = eventsData.items.filter((ev) => {
       const key = String(ev.sequence ?? ev.timestamp ?? JSON.stringify(ev))
       if (eventIdsRef.current.has(key)) return false
@@ -137,7 +150,7 @@ export function TaskWorkbenchPage() {
     if (eventsData.next_cursor > eventCursor) {
       setEventCursor(eventsData.next_cursor)
     }
-  }, [eventsData])
+  }, [eventsData, eventIdentityMatches])
 
   // ── Logs ─────────────────────────────────────────────────────────────
   const [logFilter, setLogFilter] = useState({ level: '', component: '', stage: '' })
@@ -261,10 +274,12 @@ export function TaskWorkbenchPage() {
 
   // ── Derived state ────────────────────────────────────────────────────
   const stageStatuses: Record<string, string> = {}
-  for (const s of stages) stageStatuses[s.stage] = s.status ?? 'pending'
-  for (const key of STAGE_KEYS) if (!stageStatuses[key]) stageStatuses[key] = 'pending'
+  for (const s of stages) stageStatuses[s.stage] = s.status
+  for (const key of STAGE_KEYS) if (!stageStatuses[key]) stageStatuses[key] = 'unreported'
 
   const completedCount = STAGE_KEYS.filter((k) => stageStatuses[k] === 'succeeded').length
+  const stageStatusLabel = (status: string) => status === 'unreported' ? '尚未报告' : status
+  const visibleEvents = eventIdentityMatches ? allEvents : []
   const hasFinal = artifacts.some((a) => a.producer_stage === 'compose-video' && a.status === 'succeeded')
   const runStatus = activeRun?.status ?? task.status
   const isRunning = activeRun?.status === 'running'
@@ -473,16 +488,17 @@ export function TaskWorkbenchPage() {
           </div>
           <div>
             {!activeRun && <p className="hint" style={{ marginBottom: 12 }}><span>任务尚未启动运行</span>（没有 active Run）；以下契约卡仅展示真实阶段基线。</p>}
+            {activeRun && stages.length === 0 && <p className="hint" style={{ marginBottom: 12 }}>后端尚未报告 Stage 状态。</p>}
             {STAGE_CONTRACTS.map((contract) => {
               const st = stageStatuses[contract.id]
               const stageData = stages.find((s) => s.stage === contract.id)
               return (
                 <article key={contract.id} className="stage-contract-card" style={{ padding: '14px 0', borderBottom: '1px solid var(--nt-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <StatusBadge status={st} />
+                    <StatusBadge status={st} label={stageStatusLabel(st)} />
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{contract.title}</span>
                     <code style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>{contract.id}</code>
-                    <span style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>attempt {stageData?.attempt ?? 0}</span>
+                    {stageData && <span style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>attempt {stageData.attempt}</span>}
                   </div>
                   <dl className="stage-contract-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 16px', margin: '10px 0 8px', fontSize: 12 }}>
                     <div><dt className="hint">入口条件</dt><dd>{contract.entry}</dd></div>
@@ -586,12 +602,12 @@ export function TaskWorkbenchPage() {
             </div>
 
             {/* Events */}
-            <h4 style={{ fontSize: 12, fontWeight: 600, color: 'var(--nt-text-muted)', marginBottom: 4 }}>事件 ({allEvents.length})</h4>
-            {allEvents.length === 0 ? (
+            <h4 style={{ fontSize: 12, fontWeight: 600, color: 'var(--nt-text-muted)', marginBottom: 4 }}>事件 ({visibleEvents.length})</h4>
+            {visibleEvents.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--nt-text-muted)', padding: '4px 0' }}>暂无事件</p>
             ) : (
               <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
-                {allEvents.map((ev, i) => (
+                {visibleEvents.map((ev, i) => (
                   <div key={i} style={{ padding: '3px 0', fontSize: 12, borderBottom: '1px solid var(--nt-border)' }}>
                     <span style={{ color: 'var(--nt-text-muted)', fontFamily: 'var(--nt-font-mono)', marginRight: 8 }}>
                       {ev.timestamp ? formatTime(String(ev.timestamp)) : ''}
