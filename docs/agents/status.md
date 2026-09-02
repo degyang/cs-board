@@ -74,6 +74,8 @@
 - Agent 默认按适中能力派工；同一任务连续三次返工仍未解决，CEO 才可提出升级申请。任何 `gpt-5.6-sol`
   的 high/xhigh/max/ultra 使用必须先获用户针对该任务的明确审批。PROTOTYPE 已停止未审批高配会话，改用
   `gpt-5.6-terra + medium` 执行，停止前均无文件变更。
+- DASH 是按任务动态注册的 Worker，不是常驻席位。其唯一任务 `DASH-STATS-003` 已批准且没有后续待办，
+  当前已从 Agent 注册表和瞬时运行态回收；历史任务/审核保留，4317 面板服务继续作为团队基础设施运行。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - `MEDIA-PREFLIGHT-004` 的 idle runtime 对应已完成而非遗失执行：实现 `d9f3a41` 与报告交付 `8532302`
