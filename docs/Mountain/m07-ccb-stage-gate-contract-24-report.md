@@ -1,0 +1,21 @@
+#### CCB-STAGE-GATE-CONTRACT-24 回执 — 2026-09-02
+
+- 状态: 执行中；不得据此认定 USER_ACCEPTANCE 或联合验收通过。
+- worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
+- branch: `feat/mountain-assets-settings-backend`
+- 起点: `cf3f4d5 test(agents): record CORE-RUNTIME-007 failure`
+- implementation_commit: `d67435ad888ba781c7cc65f8cc3a2ca2c2bc8bda`
+- API 契约路径: `GET /tasks/{task_id}/runs/{run_id}/gates`、`GET /tasks/{task_id}/runs/{run_id}/stages/{stage}/gate`、`POST /tasks/{task_id}/runs/{run_id}/stages/{stage}/gate`；详细安全示例见 `m07-phase-one-task-gate-api.md`。
+- 领域不变量: Gate 独立于 StageStatus；初始六项按唯一 `CANONICAL_STAGES` 顺序为 `not-ready`；同一 approve 决定幂等，已批准 Gate 的冲突决定返回 `GATE_DECISION_CONFLICT`；上游未批准时 Stage 返回 `STAGE_GATE_REQUIRED`。
+- 持久化布局: `tasks/{task_id}/runs/{run_id}/gates.json`，Repository task lock 下原子 JSON 替换；新 Repository 实例可读取该文件。
+- 状态迁移: 已实现 `not-ready -> waiting-review -> approved|rejected|redo-required` 的决定 API 基线；Stage 成功后的全面出口 Artifact 验证和所有执行器接入尚未完成。
+- 并发与幂等证据: `test_gate_decision_is_idempotent_and_conflicts_do_not_overwrite` 验证相同决定幂等且冲突不覆盖。多线程 HTTP 并发和 revision CAS 尚未补齐。
+- 插画候选证据: 仅记录 `generate-illustrations` 为 canonical 人工 Gate；没有运行真实付费图片生成。逐 Visual Item、Codex 来源、候选 hash/坏图校验尚未实现，不能批准插画或进入 render。
+- Event/Audit 脱敏: Gate decision 写入既有 redacted JSONL Event/Audit，包含 task/run/trace、actor、decision、stage、attempt、revision 和 evidence；note 不写入 telemetry。针对 Secret canary、完整文案、Prompt、敏感路径的专项测试尚未完成。
+- 专项门禁原始摘要: `env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS ... pytest -q -rs tests/test_stage_gates_24.py tests/test_illustration_gate.py tests/test_task_execution_plan_23.py` → `46 passed in 7.29s`。
+- compileall 原始摘要: `python -m compileall csboard webapp cli scripts` → exit 0。
+- diff check: `git diff --check` → exit 0（实现提交前）。
+- 全量 pytest: 以 `env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS ... pytest -q` 启动，PID `501156` 在仅输出 `...................` 后持续无新输出，已由本轮执行者发送 TERM 并确认无遗留 pytest 进程；此项为 blocked，未伪造成功。
+- CCF 对接表: CCF 可读取六 Gate 列表/单 Gate；提交时提供 `decision`、非空 `actor` 和可选 `evidence[{logical_key,sha256}]`。当前尚不可将 UI approve/reject/redo 视作可验收流程，因 Artifact evidence 与插画逐项选择校验未关闭。
+- 遗留风险: Gate evidence 未与 Artifact index 做 hash 一致性校验；reject/redo 尚未按必要下游范围标记 stale；所有 Stage executor 尚未统一保证成功后进入 waiting-review；正式 start/pipeline 旧自动策略隔离尚未完成；未知 request 字段策略未冻结。
+- 距离真实 MP4 E2E 的差距: 仍缺完整六 Stage 出口 Artifact 验证、真实 Codex image generation 候选 import/逐项人工选择、Gate 驱动的 render/compose、真实 MP4 的正式 WebUI 播放与下载，以及完整脱敏可追溯证据。
