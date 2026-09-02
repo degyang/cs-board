@@ -1,10 +1,10 @@
 # MEDIA-SKILLS-003 Review
 
 - Reviewer: PM (`/root/pm`)
-- Delivery: `eb2a985`
+- Final delivery: `6fc2924`（attempt 1 `eb2a985`）
 - Base: `7bc8af9`
-- Verdict: **CHANGES_REQUESTED**
-- Next attempt: 2
+- Verdict: **APPROVED**
+- Review history: attempt 1 的 `CHANGES_REQUESTED` 证据保留在下文
 
 ## 已通过部分
 
@@ -30,3 +30,17 @@
 
 只纠正两份 Skill、linter 结构/fixture 和报告证据；不推翻已正确的五份 Stage Skill 和 workflow，
 不进入生产实现。
+
+## Final verdict after attempt 2
+
+Delivery `6fc2924`：**APPROVED**。
+
+- visual anchor 输入已改为 persisted `script_preparation`/开关/设置，`planning.av-plan` 只作为输出；
+- illustration 未实现的 visual retry 示例已删除，linter 会主动拒绝其回归；
+- linter 使用分离的 inputs/outputs 映射，并以 legacy、自循环、未实现 retry 三类失败 fixture 验证；
+- PM 独立复现 linter exit 0、`4 passed`、两项负向 rg 和 diff-check；
+- 全量 suite 未被冒充通过，长耗时已定位为本任务未修改的
+  `tests/test_backend_runtime_17.py::test_smoke_startup_failure_path`。
+
+交付报告与实现同处 `6fc2924`，无法在该提交内容中自引用最终 hash；本 review 是权威 delivery hash
+记录，不因此制造新的纯文档返工。本批准不包含生产 Work Order 消费或媒体 E2E。

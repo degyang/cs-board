@@ -12,7 +12,7 @@
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
 | `WEB-INTAKE-003` | WEB | BLOCKED | `docs/agents/tasks/WEB-INTAKE-003.md` | `e573dea` | blocked by missing native capabilities API; see task |
-| `MEDIA-SKILLS-003` | MEDIA | CHANGES_REQUESTED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `eb2a985` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
+| `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | IN_PROGRESS | `docs/agents/tasks/CORE-CAP-004.md` | pending | dispatched after CORE-WO-003 approval |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |

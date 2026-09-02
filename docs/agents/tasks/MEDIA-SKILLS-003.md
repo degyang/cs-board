@@ -1,7 +1,7 @@
 # MEDIA-SKILLS-003：七 Skills 执行契约纠偏与机器校验
 
 - Owner: MEDIA
-- Status: CHANGES_REQUESTED
+- Status: APPROVED
 - Attempt: 2（返工）
 - Priority: P0
 - Depends on: `MEDIA-WO-002=APPROVED`, `CORE-EXEC-002=APPROVED`
@@ -88,3 +88,8 @@ git diff --check 7bc8af9...HEAD
 ```
 
 更新原报告并提交推送后，直接唤醒 `/root/pm`，停止。
+
+## Final verdict
+
+Attempt 2 delivery `6fc2924` 已由 PM 独立复核并批准，见
+`docs/agents/reviews/MEDIA-SKILLS-003.md`。本批准不代表六阶段媒体 E2E 已完成，也不授权合并。
