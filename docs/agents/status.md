@@ -11,7 +11,7 @@
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | DISPATCHED | `docs/agents/tasks/WEB-INTAKE-003.md` | `0dbbf4e` | bounded attempt 3 dispatched from approved correction scope |
+| `WEB-INTAKE-003` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-INTAKE-003.md` | `51656c9` | attempt 3 handoff verified; review `9885f57` awaits CEO status decision |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
@@ -49,8 +49,9 @@
 - `WEB-INTAKE-003@672f820` 的独立评审结论为 `CHANGES_REQUESTED`；attempt 2 只修正报告脱敏/启动说明与
   API checker 有界失败行为。纠正再次获独立审核前，不批准且不派发 `WEB-PARITY-004` 或 `WEB-WO-003`。
 - `WEB-INTAKE-003@0dbbf4e` 的 attempt 2 独立复审结论仍为 `CHANGES_REQUESTED`：默认 5000ms checker
-  deadline 与 fresh 后端 voice-alignment 的 5 秒 probe 形成边界竞态。CEO 已优先派发同一任务的有界
-  attempt 3；任务仍未批准，也不释放 `WEB-PARITY-004`、`WEB-WO-003` 或其他后续 WEB 工作。
+  deadline 与 fresh 后端 voice-alignment 的 5 秒 probe 形成边界竞态。attempt 3 已由 `51656c9`
+  有界纠正并完成 Worker handoff；本轮仅记为 `REVIEW_READY`，不在 record-review-ready 事件中作 CEO
+  批准决定，也不释放 `WEB-PARITY-004`、`WEB-WO-003` 或其他后续 WEB 工作。
 
 ## 队列规则
 

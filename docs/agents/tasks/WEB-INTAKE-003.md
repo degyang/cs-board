@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -151,7 +151,7 @@ Worker 已提交并推送有界 checker/report 纠正；等待新的独立复核
 - Review: `docs/agents/reviews/WEB-INTAKE-003.md`
 - Verdict: `CHANGES_REQUESTED`
 - Correction base: `0dbbf4e`
-- Dispatch state: `DISPATCHED` (attempt 3)
+- Dispatch state: completed; `REVIEW_READY` (attempt 3)
 
 只执行独立复审列出的 timeout-strategy、回归测试与报告纠正：默认 checker deadline 必须大于 fresh
 后端 voice-alignment endpoint 的合法近 5 秒边界，同时 silent backend 仍由 checker 自身有界非零退出。
@@ -162,3 +162,11 @@ Worker 已提交并推送有界 checker/report 纠正；等待新的独立复核
 允许范围仅限两个 checker 脚本、聚焦 checker 测试和交付报告；禁止修改后端 probe、产品页面、API/DTO、
 E2E、截图、manifest、`WEB-PARITY-004` 或 `WEB-WO-003`。Worker 必须提交并推送后再次进入独立复核，
 不得自行批准或领取下一项 WEB 工作。
+
+## Attempt 3 review handoff
+
+- Delivery: `51656c9`
+- Report: `docs/agents/reports/WEB-INTAKE-003.md`
+- State: `REVIEW_READY`
+
+Worker 已提交并推送有界 deadline/test/report 纠正；本节只记录交接，不代表 CEO 批准或释放后续 WEB 工作。
