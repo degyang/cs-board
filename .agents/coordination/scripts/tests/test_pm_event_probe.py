@@ -203,6 +203,24 @@ class PMEventProbeTest(unittest.TestCase):
         )
         self.assertEqual(self.probe(), "")
 
+    def test_supervised_review_requires_completion_bound_to_delivery(self) -> None:
+        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+        (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": {
+            "PM": {"transport": "codex_cli", "thread": "pm"},
+            "REVIEWER": {"transport": "codex_exec"},
+        }}))
+        self.assertEqual(self.probe(), "")
+        runtime = self.root / ".agents/coordination/runtime"
+        (runtime / "review-completed.json").write_text(json.dumps({
+            "state": "completed", "task_id": "CORE-1", "delivery": "old",
+        }))
+        self.assertEqual(self.probe(), "")
+        (runtime / "review-completed.json").write_text(json.dumps({
+            "state": "completed", "task_id": "CORE-1", "delivery": "abc",
+        }))
+        event = json.loads(self.probe())
+        self.assertEqual(event["actions"][0]["task_id"], "CORE-1")
+
     def test_new_or_revised_review_reopens_acknowledged_event(self) -> None:
         self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
         first = json.loads(self.probe())

@@ -31,6 +31,14 @@ def read_tasks(root: Path) -> dict[str, dict[str, str]]:
     return tasks
 
 
+def task_delivery(root: Path, task_id: str) -> str:
+    for line in (root / "docs/agents/status.md").read_text(encoding="utf-8").splitlines():
+        columns = [value.strip().strip("`") for value in line.split("|")[1:-1]]
+        if len(columns) >= 5 and columns[0] == task_id:
+            return columns[4]
+    return ""
+
+
 ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
 ACTION_ORDER = {
     "recover-stale": 0,
@@ -95,6 +103,15 @@ def review_digest(root: Path, task_id: str) -> str | None:
 
 def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600) -> list[dict[str, object]]:
     tasks = read_tasks(root)
+    try:
+        registry = json.loads((root / ".agents/coordination/agents.json").read_text(encoding="utf-8"))
+        supervised_reviewer = registry.get("agents", {}).get("REVIEWER", {}).get("transport") == "codex_exec"
+    except (FileNotFoundError, json.JSONDecodeError):
+        supervised_reviewer = False
+    try:
+        review_completion = json.loads((root / ".agents/coordination/runtime/review-completed.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        review_completion = {}
     current_time = now or datetime.now(timezone.utc)
     busy_owners = {task["owner"] for task in tasks.values() if task["status"] in ACTIVE_STATUSES}
     actions: list[dict[str, object]] = []
@@ -110,6 +127,12 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
             if reason:
                 actions.append({"kind": "recover-stale", "reason": reason, **task})
         elif task["status"] == "REVIEW_READY":
+            if supervised_reviewer and not (
+                review_completion.get("state") == "completed"
+                and review_completion.get("task_id") == task["task_id"]
+                and review_completion.get("delivery") == task_delivery(root, task["task_id"])
+            ):
+                continue
             actions.append(
                 {
                     "kind": "review",

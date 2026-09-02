@@ -61,3 +61,6 @@ runner 的 working → review 生命周期。至此 PM 只决定 Git 状态与�
 一次实际 PM 周期耗时 105 秒，却只完成两个机械状态归并。PM 现改为每轮最多消费一个 action，单次模型
 调用硬上限 60 秒；超时或事实状态未变化均不 ack，保留事件供下一周期重试。Worker/Reviewer 的确定性
 dispatcher 在 PM 模型调用前异步运行，因此 PM 变慢不会阻塞真实任务和审核接力。
+
+Reviewer completed marker 还必须同时匹配当前 `task_id + delivery`，PM 才能消费 verdict。这样同一任务
+返工后的新交付不会错误复用磁盘上上一 attempt 的旧评审文件。
