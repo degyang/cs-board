@@ -193,6 +193,16 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(action["kind"], "resolve-blocker")
         self.assertEqual(action["task_id"], "MEDIA-1")
 
+    def test_completed_test_handoff_is_not_starved_by_a_blocker(self) -> None:
+        self.write_status([
+            "| `MEDIA-1` | WORKER_MEDIA | BLOCKED | pending | m | timeout |",
+            "| `WEB-1` | WORKER_WEB | TEST_READY | pending | w | pending |",
+        ])
+        runtime = self.root / ".agents/coordination/runtime"
+        runtime.mkdir(parents=True, exist_ok=True)
+        (runtime / "test-completed-WEB-1.json").write_text(json.dumps({"state": "completed", "delivery": "w"}))
+        self.assertEqual(json.loads(self.probe())["actions"][0]["kind"], "record-test-result")
+
     def test_idle_and_blocked_in_progress_emit_recovery(self) -> None:
         for status in ("DISPATCHED", "IN_PROGRESS"):
             for state in ("idle", "blocked"):
