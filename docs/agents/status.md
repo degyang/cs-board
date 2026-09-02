@@ -17,7 +17,7 @@
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | attempt 3 lifecycle correction handed off; review queued |
+| `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | DISPATCHED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | attempt 2 deterministic immutable capture correction dispatched |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
@@ -113,6 +113,9 @@
   报告的 deterministic attempt 2；本轮按纠正优先级使用 `gpt-5.6-terra + medium` 异步派发，不等待
   Worker 门禁。`WEB-PARITY-004` blocker 保持；Reviewer 槽仍服务 `CORE-RUNTIME-006` attempt 3，
   MEDIA 继续排队。
+- `CORE-RUNTIME-006@de57fab` attempt 3 独立评审提交 `95ac14a` 结论为 `APPROVED`：全量 457 passed、
+  0 skipped，同端口两轮真实冷启动均正常退出并立即可 bind，且无残留进程。CEO 据此批准本任务；这不
+  代表用户验收、发布或合并批准。CORE 当前无其他活动任务，按动态团队约定回收当前注册席位，历史保留。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

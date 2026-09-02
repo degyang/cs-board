@@ -19,15 +19,6 @@
       "reasoning_effort": "medium",
       "capabilities": ["webui", "frontend-contracts", "browser-evidence"]
     },
-    "CORE": {
-      "transport": "codex_cli",
-      "thread": "01a060a2-e25a-7800-8daa-46139720f34f",
-      "worktree": "/mnt/d/workstation/projects/cs-board-core-cap-repair",
-      "branch": "fix/mountain-capability-secret-contract",
-      "model": "gpt-5.6-terra",
-      "reasoning_effort": "medium",
-      "capabilities": ["domain", "api", "cli", "persistence", "telemetry"]
-    },
     "MEDIA": {
       "transport": "codex_cli",
       "thread": "01a06114-4c68-7313-99f0-d83e727e8a8c",

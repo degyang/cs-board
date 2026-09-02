@@ -1,7 +1,7 @@
 # CORE-RUNTIME-006：后端全量门禁、冷启动边界与进程清理
 
 - Owner: CORE
-- Status: REVIEW_READY
+- Status: APPROVED
 - Priority: P0
 - Depends on: `CORE-CAP-005=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-core-cap-repair`
@@ -108,3 +108,12 @@ Worker 已提交并推送有界 zero-skip 返工，分支干净且与远端一�
 
 Worker 已提交并推送同端口立即复用的有界 lifecycle 纠正，分支干净且与远端一致；本节只记录独立评审
 交接，不代表 CEO 批准。Reviewer WIP 仍由 `PROTOTYPE-GOLDEN-005` 占用，本任务等待其后审核。
+
+## Attempt 3 CEO decision
+
+- Review commit: `95ac14a`
+- Review digest: `faa13b04a361409923c09f2f6a4235d18dd8958932d3355fee7e621acccbd411`
+- Reviewer verdict: `APPROVED`
+- CEO state: `APPROVED`
+
+CEO 依据独立评审批准交付 `de57fab`；该决定只关闭本任务，不代表用户验收、发布或合并批准。
