@@ -10,7 +10,7 @@
 | `CORE-EXEC-002` | CORE | APPROVED | `docs/agents/tasks/CORE-EXEC-002.md` | `e1bc3d5` | `docs/agents/reviews/CORE-EXEC-002.md` |
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
-| `CORE-WO-003` | CORE | IN_PROGRESS | `docs/agents/tasks/CORE-WO-003.md` | pending | worker active |
+| `CORE-WO-003` | CORE | CHANGES_REQUESTED | `docs/agents/tasks/CORE-WO-003.md` | `a38ae67` | `docs/agents/reviews/CORE-WO-003.md` |
 | `WEB-INTAKE-003` | WEB | IN_PROGRESS | `docs/agents/tasks/WEB-INTAKE-003.md` | pending | worker active |
 | `MEDIA-SKILLS-003` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | pending | waiting only for one runtime agent slot |
 | `WEB-WO-003` | WEB | BACKLOG | `docs/agents/tasks/WEB-WO-003.md` | pending | blocked by CORE-WO-003 |
