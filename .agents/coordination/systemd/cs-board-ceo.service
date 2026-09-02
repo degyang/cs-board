@@ -1,9 +1,0 @@
-[Unit]
-Description=CS Board CEO global watchdog
-
-[Service]
-Type=oneshot
-TimeoutStartSec=90s
-WorkingDirectory=/mnt/d/workstation/projects/cs-board-mountain-v2
-Environment=PATH=/home/ubuntu/.local/share/mise/installs/node/24/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/mnt/d/workstation/projects/cs-board-mountain-v2/.agents/coordination/scripts/run_ceo_watch.sh /mnt/d/workstation/projects/cs-board-mountain-v2
