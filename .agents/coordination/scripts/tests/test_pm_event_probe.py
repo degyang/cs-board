@@ -243,6 +243,7 @@ class PMEventProbeTest(unittest.TestCase):
         fake_codex.chmod(0o755)
         environment = os.environ.copy()
         environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+        environment["CODEX_BIN"] = str(fake_codex)
         subprocess.run(
             ["bash", str(SOURCE / "run_pm_if_needed.sh"), str(self.root)],
             check=True,
@@ -263,12 +264,31 @@ class PMEventProbeTest(unittest.TestCase):
         fake_codex.chmod(0o755)
         environment = os.environ.copy()
         environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+        environment["CODEX_BIN"] = str(fake_codex)
         result = subprocess.run(
             ["bash", str(SOURCE / "run_pm_if_needed.sh"), str(self.root)],
             env=environment,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(self.probe())["actions"][0]["kind"], "review")
+
+    def test_wrapper_success_does_not_ack_unchanged_event(self) -> None:
+        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+        (self.root / ".agents/coordination/agents.json").write_text(
+            json.dumps({"agents": {"PM": {"transport": "codex_cli", "thread": "real-looking-uuid"}}}),
+            encoding="utf-8",
+        )
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        fake_codex = fake_bin / "codex"
+        fake_codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake_codex.chmod(0o755)
+        environment = os.environ.copy()
+        environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+        environment["CODEX_BIN"] = str(fake_codex)
+        result = subprocess.run(["bash", str(SOURCE / "run_pm_if_needed.sh"), str(self.root)], env=environment)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(self.probe())["actions"][0]["task_id"], "CORE-1")
 
 
 if __name__ == "__main__":
