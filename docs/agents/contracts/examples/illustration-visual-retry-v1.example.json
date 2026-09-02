@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "operation": "retry",
+  "parent_work_order_id": "wo-illustrations-run-456-r1",
+  "idempotency_key": "idem-retry-v001",
+  "scope": {"kind": "visual", "visual_id": "visual-001-01"},
+  "reason_code": "USER_REJECTED_COMPOSITION",
+  "response": {
+    "work_order_id": "wo-illustrations-run-456-r2-v001",
+    "revision": 2,
+    "status": "ready",
+    "reuses_accepted_visual_ids": [],
+    "stale_artifacts": ["render.manifest", "output.final-manifest"],
+    "not_stale_artifacts": ["audio.voice-manifest", "timing.timeline"]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "work_order_id": "wo-illustrations-run-456-r1",
+  "identity": {
+    "task_id": "task-123",
+    "run_id": "run-456",
+    "stage": "generate-illustrations",
+    "skill": "illustration-generator",
+    "pipeline_id": "mountain-av-v1",
+    "engine": "whiteboard"
+  },
+  "revision": 1,
+  "input_fingerprint": "sha256:3f4a5b6c7d8e9f00112233445566778899aabbccddeeff001122334455667788",
+  "status": "waiting-external-output",
+  "scope": {"kind": "stage"},
+  "input_artifacts": [
+    {
+      "artifact_key": "planning.storyboard",
+      "revision": 4,
+      "sha256": "sha256:1a2b3c4d5e6f77889900aabbccddeeff00112233445566778899aabbccddeeff",
+      "status": "succeeded",
+      "relative_path": "artifacts/planning/storyboard.json"
+    },
+    {
+      "artifact_key": "style.snapshot",
+      "revision": 2,
+      "sha256": "sha256:2b3c4d5e6f77889900aabbccddeeff00112233445566778899aabbccddeeff00",
+      "status": "succeeded",
+      "relative_path": "artifacts/style/snapshot.json"
+    }
+  ],
+  "parameters_path": "work-orders/generate-illustrations/parameters.json",
+  "instructions_path": "work-orders/generate-illustrations/instructions.md",
+  "output_directory": "manual/illustrations/candidates/wo-illustrations-run-456-r1",
+  "expected_outputs": [
+    {
+      "visual_id": "visual-001-01",
+      "source_kind_allowed": ["codex-imagegen", "external-import"],
+      "source_formats": ["png", "webp"],
+      "processed_format": "png",
+      "width": 1920,
+      "height": 1080,
+      "candidate_paths": {
+        "source": "manual/illustrations/candidates/wo-illustrations-run-456-r1/visual-001-01/source.png",
+        "processed": "manual/illustrations/candidates/wo-illustrations-run-456-r1/visual-001-01/processed.png"
+      }
+    }
+  ],
+  "commands": {
+    "run": [
+      {
+        "command_id": "cmd-wo-prepare-r1",
+        "argv": ["stage-work-order", "prepare-external", "--work-order", "wo-illustrations-run-456-r1"],
+        "idempotency_key": "idem-prepare-001",
+        "preconditions": ["status=ready", "input_fingerprint=current"]
+      }
+    ],
+    "import": [
+      {
+        "command_id": "cmd-wo-import-v001",
+        "argv": ["artifact", "import-candidate", "--work-order", "wo-illustrations-run-456-r1", "--visual", "visual-001-01"],
+        "idempotency_key": "idem-import-v001",
+        "preconditions": ["status=waiting-external-output", "candidate_within_output_directory"]
+      }
+    ],
+    "validate": [
+      {
+        "command_id": "cmd-wo-validate-v001",
+        "argv": ["artifact", "validate-candidate", "--work-order", "wo-illustrations-run-456-r1", "--visual", "visual-001-01"],
+        "idempotency_key": "idem-validate-v001",
+        "preconditions": ["candidate=imported", "input_fingerprint=current"]
+      }
+    ],
+    "accept": [
+      {
+        "command_id": "cmd-wo-accept-v001",
+        "argv": ["artifact", "accept-candidate", "--work-order", "wo-illustrations-run-456-r1", "--visual", "visual-001-01"],
+        "idempotency_key": "idem-accept-v001",
+        "preconditions": ["candidate=validated", "candidate_hash=current", "all_expected_visuals_validated"]
+      }
+    ],
+    "reject": [
+      {
+        "command_id": "cmd-wo-reject-v001",
+        "argv": ["artifact", "reject-candidate", "--work-order", "wo-illustrations-run-456-r1", "--visual", "visual-001-01"],
+        "idempotency_key": "idem-reject-v001",
+        "preconditions": ["candidate=imported_or_validated"]
+      }
+    ],
+    "retry": [
+      {
+        "command_id": "cmd-wo-retry-v001",
+        "argv": ["stage-work-order", "retry", "--work-order", "wo-illustrations-run-456-r1", "--visual", "visual-001-01"],
+        "idempotency_key": "idem-retry-v001",
+        "preconditions": ["status=waiting-external-output_or_failed"]
+      }
+    ]
+  }
+}
