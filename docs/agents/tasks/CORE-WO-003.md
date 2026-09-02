@@ -2,7 +2,7 @@
 
 - Owner: CORE
 - Status: CHANGES_REQUESTED
-- Attempt: 2（返工）
+- Attempt: 3（返工）
 - Priority: P0
 - Depends on: `CORE-EXEC-002=APPROVED`, `MEDIA-WO-002=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
@@ -101,3 +101,17 @@ git diff --check e1bc3d5...HEAD
 ```
 
 更新原报告追加 attempt 2 证据，提交并推送后直接唤醒 `/root/pm`，停止。
+
+## Attempt 3 final bounded correction
+
+Attempt 2 delivery `d6a73c0` 已修正缺失依赖、run command、插画 ID/path 与 schema；只剩两项：
+
+1. `expected_outputs` 必须按规范输出集合：`clone-voice` 同时包含
+   `audio.voice-manifest`、`timing.timeline`；`compose-video` 同时包含
+   `output.final-video`、`output.final-manifest`；其余 Stage 保持规范 key。测试逐 Stage 断言完整集合；
+2. 依赖消失使 current WO stale 后，恢复相同 hash 的 Artifact 不得返回旧 stale。必须创建可执行的新
+   revision，并产生不复用旧 revision 副作用的 work_order/idempotency identity；测试覆盖
+   `ready → dependency missing/stale → same artifact restored → new ready revision`。
+
+不得修改其他语义，不进入 `CORE-CAP-004`。定向与全量门禁沿用 attempt 2；完成后追加报告、提交
+推送并直接唤醒 `/root/pm`。

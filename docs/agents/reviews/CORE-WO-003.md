@@ -60,3 +60,16 @@ generate-illustrations 的 work_order_id 与 output_directory 尾 ID 不同。
 保留已有骨架，只修正缺失依赖、Stage-specific next action/run command、插画 ID/path、schema 和对应
 行为测试。candidate import/validate/accept/reject/retry、WebUI、Skills 与 repository 架构重构均不在
 attempt 2 范围。
+
+## Attempt 2 review
+
+Delivery `d6a73c0` 已通过上一轮四项复现和定向 `23 passed`，但仍为
+**CHANGES_REQUESTED**，需 final attempt 3：
+
+- `STAGE_OUTPUTS` 是单字符串映射，`clone-voice.expected_outputs` 漏掉 `timing.timeline`，
+  `compose-video.expected_outputs` 漏掉 `output.final-video`，不符合六阶段规范主输出；
+- current WO 因依赖消失被保存为 stale 后，相同 Artifact 恢复会命中“fingerprint 相同直接返回”分支，
+  永久返回 stale，且未来副作用会复用旧 work_order/idempotency identity。
+
+Attempt 3 只补输出集合、stale 恢复 revision/identity 与行为测试；不重开已通过项，不混入
+capabilities API。
