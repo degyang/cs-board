@@ -61,6 +61,14 @@ class ServiceResolver:
         )
         return services[0]
 
+    def has_required_secrets(self, service: ServiceDefinition) -> bool:
+        """Return whether a resolved service has all required credentials.
+
+        Resolution selects a configured definition; execution boundaries also
+        need this value-free availability check before starting adapters.
+        """
+        return self._registry.has_required_secrets(service)
+
     def resolve_for_stage(self, stage_name: str) -> ServiceDefinition:
         """按 stage 名称选择服务。"""
         capability = STAGE_CAPABILITY_MAP.get(stage_name)

@@ -399,7 +399,9 @@ class MountainCommands:
             unavailable = []
             for stage_name, capability in STAGE_CAPABILITY_MAP.items():
                 try:
-                    self.service_resolver.resolve(capability)
+                    service = self.service_resolver.resolve(capability)
+                    if not self.service_resolver.has_required_secrets(service):
+                        unavailable.append({"stage": stage_name, "capability": capability})
                 except DomainError:
                     unavailable.append({"stage": stage_name, "capability": capability})
             if unavailable:
