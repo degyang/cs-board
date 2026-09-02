@@ -21,6 +21,7 @@ from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskR
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus
 from csboard.domain.models import Task, Run
 from webapp.mountain_api import mountain_router
+from webapp.mountain_server import create_app
 
 
 def _create_test_app(tmpdir: Path) -> tuple[FastAPI, FilesystemTaskRepository]:
@@ -116,99 +117,57 @@ class TestTaskEndpoints(unittest.TestCase):
             self.assertEqual(response.status_code, 404)
 
 
-@unittest.skip("Legacy mountain_api tests — segment_script alias removed, legacy API being decommissioned")
 class TestStageEndpoints(unittest.TestCase):
-    """Test stage operation endpoints."""
+    """Executable current `/api/v1` stage and pipeline boundaries."""
+
+    @staticmethod
+    def _client(tmpdir: Path) -> TestClient:
+        return TestClient(create_app(tmpdir))
+
+    @staticmethod
+    def _task(client: TestClient) -> tuple[str, str]:
+        response = client.post("/api/v1/tasks", json={"title": "Stage boundary"})
+        assert response.status_code == 200
+        payload = response.json()
+        return payload["task_id"], payload["run_id"]
 
     def test_generate_visual_anchors(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            app, repo = _create_test_app(Path(tmpdir))
-            _setup_task(repo)
-            client = TestClient(app)
-            response = client.post(
-                "/api/mountain/tasks/proj-1/runs/run-1/stages/segment-script",
-                json={"script": "第一句话。第二句话。"},
-            )
-            self.assertEqual(response.status_code, 200)
+            client = self._client(Path(tmpdir))
+            response = client.post("/api/v1/tasks/missing/runs/missing/stages/generate-visual-anchors/run")
+            self.assertEqual(response.status_code, 404)
             data = response.json()
-            self.assertTrue(data["ok"])
-            self.assertEqual(data["stage"], "generate-visual-anchors")
+            self.assertEqual(data["error"]["code"], "NOT_FOUND")
 
     def test_plan_storyboard(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            app, repo = _create_test_app(Path(tmpdir))
-            _setup_task(repo)
-            # 先运行 segment-script
-            run_dir = repo.run_dir("proj-1", "run-1")
-            artifacts_dir = run_dir / "artifacts"
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-            av_plan = {
-                "voice_units": [
-                    {
-                        "unit_id": "u1",
-                        "order": 0,
-                        "source_range": {"start": 0, "end": 10},
-                        "text": "测试文案",
-                        "visual_items": [
-                            {
-                                "visual_id": "v1",
-                                "order": 0,
-                                "source_range": {"start": 0, "end": 10},
-                                "text": "测试文案",
-                            }
-                        ],
-                    }
-                ],
-            }
-            (artifacts_dir / "planning" / "av-plan.json").parent.mkdir(parents=True, exist_ok=True)
-            (artifacts_dir / "planning" / "av-plan.json").write_text(json.dumps(av_plan))
-            timeline = {
-                "units": [
-                    {
-                        "unit_id": "u1",
-                        "duration_ms": 5000,
-                        "timing_source": "equal_fallback",
-                        "visual_timings": [{"visual_id": "v1", "start_ms": 0, "end_ms": 5000}],
-                    }
-                ],
-            }
-            (artifacts_dir / "timing" / "timeline.json").parent.mkdir(parents=True, exist_ok=True)
-            (artifacts_dir / "timing" / "timeline.json").write_text(json.dumps(timeline))
-            store = FilesystemArtifactStore(repo)
-            store.commit_bytes("proj-1", "run-1", "planning.av-plan", "planning/av-plan.json", json.dumps(av_plan).encode(), "generate-visual-anchors")
-            store.commit_bytes("proj-1", "run-1", "timing.timeline", "timing/timeline.json", json.dumps(timeline).encode(), "clone-voice")
-
-            client = TestClient(app)
-            response = client.post("/api/mountain/tasks/proj-1/runs/run-1/stages/plan-storyboard")
+            client = self._client(Path(tmpdir))
+            task_id, run_id = self._task(client)
+            response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/stages/plan-storyboard/run")
             self.assertEqual(response.status_code, 200)
             data = response.json()
-            self.assertTrue(data["ok"])
-            self.assertEqual(data["stage"], "plan-storyboard")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["results"][0]["error"]["code"], "VALIDATION_ERROR")
 
     def test_pipeline_run(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            app, repo = _create_test_app(Path(tmpdir))
-            _setup_task(repo)
-            # 保存 request.json
-            task_dir = repo.task_dir("proj-1")
-            request_path = task_dir / "request.json"
-            request_path.write_text(json.dumps({"script": "测试文案用于分割。"}))
-
-            client = TestClient(app)
+            client = self._client(Path(tmpdir))
+            task_id, run_id = self._task(client)
             response = client.post(
-                "/api/mountain/tasks/proj-1/runs/run-1/pipeline/run",
-                params={"policy": "gated"},
+                f"/api/v1/tasks/{task_id}/runs/{run_id}/pipeline/run",
+                params={"policy": "targeted", "target_stage": "plan-storyboard"},
             )
             self.assertEqual(response.status_code, 200)
             data = response.json()
-            self.assertIn("stages_executed", data)
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["results"][0]["error"]["code"], "VALIDATION_ERROR")
 
     def test_stage_retry_not_found(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            app, _ = _create_test_app(Path(tmpdir))
-            client = TestClient(app)
-            response = client.post("/api/mountain/tasks/nonexistent/runs/run-1/stages/segment-script/retry")
+            client = self._client(Path(tmpdir))
+            response = client.post("/api/v1/tasks/nonexistent/runs/run-1/stages/generate-visual-anchors/retry")
             self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.json()["error"]["code"], "NOT_FOUND")
 
 
 class TestArtifactEndpoints(unittest.TestCase):
