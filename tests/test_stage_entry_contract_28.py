@@ -23,6 +23,14 @@ def test_start_rejects_missing_reference_and_unsafe_reference(tmp_path: Path) ->
     data = json.loads(path.read_text()); data["reference_audio"] = "../../secret.wav"; path.write_text(json.dumps(data))
     assert client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start").status_code == 400
 
+def test_start_rejects_zero_byte_reference_without_side_effects(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path)); task_id, run_id = _created(client)
+    assert client.post(f"/api/v1/tasks/{task_id}/inputs", data={"script": "这是足够长的输入文案但参考音频为空。"}, files={"reference": ("voice.wav", b"RIFF-audio", "audio/wav")}).status_code == 200
+    (tmp_path / "tasks" / task_id / "inputs" / "reference.wav").write_bytes(b"")
+    root = tmp_path / "tasks" / task_id; before = _snapshot(root)
+    response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
+    assert response.status_code == 400 and response.json()["error"]["details"]["invalid_fields"] == ["reference_audio"] and _snapshot(root) == before
+
 def _snapshot(root: Path) -> dict[str, str]:
     return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob("*") if p.is_file()}
 
@@ -65,3 +73,11 @@ def test_invalid_output_failed_identity_and_gate_write_failure_are_safe(tmp_path
     monkeypatch.setattr(type(commands), "mark_gate_waiting", lambda *_: (_ for _ in ()).throw(OSError("disk")))
     persisted = commands._stage_response(task_id, run_id, "generate-visual-anchors", {"ok": True, "result": "succeeded"})
     assert not persisted["ok"] and persisted["next_action"]["code"] == "STAGE_GATE_PERSIST_FAILED"
+
+@pytest.mark.parametrize("field", ["task_id", "run_id", "trace_id", "stage"])
+def test_identity_conflicts_never_echo_forged_identity(tmp_path: Path, field: str) -> None:
+    commands, task_id, run_id = _commands(tmp_path)
+    response = commands._stage_response(task_id, run_id, "generate-visual-anchors", {"ok": True, "result": "succeeded", field: "forged"})
+    item = response["results"][0]
+    assert response["next_action"]["code"] == "FIX_STAGE_RESULT" and item["error"] == "STAGE_RESPONSE_IDENTITY_CONFLICT"
+    for key in ("task_id", "run_id", "trace_id", "stage"): assert item[key] == response[key]
