@@ -29,8 +29,9 @@
 
 当前 CEO 由 `codex exec --json` 启动，注册表保存其 `thread.started` 返回的真实 UUID；UUID 只用于
 `codex exec resume`，不是在线心跳。由于当前项目位于 WSL `/mnt/d`，CLI 的 `workspace-write` sandbox
-实际返回 `EROFS`；当前 CEO session 以 `danger-full-access` 创建，但权限仍受 Git 契约、单周期 prompt、
-非重叠锁和独立审核约束。用户级 timer 安装命令为：
+实际返回 `EROFS`；wrapper 因此用 CLI 的无 sandbox resume 模式恢复当前 CEO session。它的动作权限仍
+受 Git 契约、单周期 prompt、非重叠锁和独立审核约束，systemd unit 也只允许执行项目内这一 wrapper。
+用户级 timer 安装命令为：
 
 ```bash
 mkdir -p ~/.config/systemd/user
