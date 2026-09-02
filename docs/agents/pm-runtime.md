@@ -46,3 +46,39 @@ systemctl --user enable --now cs-board-pm.timer
 
 用户已授权的上限是每五分钟检查一次、无事件零模型调用。定时器没有 merge、删除、审批绕过或产品
 决策权限；未注册 CLI UUID 前不应启用。运行证据只写 ignored runtime，不写 Secret 或用户素材。
+
+## 当前 M1 全局瓶颈快照（2026-09-02）
+
+本快照服从 `docs/agents/agreements.md` 最新 ACTIVE 节点：只推进人工 Codex Skills 视频闭环；新任务和
+Reviewer 默认使用适中模型与 reasoning effort，未达到三次失败返工不申请升级。
+
+### 首要瓶颈
+
+`PROTOTYPE-GOLDEN-005 → WEB-PARITY-004 attempt 2 → WEB-WO-003 → MEDIA-E2E-003 → USER_ACCEPTANCE`
+是当前最长且不可绕过的串行链。PROTOTYPE 正在以 `gpt-5.6-terra + medium` 恢复五页 immutable golden；
+在其独立审核通过前，WEB 缺少合法验收输入，不能重派 parity，也不能越过 P0 去领取 Work Order。
+
+### 次要瓶颈
+
+`MEDIA-PREFLIGHT-004` 的检测器已交付，但 live readiness 仍报告 FFmpeg/ffprobe version failure、
+IndexTTS timeout 和 Whisper model 缺失。即使 WEB 链先完成，MEDIA live readiness 未全绿也不能派发
+`MEDIA-E2E-003`，因而无法生成最终可播放 MP4。
+
+### 关键依赖与资源错配
+
+- `CORE-RUNTIME-006` 与上述产品串行链并行，但它是正式 API 冷启动、零 skip 和清理的发布前可靠性门禁；
+  当前唯一 Reviewer 正在审核其 attempt 2，MEDIA review 因 Reviewer WIP=1 排队。
+- WEB Worker 当前 blocked/空闲，不是缺人，而是缺经审核的 immutable golden；提前派发只会重复失败。
+- MEDIA Worker 已交付 preflight，当前阻塞来自本机工具/模型/服务环境，而非继续写媒体代码。
+- PROTOTYPE Worker 是当前真正解除 WEB 空转的资源，已使用治理允许的适中配置；不得为了缩短等待越级提模。
+
+### CEO 接下来三个最小动作
+
+1. 等当前 `CORE-RUNTIME-006` 独立审核提交后，只记录 verdict 与任务状态，不并发启动第二个 Reviewer。
+2. Reviewer 释放后：若 `PROTOTYPE-GOLDEN-005` 已 handoff，优先审核它以解除主链；否则先审核已排队的
+   `MEDIA-PREFLIGHT-004`，同时保持 PROTOTYPE Worker 单独运行。
+3. 只有 PROTOTYPE 获批后，才把同一 `WEB-PARITY-004` 有界 attempt 2 提交为 `DISPATCHED` 并异步唤醒
+   WEB；继续冻结 `WEB-WO-003`。MEDIA 侧依据 preflight review 只做最小环境修复，live readiness 全绿前
+   不派发 `MEDIA-E2E-003`。
+
+以上均为工程协调判断，不代表用户验收、发布或合并通过。
