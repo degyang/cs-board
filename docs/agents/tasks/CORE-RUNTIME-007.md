@@ -9,6 +9,17 @@
 - Model: `gpt-5.6-terra`
 - Reasoning effort: `medium`
 
+## External dependency record
+
+- Dependency: the supervised Worker dispatcher at
+  `dispatch_cli_agent.sh`, required to start `WORKER_CORE` through
+  `run_worker_agent.sh`.
+- State: unavailable from the repository and configured command path; no
+  supervised Worker lease can therefore be created.
+- Recovery condition: restore the dispatcher and its supervised wrapper, then
+  re-dispatch this unchanged P0 task. Until then, no Worker runtime, Tester
+  handoff, or MEDIA resume decision is valid.
+
 ## Goal
 
 Diagnose and recover the reproducible full-suite timeout reported by
