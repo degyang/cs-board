@@ -23,11 +23,11 @@ from pathlib import Path
 root = Path(sys.argv[1])
 row = re.compile(r"^\|\s*`?([^|`]+)`?\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*`?([^|`]+)`?\s*\|\s*`?([^|`]+)`?")
 registry = json.loads((root / '.agents/coordination/agents.json').read_text())['agents']
-runtime_path = root / '.agents/coordination/runtime/REVIEWER.json'
+completion_path = root / '.agents/coordination/runtime/review-completed.json'
 try:
-    reviewer = json.loads(runtime_path.read_text())
+    completion = json.loads(completion_path.read_text())
 except (FileNotFoundError, json.JSONDecodeError):
-    reviewer = {}
+    completion = {}
 for line in (root / 'docs/agents/status.md').read_text().splitlines():
     match = row.match(line)
     if not match:
@@ -36,7 +36,7 @@ for line in (root / 'docs/agents/status.md').read_text().splitlines():
     if status != 'REVIEW_READY':
         continue
     # A completed review must be consumed by PM before the same task can run again.
-    if reviewer.get('state') == 'review' and reviewer.get('task_id') == task_id:
+    if completion.get('state') == 'completed' and completion.get('task_id') == task_id and completion.get('delivery') == delivery:
         raise SystemExit(0)
     owner_config = registry.get(owner, {})
     print(task_id)

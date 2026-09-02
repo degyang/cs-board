@@ -10,17 +10,25 @@ dashboard_dir="${TEAM_DASHBOARD_DIR:-/home/ubuntu/.codex/skills/pos-magents/scri
 node_bin="${NODE_BIN:-/home/ubuntu/.local/share/mise/installs/node/24/bin/node}"
 codex_bin="${CODEX_BIN:-/home/ubuntu/.local/share/mise/installs/node/24/bin/codex}"
 teamctl="$dashboard_dir/teamctl.mjs"
+runtime="$project_root/.agents/coordination/runtime"
+completion="$runtime/review-completed.json"
 result=1
 
 finish() {
   local state=blocked
-  [[ "$result" -eq 0 ]] && state=review
+  if [[ "$result" -eq 0 ]]; then
+    state=idle
+    temporary="$completion.$$.tmp"
+    printf '{"task_id":"%s","delivery":"%s","state":"completed"}\n' "$task_id" "$delivery" >"$temporary"
+    mv "$temporary" "$completion"
+  fi
   "$node_bin" "$teamctl" agent --project "$project_root" --role REVIEWER \
     --state "$state" --task "$task_id" --cycle 审核 --attempt 1 >/dev/null 2>&1 || true
 }
 trap finish EXIT
 
 # The wrapper is the real supervised Reviewer process. Only it may publish working.
+mkdir -p "$runtime"
 "$node_bin" "$teamctl" agent --project "$project_root" --role REVIEWER \
   --state working --task "$task_id" --cycle 审核 --attempt 1 --lease-seconds 600 >/dev/null
 

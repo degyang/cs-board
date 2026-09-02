@@ -74,6 +74,17 @@ class PMEventProbeTest(unittest.TestCase):
         )
         return result.stdout.strip()
 
+    def test_max_actions_bounds_pm_cycle_to_one_fact_transition(self) -> None:
+        self.write_status([
+            "| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |",
+            "| `MEDIA-1` | MEDIA | REVIEW_READY | pending | def | pending |",
+        ])
+        result = subprocess.run([
+            "python3", str(SOURCE / "pm_event_probe.py"), "probe", "--project", str(self.root),
+            "--now", "2026-09-02T04:05:00Z", "--max-actions", "1",
+        ], check=True, capture_output=True, text=True)
+        self.assertEqual(len(json.loads(result.stdout)["actions"]), 1)
+
     def test_no_actionable_event_has_no_output(self) -> None:
         self.write_status(["| `CORE-1` | CORE | IN_PROGRESS | pending | pending | pending |"])
         self.write_runtime("CORE")

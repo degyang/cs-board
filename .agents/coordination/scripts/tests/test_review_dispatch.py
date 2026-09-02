@@ -57,8 +57,8 @@ class ReviewDispatchTest(unittest.TestCase):
         self.assertFalse((self.root / ".agents/coordination/runtime/REVIEWER.json").exists())
 
     def test_completed_review_waits_for_pm_consumption(self) -> None:
-        (self.root / ".agents/coordination/runtime/REVIEWER.json").write_text(
-            json.dumps({"state": "review", "task_id": "CORE-1"})
+        (self.root / ".agents/coordination/runtime/review-completed.json").write_text(
+            json.dumps({"state": "completed", "task_id": "CORE-1", "delivery": "abc1234"})
         )
         result = self.run_dispatch()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -93,7 +93,9 @@ class ReviewDispatchTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         lines = transitions.read_text().splitlines()
         self.assertIn("--state working", lines[0])
-        self.assertIn("--state review", lines[-1])
+        self.assertIn("--state idle", lines[-1])
+        completion = json.loads((self.root / ".agents/coordination/runtime/review-completed.json").read_text())
+        self.assertEqual(completion["task_id"], "CORE-1")
 
     def test_supervised_runner_marks_failed_process_blocked(self) -> None:
         dashboard = self.root / "dashboard"

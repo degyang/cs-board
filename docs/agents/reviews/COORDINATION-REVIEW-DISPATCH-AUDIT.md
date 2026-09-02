@@ -24,7 +24,8 @@ Reviewer 是否建立、是否仍存活、是否完成以及下一项是否接�
 - `dispatch_review_agent.sh`：按事实表顺序选择一项 `REVIEW_READY`，用 flock 和单一 systemd unit 保证
   Reviewer WIP=1；已有服务运行时幂等退出；已完成 verdict 未被 PM 消费时不重复审核同一任务。
 - `run_review_agent.sh`：systemd 监督的 wrapper 成为唯一 Reviewer 进程真相源；只有 wrapper 真正启动后
-  才写 `working`，Codex 正常结束写 `review`，异常退出写 `blocked`。
+  才写 `working`，Codex 正常结束写 `idle` 并写独立 completed marker，异常退出写 `blocked`。Reviewer
+  不使用 Worker 的 `review`（等待审核）状态，避免出现“Reviewer 等待审核”的自指语义。
 - `run_pm_if_needed.sh`：每个周期先异步调用确定性 Reviewer dispatcher；PM 不再创建或预标 Reviewer。
   PM 返回后重新探测事件，事实状态未变化则不 ack 并非零退出，下一周期继续恢复。
 - 所有新 Reviewer 固定使用治理允许的 `gpt-5.6-terra + medium`，不得自行升级。
@@ -54,3 +55,9 @@ PROTOTYPE attempt 2 随后复现完全相同的失败模式：CEO 预写 `workin
 
 新增 Worker 回归覆盖：真实 wrapper 命令构造且 dispatcher 零预写、systemd 启动失败零假状态、受监督
 runner 的 working → review 生命周期。至此 PM 只决定 Git 状态与调用执行器，不直接创建 Agent 或写心跳。
+
+## PM 有界化补充
+
+一次实际 PM 周期耗时 105 秒，却只完成两个机械状态归并。PM 现改为每轮最多消费一个 action，单次模型
+调用硬上限 60 秒；超时或事实状态未变化均不 ack，保留事件供下一周期重试。Worker/Reviewer 的确定性
+dispatcher 在 PM 模型调用前异步运行，因此 PM 变慢不会阻塞真实任务和审核接力。

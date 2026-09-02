@@ -150,6 +150,7 @@ def main() -> int:
     parser.add_argument("--signature")
     parser.add_argument("--now", help="ISO-8601 clock override for deterministic tests")
     parser.add_argument("--worker-lease-seconds", type=int, default=600)
+    parser.add_argument("--max-actions", type=int, default=0, help="limit one bounded scheduler cycle; 0 keeps all")
     args = parser.parse_args()
     root = args.project.resolve()
     runtime = root / ".agents/coordination/runtime"
@@ -166,6 +167,8 @@ def main() -> int:
     if args.now and now is None:
         parser.error("--now must be an ISO-8601 timestamp")
     actions = actionable(root, now=now, lease_seconds=args.worker_lease_seconds)
+    if args.max_actions > 0:
+        actions = actions[: args.max_actions]
     if not actions:
         return 0
     current = signature(actions)

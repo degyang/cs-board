@@ -26,7 +26,7 @@ flock -n 9 || exit 0
 # Review dispatch is deterministic and asynchronous; it must not depend on a PM model turn.
 [[ ! -x "$review_dispatch" ]] || "$review_dispatch" "$project_root" || true
 
-event_json="$(python3 "$probe" probe --project "$project_root")"
+event_json="$(python3 "$probe" probe --project "$project_root" --max-actions 1)"
 [[ -n "$event_json" ]] || exit 0
 pm_task="$(python3 -c 'import json,sys; event=json.load(sys.stdin); print(event["actions"][0].get("task_id", "COORDINATION"))' <<<"$event_json")"
 
@@ -52,9 +52,10 @@ prompt="$prompt Model governance: default every new task to a moderate model and
 prompt="$prompt Reviewer execution is owned exclusively by dispatch_review_agent.sh and its supervised systemd service. Do not register, spawn, or pre-mark an orchestrator Reviewer; only consume a completed review verdict and update tracked state."
 prompt="$prompt Worker execution is owned exclusively by dispatch_cli_agent.sh and run_worker_agent.sh. Never create an orchestrator Worker or write working runtime yourself. After committing DISPATCHED, invoke the dispatcher asynchronously; only its supervised wrapper may publish working, review, or blocked."
 
-if "$codex_bin" exec resume --dangerously-bypass-approvals-and-sandbox "${registration[1]}" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
+if timeout --signal=TERM --kill-after=5s 60s \
+  "$codex_bin" exec resume --dangerously-bypass-approvals-and-sandbox "${registration[1]}" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
-  remaining="$(python3 "$probe" probe --project "$project_root")"
+  remaining="$(python3 "$probe" probe --project "$project_root" --max-actions 1)"
   remaining_signature="$(python3 -c 'import json,sys; data=sys.stdin.read().strip(); print(json.loads(data)["signature"] if data else "")' <<<"$remaining")"
   if [[ "$remaining_signature" == "$signature" ]]; then
     printf '{"state":"incomplete","signature":"%s","reason":"actionable state unchanged"}\n' "$signature" >"$runtime/pm-scheduler.json"
