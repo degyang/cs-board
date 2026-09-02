@@ -11,8 +11,8 @@
       "capabilities": ["planning", "review", "integration"]
     },
     "WEB": {
-      "transport": "codex_cli",
-      "thread": "01a060ad-70fe-7ed2-8e37-8c2cdf4c29ee",
+      "transport": "codex_exec",
+      "thread": "systemd:cs-board-agent-web.service",
       "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity",
       "branch": "feat/mountain-webui-surface-parity",
       "model": "gpt-5.6-luna",
@@ -20,8 +20,8 @@
       "capabilities": ["webui", "frontend-contracts", "browser-evidence"]
     },
     "MEDIA": {
-      "transport": "codex_cli",
-      "thread": "01a06114-4c68-7313-99f0-d83e727e8a8c",
+      "transport": "codex_exec",
+      "thread": "systemd:cs-board-agent-media.service",
       "worktree": "/mnt/d/workstation/projects/cs-board-media",
       "branch": "feat/mountain-media-work-orders",
       "model": "gpt-5.6-terra",
@@ -29,8 +29,8 @@
       "capabilities": ["skills", "tts", "illustration", "ffmpeg", "artifact-e2e"]
     },
     "PROTOTYPE": {
-      "transport": "orchestrator",
-      "thread": "/root/prototype_golden_attempt2_live",
+      "transport": "codex_exec",
+      "thread": "systemd:cs-board-agent-prototype.service",
       "worktree": "/mnt/d/workstation/projects/cs-board-prototype-golden",
       "branch": "feat/mountain-prototype-golden",
       "model": "gpt-5.6-terra",

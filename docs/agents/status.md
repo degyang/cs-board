@@ -119,6 +119,9 @@
 - `CORE-RUNTIME-006@de57fab` attempt 3 独立评审提交 `95ac14a` 结论为 `APPROVED`：全量 457 passed、
   0 skipped，同端口两轮真实冷启动均正常退出并立即可 bind，且无残留进程。CEO 据此批准本任务；这不
   代表用户验收、发布或合并批准。CORE 当前无其他活动任务，按动态团队约定回收当前注册席位，历史保留。
+- Worker 调度已统一整改：WEB、MEDIA、PROTOTYPE 及后续动态角色全部改用 `codex_exec` systemd wrapper；
+  dispatcher 不写 runtime，只有真实 wrapper 启动后写 working，正常/异常退出分别写 review/blocked，同
+  Owner WIP=1。CEO/PM 禁止再创建 orchestrator Worker 或预写 Agent 状态。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

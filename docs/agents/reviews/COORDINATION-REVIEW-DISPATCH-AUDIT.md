@@ -38,3 +38,19 @@ Reviewer 是否建立、是否仍存活、是否完成以及下一项是否接�
 - shell 语法、原事件优先级和 stale recovery 测试全部保留。
 
 本审核只修复协调与可观测性，不修改产品代码，也不构成任何任务批准。
+
+## Worker 链补充审核与修正
+
+PROTOTYPE attempt 2 随后复现完全相同的失败模式：CEO 预写 `working`，orchestrator 会话停在
+`pending_init`，租约过期且工作树无变化。这证明缺陷属于所有动态 Agent，而非 Reviewer 特例。
+
+- `run_worker_agent.sh` 成为 WEB、MEDIA、PROTOTYPE 及未来动态 Worker 的唯一受监督生命周期边界；
+- `dispatch_cli_agent.sh` 只校验注册、契约 commit、Owner WIP 并启动 systemd wrapper，不再写 runtime；
+- wrapper 真实启动才写 working，正常结束写 review，异常写 blocked；
+- 同一 Owner 已有服务时仅允许同 task 幂等调用，其他 task 明确失败；
+- 支持旧 `codex_cli` resume 和新 `codex_exec` fresh session；活动动态 Worker 全部迁移为后者，避免失效
+  UUID、orchestrator thread limit 和 pending_init 成为隐式依赖；
+- cycle/attempt 由派工显式传入，不再把所有返工错误显示为 attempt 1。
+
+新增 Worker 回归覆盖：真实 wrapper 命令构造且 dispatcher 零预写、systemd 启动失败零假状态、受监督
+runner 的 working → review 生命周期。至此 PM 只决定 Git 状态与调用执行器，不直接创建 Agent 或写心跳。
