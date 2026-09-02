@@ -169,6 +169,10 @@
   handoff 或 Tester 报告。提交重派记录后，PM 已确认仓库与命令路径均不存在
   `dispatch_cli_agent.sh`，因而无法合规调用受监督 dispatcher；任务改为 `BLOCKED`，等待该外部
   调度依赖恢复。未写入 Worker runtime、未运行门禁、未作 PM 决策，且不生成后续任务。
+- `CORE-RUNTIME-007` 的本次 `resolve-blocker` 事件以任务契约中的外部依赖记录结案：恢复
+  `dispatch_cli_agent.sh` 及其 `run_worker_agent.sh` 受监督 wrapper 是唯一恢复条件；在该条件满足前，
+  不创建重复诊断任务、不派发 WORKER_CORE，也不改变 `MEDIA-PREFLIGHT-004` 或 `MEDIA-E2E-003` 的
+  `BLOCKED` 状态。
 
 ## 队列规则
 
