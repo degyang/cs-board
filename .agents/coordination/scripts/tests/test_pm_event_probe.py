@@ -76,8 +76,8 @@ class PMEventProbeTest(unittest.TestCase):
 
     def test_max_actions_bounds_pm_cycle_to_one_fact_transition(self) -> None:
         self.write_status([
-            "| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |",
-            "| `MEDIA-1` | MEDIA | REVIEW_READY | pending | def | pending |",
+            "| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |",
+            "| `MEDIA-1` | MEDIA | PM_DECISION | pending | def | pending |",
         ])
         result = subprocess.run([
             "python3", str(SOURCE / "pm_event_probe.py"), "probe", "--project", str(self.root),
@@ -153,7 +153,7 @@ class PMEventProbeTest(unittest.TestCase):
         self.write_status(
             [
                 "| `CEO-RECOVERY-1` | PM | IN_PROGRESS | pending | pending | pending |",
-                "| `WEB-1` | WEB | REVIEW_READY | pending | abc | pending |",
+                "| `WEB-1` | WEB | PM_DECISION | pending | abc | pending |",
             ]
         )
         self.write_runtime("PM", task_id="CEO-RECOVERY-1", heartbeat_at="2026-09-02T03:00:00Z")
@@ -162,11 +162,10 @@ class PMEventProbeTest(unittest.TestCase):
             actions,
             [
                 {
-                    "kind": "review",
-                    "review_digest": None,
+                    "kind": "pm-review",
                     "task_id": "WEB-1",
                     "owner": "WEB",
-                    "status": "REVIEW_READY",
+                    "status": "PM_DECISION",
                 }
             ],
         )
@@ -179,7 +178,7 @@ class PMEventProbeTest(unittest.TestCase):
                 actions = json.loads(self.probe())["actions"]
                 self.assertEqual(
                     actions,
-                    [{"kind": "record-review-ready", "task_id": "WEB-1", "owner": "WEB", "status": status}],
+                    [{"kind": "record-test-ready", "task_id": "WEB-1", "owner": "WEB", "status": status}],
                 )
 
     def test_missing_runtime_emits_recovery(self) -> None:
@@ -198,7 +197,7 @@ class PMEventProbeTest(unittest.TestCase):
                     self.assertEqual(action["reason"], f"runtime_{state}")
 
     def test_ready_is_suppressed_while_same_owner_has_active_task(self) -> None:
-        for status in ("DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"):
+        for status in ("DISPATCHED", "IN_PROGRESS", "TEST_READY", "TESTING", "PM_DECISION", "CHANGES_REQUESTED", "BLOCKED"):
             with self.subTest(status=status):
                 self.write_status(
                     [
@@ -239,50 +238,29 @@ class PMEventProbeTest(unittest.TestCase):
         actions = json.loads(output)["actions"] if output else []
         self.assertFalse(any(action["kind"] == "dispatch" for action in actions))
 
-    def test_review_event_is_emitted_once_after_ack(self) -> None:
-        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+    def test_pm_review_event_is_emitted_once_after_ack(self) -> None:
+        self.write_status(["| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |"])
         event = json.loads(self.probe())
-        self.assertEqual(event["actions"][0]["kind"], "review")
+        self.assertEqual(event["actions"][0]["kind"], "pm-review")
         subprocess.run(
             ["python3", str(SOURCE / "pm_event_probe.py"), "ack", "--project", str(self.root), "--signature", event["signature"]],
             check=True,
         )
         self.assertEqual(self.probe(), "")
 
-    def test_supervised_review_requires_completion_bound_to_delivery(self) -> None:
-        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
-        (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": {
-            "PM": {"transport": "codex_cli", "thread": "pm"},
-            "REVIEWER": {"transport": "codex_exec"},
-        }}))
+    def test_test_result_requires_completion_bound_to_delivery(self) -> None:
+        self.write_status(["| `CORE-1` | CORE | TEST_READY | pending | abc | pending |"])
         self.assertEqual(self.probe(), "")
         runtime = self.root / ".agents/coordination/runtime"
-        (runtime / "review-completed.json").write_text(json.dumps({
+        (runtime / "test-completed-CORE-1.json").write_text(json.dumps({
             "state": "completed", "task_id": "CORE-1", "delivery": "old",
         }))
         self.assertEqual(self.probe(), "")
-        (runtime / "review-completed.json").write_text(json.dumps({
+        (runtime / "test-completed-CORE-1.json").write_text(json.dumps({
             "state": "completed", "task_id": "CORE-1", "delivery": "abc",
         }))
         event = json.loads(self.probe())
-        self.assertEqual(event["actions"][0]["task_id"], "CORE-1")
-
-    def test_new_or_revised_review_reopens_acknowledged_event(self) -> None:
-        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
-        first = json.loads(self.probe())
-        subprocess.run(
-            ["python3", str(SOURCE / "pm_event_probe.py"), "ack", "--project", str(self.root), "--signature", first["signature"]],
-            check=True,
-        )
-        reviews = self.root / "docs/agents/reviews"
-        reviews.mkdir(parents=True)
-        (reviews / "CORE-1.md").write_text("Verdict: `CHANGES_REQUESTED`\n", encoding="utf-8")
-        second = json.loads(self.probe())
-        self.assertNotEqual(second["signature"], first["signature"])
-        first_digest = second["actions"][0]["review_digest"]
-        (reviews / "CORE-1.md").write_text("Verdict: `APPROVED`\n", encoding="utf-8")
-        third = json.loads(self.probe())
-        self.assertNotEqual(third["actions"][0]["review_digest"], first_digest)
+        self.assertEqual(event["actions"][0]["kind"], "record-test-result")
 
     def test_satisfied_backlog_dependency_requests_promotion(self) -> None:
         self.write_status(
@@ -299,7 +277,7 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(event["actions"][0]["kind"], "promote-ready")
 
     def test_wrapper_does_not_call_model_without_cli_registration(self) -> None:
-        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+        self.write_status(["| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |"])
         subprocess.run(["bash", str(SOURCE / "run_pm_if_needed.sh"), str(self.root)], check=True)
         state = json.loads((self.root / ".agents/coordination/runtime/pm-scheduler.json").read_text(encoding="utf-8"))
         self.assertEqual(state["state"], "not-configured")
@@ -327,7 +305,7 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertFalse(marker.exists())
 
     def test_wrapper_failure_does_not_ack_event(self) -> None:
-        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+        self.write_status(["| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |"])
         (self.root / ".agents/coordination/agents.json").write_text(
             json.dumps({"agents": {"PM": {"transport": "codex_cli", "thread": "real-looking-uuid"}}}),
             encoding="utf-8",
@@ -345,10 +323,10 @@ class PMEventProbeTest(unittest.TestCase):
             env=environment,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(json.loads(self.probe())["actions"][0]["kind"], "review")
+        self.assertEqual(json.loads(self.probe())["actions"][0]["kind"], "pm-review")
 
     def test_wrapper_success_does_not_ack_unchanged_event(self) -> None:
-        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+        self.write_status(["| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |"])
         (self.root / ".agents/coordination/agents.json").write_text(
             json.dumps({"agents": {"PM": {"transport": "codex_cli", "thread": "real-looking-uuid"}}}),
             encoding="utf-8",

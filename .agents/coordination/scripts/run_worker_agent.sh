@@ -25,7 +25,7 @@ finish() {
   [[ "$result" -eq 0 ]] && state=review
   "$node_bin" "$teamctl" agent --project "$project_root" --role "$role" \
     --state "$state" --task "$task_id" --cycle "$cycle" --attempt "$attempt" >/dev/null 2>&1 || true
-  # A successful handoff must wake the short coordinator cycle immediately.
+  # PM records the tracked TEST_READY handoff; Tester dispatch follows immediately.
   # The periodic timer remains a recovery path if this best-effort wakeup fails.
   if [[ "$result" -eq 0 ]]; then
     "$systemctl_bin" --user start --no-block cs-board-pm.service >/dev/null 2>&1 || true

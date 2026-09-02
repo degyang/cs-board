@@ -39,11 +39,12 @@ def task_delivery(root: Path, task_id: str) -> str:
     return ""
 
 
-ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
+ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "WORKING", "TEST_READY", "TESTING", "PM_DECISION", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
 ACTION_ORDER = {
     "recover-stale": 0,
-    "record-review-ready": 1,
-    "review": 2,
+    "record-test-ready": 1,
+    "record-test-result": 2,
+    "pm-review": 3,
     "promote-ready": 3,
     "dispatch": 4,
     "retire-agent": 6,
@@ -147,15 +148,6 @@ def retirement_actions(root: Path, tasks: dict[str, dict[str, str]], now: dateti
 
 def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600) -> list[dict[str, object]]:
     tasks = read_tasks(root)
-    try:
-        registry = json.loads((root / ".agents/coordination/agents.json").read_text(encoding="utf-8"))
-        supervised_reviewer = registry.get("agents", {}).get("REVIEWER", {}).get("transport") == "codex_exec"
-    except (FileNotFoundError, json.JSONDecodeError):
-        supervised_reviewer = False
-    try:
-        review_completion = json.loads((root / ".agents/coordination/runtime/review-completed.json").read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        review_completion = {}
     current_time = now or datetime.now(timezone.utc)
     busy_owners = {task["owner"] for task in tasks.values() if task["status"] in ACTIVE_STATUSES}
     actions: list[dict[str, object]] = []
@@ -165,25 +157,21 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
             and task["owner"] not in COORDINATOR_OWNERS
             and runtime_state(root, task["owner"]) == "review"
         ):
-            actions.append({"kind": "record-review-ready", **task})
+            actions.append({"kind": "record-test-ready", **task})
         elif task["status"] in {"DISPATCHED", "IN_PROGRESS"} and task["owner"] not in COORDINATOR_OWNERS:
             reason = recovery_reason(root, task, current_time, lease_seconds)
             if reason:
                 actions.append({"kind": "recover-stale", "reason": reason, **task})
-        elif task["status"] == "REVIEW_READY":
-            if supervised_reviewer and not (
-                review_completion.get("state") == "completed"
-                and review_completion.get("task_id") == task["task_id"]
-                and review_completion.get("delivery") == task_delivery(root, task["task_id"])
-            ):
-                continue
-            actions.append(
-                {
-                    "kind": "review",
-                    "review_digest": review_digest(root, task["task_id"]),
-                    **task,
-                }
-            )
+        elif task["status"] in {"TEST_READY", "TESTING"}:
+            completion_path = root / ".agents/coordination/runtime" / f"test-completed-{task['task_id']}.json"
+            try:
+                completion = json.loads(completion_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, json.JSONDecodeError):
+                completion = {}
+            if completion.get("state") == "completed" and completion.get("delivery") == task_delivery(root, task["task_id"]):
+                actions.append({"kind": "record-test-result", "test_result": completion.get("result"), **task})
+        elif task["status"] == "PM_DECISION":
+            actions.append({"kind": "pm-review", **task})
         elif task["status"] == "CHANGES_REQUESTED":
             owner_has_other_active_task = any(
                 other["task_id"] != task["task_id"]
