@@ -16,8 +16,10 @@
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
+| `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | pending | P0 independent backend/runtime gate |
 | `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0 dispatched asynchronously ahead of WEB-WO-003 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
+| `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | pending | P0 independent fail-closed readiness gate |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -57,6 +59,8 @@
   `WEB-WO-003` 保持 `READY` 但排在其后。本决策不构成用户、发布或合并审核批准。
 - `WEB-PARITY-004` 已固定在 WEB 分支 `feat/mountain-webui-surface-parity`、交付基线 `51656c9`，并按
   P0 顺序异步派发；PM 不等待其长门禁，`WEB-WO-003` 不得并发领取。
+- CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
+  WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 
 ## 队列规则
 
@@ -65,3 +69,5 @@
 3. Worker 同一时间只领取一项 `DISPATCHED` 任务；返工沿用原任务并递增 attempt；
 4. PM 审核写入 Git 后，必须在同一轮计算并派发下一个满足依赖的 `READY` 任务；
 5. Dashboard 心跳只表示有限租约内的真实活动，不表示 Agent 能跨会话自行运行。
+6. 每个 Owner 的 WIP 上限为 1；BACKLOG 不设硬长度上限，按真实里程碑风险滚动维护跨角色后续链；
+7. Reviewer 不设伪造的常驻忙碌任务，只在 Worker 提交 `REVIEW_READY` 事件后生成独立评审工作。
