@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
 from cli.csboard import EXIT_NOT_FOUND, EXIT_OK, EXIT_VALIDATION, main
+from csboard.domain.enums import StageStatus
+from csboard.domain.execution_plan import CANONICAL_STAGES
+from csboard.domain.models import StageState
 
 
 class CliCsboardTest(unittest.TestCase):
@@ -116,6 +121,65 @@ class CliCsboardTest(unittest.TestCase):
         code, result = self.invoke("stage", "retry", "--task", created["task_id"], "--run", created["run_id"], "--stage", "generate-visual-anchors", "--json")
         self.assertEqual(code, EXIT_NOT_FOUND)
         self.assertEqual(result["error"]["code"], "NOT_FOUND")
+
+    def test_stage_run_exposes_no_legacy_production_inputs(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, "-m", "cli.csboard", "stage", "run", "--help"],
+            cwd=Path(__file__).parents[1], text=True, capture_output=True, check=True, timeout=30)
+        for legacy in ("--script", "--reference", "--tts-url", "--tts-mode"):
+            self.assertNotIn(legacy, completed.stdout)
+
+    def test_every_canonical_stage_uses_persisted_plan_dispatch_in_subprocess(self) -> None:
+        """No stage-specific CLI input can bypass the persisted manual gate."""
+        from starlette.testclient import TestClient
+        from webapp.mountain_server import create_app
+        client = TestClient(create_app(self.root))
+        plan = {"mode": "selective", "manual_stages": list(CANONICAL_STAGES)}
+        for stage in CANONICAL_STAGES:
+            created = client.post("/api/v1/tasks", json={"title": f"CLI {stage}"}).json()
+            task_id, run_id = created["task_id"], created["run_id"]
+            saved = client.post(f"/api/v1/tasks/{task_id}/inputs", data={
+                "script": "这是 CLI 六阶段统一分派的持久化测试文案，长度足够。",
+                "execution_mode": plan["mode"], "manual_stages": json.dumps(plan["manual_stages"]),
+                "visual_anchor_enabled": "false",
+            })
+            self.assertEqual(saved.status_code, 200, saved.text)
+            completed = subprocess.run(
+                [sys.executable, "-m", "cli.csboard", "--data-dir", str(self.root), "stage", "run",
+                 "--task", task_id, "--run", run_id, "--stage", stage, "--json"],
+                cwd=Path(__file__).parents[1], text=True, capture_output=True, timeout=30)
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            result = json.loads(completed.stdout)
+            if stage == "generate-visual-anchors":
+                self.assertEqual(result["stages_executed"], [stage])
+            else:
+                self.assertEqual(result["state"], "waiting-manual-trigger")
+                self.assertEqual(result["next_stage"], "generate-visual-anchors")
+
+    def test_stage_retry_uses_persisted_plan_in_subprocess(self) -> None:
+        from starlette.testclient import TestClient
+        from webapp.mountain_server import create_app
+        client = TestClient(create_app(self.root))
+        created = client.post("/api/v1/tasks", json={"title": "CLI retry persisted plan"}).json()
+        task_id, run_id = created["task_id"], created["run_id"]
+        client.post(f"/api/v1/tasks/{task_id}/inputs", data={
+            "script": "这是 CLI retry 使用持久化执行计划的测试文案，长度足够。",
+            "execution_mode": "selective",
+            "manual_stages": json.dumps(["generate-visual-anchors", "clone-voice"]),
+        })
+        from csboard.adapters.filesystem.repository import FilesystemTaskRepository
+        repository = FilesystemTaskRepository(self.root)
+        run = repository.get_run(task_id, run_id)
+        run.stages["clone-voice"] = StageState(StageStatus.SUCCEEDED, 1)
+        repository.save_run(run)
+        completed = subprocess.run(
+            [sys.executable, "-m", "cli.csboard", "--data-dir", str(self.root), "stage", "retry",
+             "--task", task_id, "--run", run_id, "--stage", "clone-voice", "--json"],
+            cwd=Path(__file__).parents[1], text=True, capture_output=True, timeout=30)
+        self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+        decision = json.loads(completed.stdout)
+        self.assertEqual(decision["state"], "waiting-manual-trigger")
+        self.assertEqual(decision["next_stage"], "generate-visual-anchors")
 
 
 if __name__ == "__main__":

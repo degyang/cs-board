@@ -179,10 +179,6 @@ def parser() -> argparse.ArgumentParser:
     stage_run.add_argument("--task", required=True)
     stage_run.add_argument("--run")
     stage_run.add_argument("--stage", required=True)
-    stage_run.add_argument("--script", help="（已废弃）文案内容由 task.json 管理")
-    stage_run.add_argument("--reference", type=Path, help="clone-voice 的参考音频")
-    stage_run.add_argument("--tts-url", default="http://127.0.0.1:7860", help="TTS 服务地址")
-    stage_run.add_argument("--tts-mode", default="gradio", choices=["gradio", "fastapi"], help="TTS 模式")
     stage_run.add_argument("--events", choices=["jsonl"], help="流式输出事件")
 
     stage_retry = stage_actions.add_parser("retry")
@@ -283,60 +279,13 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
 
     # ── stage ────────────────────────────────────────────────────────
     if (args.resource, args.action) == ("stage", "run"):
-        if args.stage == "generate-visual-anchors":
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id:
-                raise ValueError("generate-visual-anchors 需要 --run")
-            return commands.stage_run(args.task, run_id, args.stage)
-        elif args.stage == "clone-voice":
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id or not args.reference:
-                raise ValueError("clone-voice 需要 --run 与 --reference")
-            from csboard.adapters.indextts.tts_adapter import IndexTTSAdapter
-            from csboard.adapters.whisper.alignment_adapter import WhisperAlignmentAdapter
-            from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
-            tts = IndexTTSAdapter(base_url=args.tts_url, mode=args.tts_mode)
-            alignment = WhisperAlignmentAdapter(renderer_root=ROOT / "video_renderer")
-            media = FFmpegMediaAdapter()
-            return commands.stage_run(args.task, run_id, args.stage)
-        elif args.stage == "plan-storyboard":
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id:
-                raise ValueError("需要 --run 或任务有活跃运行")
-            return commands.stage_run(args.task, run_id, args.stage)
-        elif args.stage == "generate-illustrations":
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id:
-                raise ValueError("需要 --run 或任务有活跃运行")
-            return commands.stage_run(args.task, run_id, args.stage)
-        elif args.stage == "render-visuals":
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id:
-                raise ValueError("需要 --run 或任务有活跃运行")
-            from csboard.adapters.whiteboard.renderer_adapter import WhiteboardRendererAdapter
-            renderer = WhiteboardRendererAdapter()
-            return commands.stage_run(args.task, run_id, args.stage)
-        elif args.stage == "compose-video":
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id:
-                raise ValueError("需要 --run 或任务有活跃运行")
-            from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
-            media = FFmpegMediaAdapter()
-            return commands.stage_run(args.task, run_id, args.stage)
-        else:
-            if args.stage not in commands.pipeline._executors:
-                raise DomainError("CAPABILITY_NOT_AVAILABLE", f"stage.run.{args.stage} 将在后续 Mountain PR 提供")
-            task = commands.repository.get_task(args.task)
-            run_id = getattr(args, "run", None) or task.active_run_id
-            if not run_id:
-                raise ValueError("需要 --run 或任务有活跃运行")
-            return commands.stage_run(args.task, run_id, args.stage)
+        if args.stage not in commands.pipeline._executors:
+            raise DomainError("CAPABILITY_NOT_AVAILABLE", f"stage.run.{args.stage} 将在后续 Mountain PR 提供")
+        task = commands.repository.get_task(args.task)
+        run_id = getattr(args, "run", None) or task.active_run_id
+        if not run_id:
+            raise ValueError("需要 --run 或任务有活跃运行")
+        return commands.stage_run(args.task, run_id, args.stage)
 
     if (args.resource, args.action) == ("stage", "retry"):
         task = commands.repository.get_task(args.task)
