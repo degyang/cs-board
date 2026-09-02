@@ -7,6 +7,7 @@
 - branch: `feat/mountain-assets-settings-web`
 - starting HEAD: `c221947 docs(mountain): report execution plan web evidence`
 - implementation commit: `1a4f75d feat(mountain-web): establish manual stage workbench`
+- follow-up safety commit: `ecd15ac fix(mountain-web): keep unknown stage keys stable`
 - receipt commit: `docs(mountain): report manual stage workbench baseline` (this receipt commit)
 - push: 未推送
 - backend/assets/settings: 未修改
