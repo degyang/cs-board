@@ -14,6 +14,10 @@ for line in (root/'docs/agents/status.md').read_text().splitlines():
  m=row.match(line)
  if not m or m.group(3).strip()!='TEST_READY': continue
  task,owner,_,contract,delivery=(x.strip() for x in m.groups())
+ completion=root/f'.agents/coordination/runtime/test-completed-{task}.json'
+ try: done=json.loads(completion.read_text())
+ except (FileNotFoundError,json.JSONDecodeError): done={}
+ if done.get('state')=='completed' and done.get('delivery')==delivery: continue
  domain=owner.removeprefix('WORKER_'); tester=f'TESTER_{domain}'
  cfg=agents.get(tester)
  if cfg: print('\n'.join((task,owner,tester,contract,delivery,cfg.get('worktree',''),cfg.get('model','gpt-5.6-terra'),cfg.get('reasoning_effort','medium')))); break

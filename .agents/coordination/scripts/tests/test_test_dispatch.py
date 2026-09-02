@@ -15,4 +15,9 @@ class TesterDispatchTest(unittest.TestCase):
   env={**os.environ,'SYSTEMCTL_BIN':str(self.bin/'systemctl'),'SYSTEMD_RUN_BIN':str(self.bin/'systemd-run')}
   result=subprocess.run(['bash',str(SOURCE/'dispatch_test_agent.sh'),str(self.root)],env=env,capture_output=True,text=True)
   self.assertEqual(result.returncode,0,result.stderr); call=self.calls.read_text(); self.assertIn('TESTER_WEB',call); self.assertIn('WEB-1',call); self.assertIn('run_test_agent.sh',call)
+ def test_does_not_repeat_completed_delivery(self):
+  (self.root/'.agents/coordination/runtime/test-completed-WEB-1.json').write_text(json.dumps({'state':'completed','delivery':'abc'}))
+  env={**os.environ,'SYSTEMCTL_BIN':str(self.bin/'systemctl'),'SYSTEMD_RUN_BIN':str(self.bin/'systemd-run')}
+  result=subprocess.run(['bash',str(SOURCE/'dispatch_test_agent.sh'),str(self.root)],env=env,capture_output=True,text=True)
+  self.assertEqual(result.returncode,0,result.stderr); self.assertFalse(self.calls.exists())
 if __name__=='__main__': unittest.main()
