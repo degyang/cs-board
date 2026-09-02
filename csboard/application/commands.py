@@ -414,15 +414,30 @@ class MountainCommands:
         run = self.repository.get_run(task_id, run_id)
         if run.task_id != task.task_id:
             raise NotFoundError("运行记录不存在")
-        # The persisted input contract is the sole start precondition.
         request_data = self.repository.get_request(task_id)
-        if not request_data or not isinstance(request_data.get("script"), str) or len(request_data["script"].strip()) < 10:
-            raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
+        self._validate_start_inputs(task_id, request_data)
 
         return {"ok": True, "state": "waiting-manual-trigger", "task_id": task_id,
                 "run_id": run_id, "trace_id": run.trace_id,
                 "next_stage": self.pipeline.get_next_stage(run),
                 "gates": self.list_gates(task_id, run_id)["items"]}
+
+    def _validate_start_inputs(self, task_id: str, request: dict[str, Any] | None) -> None:
+        """Validate the persisted, non-negotiable manual-path inputs safely."""
+        invalid: list[str] = []
+        if not request or not isinstance(request.get("script"), str) or len(request["script"].strip()) < 10:
+            invalid.append("script")
+        reference = request.get("reference_audio") if request else None
+        if not isinstance(reference, str) or not reference:
+            invalid.append("reference_audio")
+        else:
+            path = Path(reference)
+            allowed_root = self.repository.task_dir(task_id) / "inputs"
+            candidate = (self.repository.task_dir(task_id) / path).resolve()
+            if path.is_absolute() or ".." in path.parts or candidate.parent != allowed_root.resolve() or not candidate.is_file() or candidate.stat().st_size <= 0:
+                invalid.append("reference_audio")
+        if invalid:
+            raise DomainError("VALIDATION_ERROR", "必要输入无效", details={"invalid_fields": sorted(set(invalid))})
 
     def cancel_run(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
         """取消运行。"""
@@ -832,14 +847,25 @@ class MountainCommands:
         if missing: raise DomainError("STAGE_GATE_REQUIRED", "上游 Artifact 尚未验证", details={"missing_artifacts": missing})
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         result = self.pipeline._execute_stage(task_id, run_id, stage, context)
-        if result.get("ok") and result.get("result") in {"succeeded", "skipped"} and self._exit_artifacts_valid(task_id, run_id, stage): self.mark_gate_waiting(task_id, run_id, stage)
-        executed = [stage]
-        next_stage = (CANONICAL_STAGES[CANONICAL_STAGES.index(stage) + 1]
-                      if result.get("ok") and result.get("result") in {"succeeded", "skipped"} and stage != CANONICAL_STAGES[-1] else None)
-        return {"ok": bool(result.get("ok")), "task_id": task_id, "run_id": run_id,
-                "trace_id": self.repository.get_run(task_id, run_id).trace_id, "stage": stage,
-                "stages_executed": executed, "results": [result], "next_stage": next_stage,
-                "next_action": "review-gate" if next_stage else "fix-stage-result"}
+        return self._stage_response(task_id, run_id, stage, result)
+
+    def _stage_response(self, task_id: str, run_id: str, stage: str, result: dict[str, Any]) -> dict[str, Any]:
+        run = self.repository.get_run(task_id, run_id)
+        for key, expected in {"task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage}.items():
+            if key in result and result[key] != expected:
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [{"ok": False, "error": "STAGE_RESPONSE_IDENTITY_CONFLICT"}], "next_stage": None, "next_action": {"code": "FIX_STAGE_RESULT"}}
+        state = result.get("result")
+        successful = bool(result.get("ok")) and state in {"succeeded", "skipped"}
+        if successful and not self._exit_artifacts_valid(task_id, run_id, stage):
+            return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_OUTPUT_INVALID"}}
+        if successful:
+            self.mark_gate_waiting(task_id, run_id, stage)
+            gate = self.get_gate(task_id, run_id, stage)
+            if gate["status"] != GATE_WAITING:
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_GATE_PERSIST_FAILED"}}
+            next_stage = CANONICAL_STAGES[CANONICAL_STAGES.index(stage) + 1] if stage != CANONICAL_STAGES[-1] else None
+            return {"ok": True, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": next_stage, "next_action": {"code": "GATE_REVIEW_REQUIRED"}}
+        return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "FIX_STAGE_RESULT"}}
 
     def _valid_artifact(self, task_id: str, run_id: str, key: str) -> bool:
         import hashlib

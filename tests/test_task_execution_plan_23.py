@@ -55,8 +55,7 @@ def _save(client: TestClient, task_id: str, script: str = SCRIPT_A,
         data={"script": script, "execution_mode": plan["mode"],
               "manual_stages": json.dumps(plan["manual_stages"]),
               "visual_anchor_enabled": str(visual_anchor_enabled).lower()},
-        files={} if reference is None else {
-            "reference": ("reference.wav", io.BytesIO(reference), "audio/wav")},
+        files={"reference": ("reference.wav", io.BytesIO(reference if reference is not None else b"RIFF-test"), "audio/wav")},
     )
     assert response.status_code == 200, response.text
     return response.json()

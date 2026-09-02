@@ -9,7 +9,7 @@ def test_start_has_not_found_invalid_input_and_waiting_boundaries(tmp_path: Path
     created = client.post("/api/v1/tasks", json={"title": "entry contract"}).json()
     task_id, run_id = created["task_id"], created["run_id"]
     assert client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start").status_code == 400
-    saved = client.post(f"/api/v1/tasks/{task_id}/inputs", data={"script": "这是足够长的持久化输入文案用于启动验证。", "style": "safe"})
+    saved = client.post(f"/api/v1/tasks/{task_id}/inputs", data={"script": "这是足够长的持久化输入文案用于启动验证。", "style": "safe"}, files={"reference": ("voice.wav", b"RIFF-not-empty", "audio/wav")})
     assert saved.status_code == 200
     before = (tmp_path / "tasks" / task_id / "runs" / run_id / "run.json").read_bytes()
     response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")

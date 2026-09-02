@@ -225,7 +225,8 @@ def test_start_without_inputs_returns_validation_error(client: TestClient):
     assert resp.status_code == 400
     error = resp.json()["error"]
     assert error["code"] == "VALIDATION_ERROR"
-    assert "文案" in error["message"]
+    assert error["message"] == "必要输入无效"
+    assert "script" in error["details"]["invalid_fields"]
 
 
 def test_update_inputs_preserves_old_reference(client: TestClient):
