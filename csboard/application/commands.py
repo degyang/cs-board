@@ -419,6 +419,11 @@ class MountainCommands:
         if not request_data:
             raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
 
+        return {"ok": True, "state": "waiting-manual-trigger", "task_id": task_id,
+                "run_id": run_id, "trace_id": run.trace_id,
+                "next_stage": self.pipeline.get_next_stage(run),
+                "gates": self.list_gates(task_id, run_id)["items"]}
+
         execution_plan = self._execution_plan(task_id)
         # An immediate manual gate is a decision, not an attempt to execute.
         # Do not demand provider configuration merely to tell the caller which
@@ -854,7 +859,7 @@ class MountainCommands:
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         result = self.pipeline._execute_stage(task_id, run_id, stage, context)
         if result.get("ok") and result.get("result") in {"succeeded", "skipped"} and self._exit_artifacts_valid(task_id, run_id, stage): self.mark_gate_waiting(task_id, run_id, stage)
-        return result
+        return {"ok": bool(result.get("ok")), "task_id": task_id, "run_id": run_id, "trace_id": self.repository.get_run(task_id, run_id).trace_id, "stage": stage, "stages_executed": [stage] if result.get("ok") else [], "results": [result], "next_stage": CANONICAL_STAGES[CANONICAL_STAGES.index(stage) + 1] if stage != CANONICAL_STAGES[-1] else None, **result}
 
     def _valid_artifact(self, task_id: str, run_id: str, key: str) -> bool:
         import hashlib
@@ -875,9 +880,10 @@ class MountainCommands:
         run, gates = self.repository.get_run(task_id, run_id), self.repository.get_gates(task_id, run_id)
         changed = [StageGate(**{**gate.to_dict(), "status": GATE_WAITING, "attempt": run.stages[stage].attempt if stage in run.stages else gate.attempt, "revision": gate.revision + 1}) if gate.stage_id == stage else gate for gate in gates]
         self.repository.save_gates(task_id, run_id, changed)
-    def decide_gate(self, task_id: str, run_id: str, stage: str, decision: str, actor: str, note: str | None = None, evidence: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    def decide_gate(self, task_id: str, run_id: str, stage: str, decision: str, actor: str, expected_revision: int | None = None, note: str | None = None, evidence: list[dict[str, str]] | None = None) -> dict[str, Any]:
         if stage not in CANONICAL_STAGES or decision not in {"approve", "reject", "redo"} or not actor.strip(): raise DomainError("VALIDATION_ERROR", "Gate 决定、Stage 和 actor 无效")
         gates = self.repository.get_gates(task_id, run_id); gate = next(item for item in gates if item.stage_id == stage)
+        if expected_revision is not None and (isinstance(expected_revision, bool) or expected_revision != gate.revision): raise DomainError("GATE_DECISION_CONFLICT", "Gate revision 已变化")
         wanted = {"approve": GATE_APPROVED, "reject": GATE_REJECTED, "redo": GATE_REDO}[decision]
         if not isinstance(evidence or [], list) or len(evidence or []) > 100: raise DomainError("VALIDATION_ERROR", "evidence 无效")
         allowed = {"logical_key", "sha256", "visual_id", "candidate_id", "revision", "source"}
