@@ -1,7 +1,8 @@
 # CORE-EXEC-002：执行计划成为运行决策源
 
 - Owner: CORE
-- Status: READY
+- Status: CHANGES_REQUESTED
+- Attempt: 2（返工）
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
 - Branch: `feat/mountain-assets-settings-backend`
 - Base commit: `a5d5938`
@@ -44,3 +45,30 @@
 ## Delivery
 
 在 `docs/agents/reports/CORE-EXEC-002.md` 写实际提交、DTO decision、测试命令和结果、已知缺口。提交并推送当前分支后通知 PM，停止，不进入 Work Order。
+
+## Attempt 2 bounded correction
+
+权威审核：`docs/agents/reviews/CORE-EXEC-002.md`。
+
+只修正以下范围：
+
+1. `cli/csboard.py stage run/retry` 对六个规范 Stage 使用统一 dispatch，执行输入全部来自已持久化 `ExecutionPlan` 与 Task/Run 数据；
+2. 删除或停止暴露 `stage run` 的旧制作参数 `--script`、`--reference`、`--tts-url`、`--tts-mode`，不得要求用户在 CLI 重复提供 WebUI 已保存输入；
+3. 删除 CLI 分支中仅被构造、未参与执行的 IndexTTS/Whisper/FFmpeg 等 adapter；Provider 构造仍由 Application 的既有唯一入口负责；
+4. 增加真实 CLI subprocess 行为测试，至少覆盖六个规范 Stage dispatch、`clone-voice` 无 `--reference`、selective manual gate、run/retry 使用同一 persisted plan；
+5. 保留 attempt 1 已通过的 ExecutionPlan、输入保真、锁和 API 行为，不重写架构，不进入 Work Order。
+
+必须复现：
+
+```bash
+.venv/bin/python -m pytest -q \
+  tests/test_task_execution_plan_23.py \
+  tests/test_pipeline_orchestrator.py \
+  tests/test_cli_csboard.py \
+  tests/test_mountain_contracts.py \
+  tests/test_mountain_server.py
+.venv/bin/python -m pytest -q
+git diff --check a5d5938...HEAD
+```
+
+完成后更新原报告，追加 attempt 2 的提交、测试和 `rg` 证据；提交并推送后，直接唤醒注册表中的 PM `/root/pm`。停止，不领取新任务。
