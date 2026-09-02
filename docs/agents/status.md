@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | SUPERSEDED | `docs/agents/tasks/CEO-RECOVERY-002.md` | `38a98f8` | archived; replaced by independent CEO timer and separate PM |
 | `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `CORE-RUNTIME-007` | WORKER_CORE | PM_DECISION | `docs/agents/tasks/CORE-RUNTIME-007.md` | `09009f103439d5d17e44fc6d30ebc1dfb1b1ec8e` | no bound Tester report; dispatcher dependency unavailable |
+| `CORE-RUNTIME-007` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-007.md` | `09009f103439d5d17e44fc6d30ebc1dfb1b1ec8e` | conditionally approved; Tester FAIL evidence and legacy residuals preserved |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WORKER_WEB | BLOCKED | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | supervised dispatcher unavailable; attempt 2 cannot start until restored |
@@ -195,9 +195,11 @@
 - `CORE-RUNTIME-007` 的 `resolve-blocker` 事件 `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`
   再次作幂等 PM 决定：外部 dispatcher/wrapper 依赖仍未恢复，维持 `BLOCKED`；M1 当前不需要下一任务，未派发
   `WORKER_CORE`，`MEDIA-PREFLIGHT-004` 与 `MEDIA-E2E-003` 继续保持 `BLOCKED`。
-- `CORE-RUNTIME-007` 的 `pm-review` 事件 `96d0dedbc4e7fd105e143c6095ed14bde3ddc38b7627d371c7ab32a9bdf8abc1`：未找到
-  bound Tester report，且任务契约记录的 dispatcher/wrapper 外部依赖未恢复，因此 PM 决定为 `BLOCKED`。M1 当前
-  不需要下一任务；未派发 `WORKER_CORE`，`MEDIA-PREFLIGHT-004` 与 `MEDIA-E2E-003` 继续保持 `BLOCKED`。
+- `CORE-RUNTIME-007` 的 `pm-review` 事件 `96d0dedbc4e7fd105e143c6095ed14bde3ddc38b7627d371c7ab32a9bdf8abc1`：bound
+  Tester report 完整记录了交付、两项门禁、清理证据与 `FAIL` 发现。根据 `CORE-RUNTIME-007-CONDITIONAL-20260902` 的用户裁决，
+  PM 将 `09009f1` 以标准依赖状态有条件置为 `APPROVED`：运行时挂起已解决；5 个 legacy skip 及 25/27 号历史文档行尾空格作为
+  保留问题，不在本任务授权面内修复。这不构成最终用户验收。现阶段不创建下一任务；`MEDIA-PREFLIGHT-004` 仍须处理其自身门禁，
+  `MEDIA-E2E-003` 继续保持 `BLOCKED`。
 
 ## 队列规则
 
