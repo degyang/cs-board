@@ -1,7 +1,7 @@
 # PROTOTYPE-GOLDEN-005：恢复并冻结 5182 WebUI 原型基准
 
 - Owner: PROTOTYPE
-- Status: READY
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: none
 - Worktree: `/mnt/d/workstation/projects/cs-board-prototype-golden`
@@ -56,3 +56,10 @@ git diff --check 0f56e82...HEAD
 
 提交并推送当前分支，写入报告并通知 CEO。全部 acceptance 满足才置为 `REVIEW_READY`；否则提交具体
 `BLOCKED` 证据。不得自行解除 `WEB-PARITY-004`、批准或领取其他任务。
+
+## Dispatch
+
+- Attempt: 1（初次）
+- Coordination decision: `8fbed11`
+- Worker: `/root/prototype_golden_worker`
+- State: `DISPATCHED`

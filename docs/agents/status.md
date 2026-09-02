@@ -19,7 +19,7 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `7a74378` | attempt 2: execute five skipped boundaries; zero-skip gate unchanged |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | pending | restores immutable five-page golden; unblocks WEB-PARITY-004 |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | DISPATCHED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | pending | restores immutable five-page golden; unblocks WEB-PARITY-004 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | stale recovery found committed delivery; independent review pending |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
