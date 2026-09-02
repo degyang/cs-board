@@ -132,3 +132,73 @@ git status --short
 - 证据脚本 commit：`9e79aa2`（扩展 `web-v2/scripts/capture-parity-evidence.mjs`，加入六张 create surface/validation 路径；脚本不创建 Task）。因真实后端不可达，本轮未生成或伪造截图，故无 SHA-256 可报告。
 - 门禁摘要：`npm --prefix web-v2 run build` 通过（TypeScript + Vite）；`git diff --check` 通过；`! rg -n 'Project|project_id|/projects' web-v2/src` 通过。`MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs` 在 10 秒内无响应并超时。既有 `tests/create-task.test.tsx` 仍针对旧单页表面/可选 reference 假设，运行结果为 16 failed、1 passed，需按本执行单补写六 Tab 测试后复验。
 - 截止报告时工作树状态：见同提交后的 `git status --short`；未推送。
+
+## PM 审核结论：CORRECTION REQUIRED
+
+审核基线：`cfb669f`。本轮不得进入下一功能切片。
+
+### 未通过的可观察事实
+
+1. PM 独立执行全量前端测试得到 `329 passed / 16 failed`，失败全部位于 `tests/create-task.test.tsx`；不是可接受的历史基线。
+2. 测试仍按旧单页 DOM 查找“文案”，没有覆盖六 Tab 导航、状态保持、真实资产状态和最终 FormData。执行单第 7 节未交付。
+3. 测试 stderr 存在大量 React `act(...)` warning，违反零 warning 门禁。
+4. 六张 `create-*.png` 均不存在，evidence README 未增加新建任务记录和 SHA-256。
+5. 真实后端 contract checker 未执行成功。后端未启动不是跳过门禁的理由；仓库已有可移植启动器。
+6. 报告在测试失败、证据缺失、契约未验证时仍以“完成工作”交付，状态表述不成立。
+7. `CreateTaskPage` 的资产请求 rejection 分支未检查 `mountedRef`，必须由 unmount 行为测试证明不会产生卸载后更新；不得仅靠注释说明。
+
+### 唯一纠偏范围
+
+不重写已完成的六 Tab 视觉结构，不新增业务功能。只完成以下工作：
+
+1. 重写 `web-v2/tests/create-task.test.tsx` 以匹配六 Tab 真实交互；测试 helper 必须按用户路径逐 Tab 填写，不能绕过生产交互。
+2. 覆盖原第 7 节全部九类行为，特别是：Tab 状态保持、styles/voices 四态、首次 reference 必填、FormData 精确字段、双提交、同 Task 重试、卸载安全和敏感错误不渲染。
+3. 修复生产代码中被行为测试揭示的问题；Promise resolve/reject 后均不得在 unmount 后 setState/navigate。
+4. 捕获 `console.error`/`console.warn`，专项和全量测试均必须零 React warning、零 act warning、零 unhandled rejection。
+5. 使用隔离临时数据目录启动真实后端；不得依赖用户 `~/.csboard`，不得允许明文 Secret：
+
+```bash
+EVIDENCE_DATA_DIR="$(mktemp -d)"
+/mnt/d/workstation/projects/cs-board/.venv/bin/python scripts/run_mountain_backend.py \
+  --host 127.0.0.1 --port 8000 --data-dir "$EVIDENCE_DATA_DIR"
+```
+
+在另一个终端启动 WebUI（固定 5175）并执行契约与证据：
+
+```bash
+npm --prefix web-v2 run dev -- --host 127.0.0.1 --port 5175
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+WEBUI_BASE=http://127.0.0.1:5175 MOUNTAIN_API_BASE=http://127.0.0.1:8000 \
+  node web-v2/scripts/capture-parity-evidence.mjs
+```
+
+证据脚本不得创建 Task。完成后终止本轮启动的两个进程并删除该精确临时目录。
+
+6. 生成第 8 节六张截图，逐张人工确认不是 404/loading/error；更新 evidence README 的 API、状态、时间和 SHA-256。
+7. 新建纠偏报告段落，不改写或删除上面的失败记录；如实列出修复 commit、测试总数、零 warning 证明、contract checker、21 张总截图结果和六张新截图哈希。
+
+### 复验门禁
+
+```bash
+npm --prefix web-v2 run build
+npm --prefix web-v2 test -- --run
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+WEBUI_BASE=http://127.0.0.1:5175 MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/capture-parity-evidence.mjs
+git diff --check origin/integration/mountain-v2...HEAD
+! rg -n 'Project|project_id|/projects' web-v2/src
+git status --short
+```
+
+实现/测试修复提交：
+
+```text
+fix(web): complete tested create task flow
+```
+
+证据与报告提交：
+
+```text
+docs(mountain): prove create task flow against real backend
+```
+
+两项提交完成后推送当前分支，再申请复审。CCF 不得自行宣布通过。
