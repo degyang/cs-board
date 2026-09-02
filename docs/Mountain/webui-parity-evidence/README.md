@@ -35,3 +35,18 @@
 ### 浏览器证据最终尝试（2026-09-02）
 
 本轮已改用文档指定 Chromium `/home/ubuntu/.cache/ms-playwright/chromium-1187/chrome-linux/chrome`。真实后端 contract checker 通过；5175 `--strictPort` 因外部端口占用无法启动，备用端口流程未完成服务就绪。未创建 Task，未生成六张新图或 SHA-256；PNG 总数仍为 15，等待 PM 复审。
+
+### 新建任务浏览器证据（2026-09-02，端口 5275）
+
+使用隔离临时数据目录启动后端 8000，前端以 `VITE_API_BASE_URL=/api/v1` 通过 Vite 代理监听 5275（`--strictPort`），并使用指定 Chromium。`capture-parity-evidence.mjs` 报告：`Captured 21 real-backend screenshots; console errors/warnings: 0; failed API requests: 0`。截图脚本未创建 Task；六张 create 图均为 1440×900，人工检查为正常页面而非 404/loading/error/空白。PNG 总数为 21。
+
+六张新图 SHA-256：
+
+```text
+20c66939127ac8f4cf37a5edf89b6aad33f297a6ce2f79e5418c31377a590bc8  tasks/create-final.png
+27ac0835026bf0792d67217f1173f05c012281dcb4b47ee9ab6b180be7579c16  tasks/create-intro.png
+7086e8e3411aaa5866ef5d41aa2997d331fdfc3282dca7e9339e029cb68d36c3  tasks/create-script.png
+96696b6b54a5c9f44fe410dac7a1d065982d6339fe7c0df3c8b0e0a6152522df  tasks/create-validation.png
+e1af2457372218bcf6069e554e1cd06358b96dcfa256353c85777c5e56053f9d  tasks/create-visual.png
+8cdbf763aa823e08e2d08b8c9b13c5a5dfbc02188f68d8268278c7cf3acb18c4  tasks/create-voice.png
+```

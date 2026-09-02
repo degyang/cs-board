@@ -219,3 +219,13 @@ docs(mountain): prove create task flow against real backend
 - `npm --prefix web-v2 run dev -- --host 127.0.0.1 --port 5175 --strictPort` 因环境外部端口占用启动失败；按禁止项未终止其他会话。备用 5180 流程亦未能完成服务就绪，因此未运行截图断言。
 - 新建任务六张截图均未生成，SHA-256 无可报告；证据目录现有 PNG 总数仍为 15，未冒充 21 张。Playwright 浏览器二进制存在，但本轮没有产生新截图。
 - 所有本轮启动的进程均已终止，临时数据目录与临时日志已精确清理；工作树 clean。等待 PM 提供可用 5175 端口后复审。
+
+## CCF 最终浏览器证据报告（待 PM 复审）
+
+- 证据运行：真实后端临时数据目录 + 8000，前端 5275 `--strictPort`（启动时注入 `VITE_API_BASE_URL=/api/v1` 以使用 Vite `/api` 代理），curl 均使用 `--noproxy '*'`；Chromium 为文档指定路径。
+- `capture-parity-evidence.mjs` 原始摘要：`Captured 21 real-backend screenshots; console errors/warnings: 0; failed API requests: 0`。
+- 六张 create 图均存在、非零、1440×900；已人工查看拼图，确认分别呈现任务介绍、文案/字数、声音与 reference、视觉风格、成片设置、校验状态，无 404/loading/error/空白。
+- SHA-256：见 `docs/Mountain/webui-parity-evidence/README.md` 的“新建任务浏览器证据（端口 5275）”段落。
+- `npm --prefix web-v2 run build` 通过；`npm --prefix web-v2 test -- --run`：15 files / 338 tests passed；输出无 React warning、act warning、unhandled rejection。
+- contract checker：`All contracts aligned against real backend ✓`。证据脚本未创建 Task；运行后 8000、5275 均无本轮进程，临时目录与日志已精确清理，工作树 clean。
+- 本报告仅提交证据，等待 PM 复审，不宣布审核通过。
