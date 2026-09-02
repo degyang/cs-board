@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | pending | P0 independent backend/runtime gate |
-| `WEB-PARITY-004` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | committed delivery; independent visual/contract review pending |
+| `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | pending | P0 independent fail-closed readiness gate |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
@@ -63,6 +63,10 @@
 - WEB 已提交并推送 `WEB-PARITY-004@d7819d2`，分支与远端一致且报告存在；本轮只记录
   `REVIEW_READY` handoff。五组 golden/actual 配对、真实视觉对齐和全部门禁仍需独立 Reviewer 核验，
   不提前批准或派发同 Owner 的 `WEB-WO-003`。
+- `WEB-PARITY-004@d7819d2` 的独立评审提交 `d069a34` 结论为 `CHANGES_REQUESTED`：actual 页面和工程
+  门禁通过，但缺少五张 golden、hash/来源 manifest 与真实 prototype 访问。Git 中现有 prototype source
+  不可构建且冻结截图只覆盖 settings，CEO 将任务置为 `BLOCKED`；先提供不可变、可复现的五页 golden
+  输入，再派发同一任务的有界纠正。`WEB-WO-003` 继续等待，不得越过该 P0 blocker。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按

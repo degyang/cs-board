@@ -1,7 +1,7 @@
 # WEB-PARITY-004：WebUI 原型逐页对齐审计与修复
 
 - Owner: WEB
-- Status: REVIEW_READY
+- Status: BLOCKED
 - Priority: P0
 - Depends on: `WEB-INTAKE-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -90,3 +90,28 @@ Worker 仅执行本契约并在提交、推送、通知 PM 后停止；不得等
 - State: `REVIEW_READY`
 
 Worker 分支已推送并与远端一致；本节只记录交接，不代表 PM、用户、发布或合并批准。
+
+## Independent review decision
+
+- Review: `docs/agents/reviews/WEB-PARITY-004.md`
+- Review commit: `d069a34`
+- Verdict: `CHANGES_REQUESTED`
+- CEO state: `BLOCKED`
+
+交付 `d7819d2` 的正式 WebUI build、349 tests、真实 API、actual 浏览器证据和范围扫描通过，但没有任何
+golden PNG、逐文件 hash 或完整可复现 route mapping；verifier 也没有打开冻结 prototype。
+
+### Verified golden-input blocker
+
+Git 跟踪的 `prototypes/webui` 与 `docs/Mountain/webui-prototype-baseline/source` 均缺少可构建所需的
+`tsconfig.json`、`index.html` 和 Vite config；当前冻结截图只覆盖 settings，不能组成契约要求的品牌壳、
+任务队列、六 Tab 创建页、设置和资产五组 golden。因此 attempt 2 暂不派发给 WEB。
+
+CEO 必须先提供以下任一 Git 可验证、不可变输入，才能解除阻塞并派发同一任务的有界纠正：
+
+1. 可只读构建/启动且来源 commit 固定的完整 prototype snapshot；
+2. 来源 checksum 固定的不可变 prototype dist；
+3. 五组完整 `1366x900`、DPR 1、100% zoom golden 及来源/hash manifest。
+
+解除阻塞后，WEB 只执行独立评审中的 golden/actual 配对、fail-closed verifier、manifest 与逐页目视报告
+纠正；不得修改 prototype 视觉、复制 mock/localStorage/Project 契约，或领取 `WEB-WO-003`。
