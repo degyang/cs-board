@@ -1,7 +1,7 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WORKER_WEB
-- Status: PM_DECISION
+- Status: CHANGES_REQUESTED
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -34,3 +34,14 @@
   `dispatch_cli_agent.sh` supervised dispatcher is unavailable from this checkout and the command
   path, so no compliant asynchronous recovery can be invoked. Blocked pending restoration of that
   dispatcher; do not create an orchestrator Worker or write a runtime record manually.
+
+## PM decision
+
+- `2026-09-02T18:30:00+08:00` — `TESTER_WEB` result `FAIL` is complete and bound to delivery
+  `7adc8f5167602cc321e9467a15431efc6dbafd0f`: all non-browser gates passed, but the required
+  browser gate has a recorded failed POST `/tasks` flow and no passing browser evidence. Decision:
+  `CHANGES_REQUESTED`.
+- Next-task decision: M1 still requires this existing task. Perform bounded attempt 2 on
+  `WEB-WO-003` to make the real browser Task flow pass and provide its required browser evidence;
+  do not create or dispatch a later task while this owner has this non-terminal work. `MEDIA-E2E-003`
+  remains blocked on this approval and `MEDIA-PREFLIGHT-004`.
