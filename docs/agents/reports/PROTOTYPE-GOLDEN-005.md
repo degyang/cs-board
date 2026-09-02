@@ -23,11 +23,11 @@
 
 | 组 | Prototype route | Golden | SHA-256 | Bytes |
 | --- | --- | --- | --- | ---: |
-| 品牌壳 | `/help` | `01-brand-shell.png` | `068e8a97191abbbc65706ff8c96203f243b44428d1ff62f2b610e52cf6ad9782` | 173414 |
-| 任务队列 | `/projects` | `02-task-queue.png` | `519cc468f792c2b5f8a23ecab5b8ef3e1e695c1c5c3ffd08f0ac7b22dc509318` | 154789 |
+| 品牌壳 | `/help` | `01-brand-shell.png` | `58e56ce2bba8119624e0e7a79f61c8d58063b9c378cc4eada86c6b2b49486467` | 173406 |
+| 任务队列 | `/projects` | `02-task-queue.png` | `752072be1ef9791b64c944c2b8672d899649d16afa4452a6643afd32859c7994` | 154793 |
 | 六 Tab 新建任务映射 | `/create` | `03-create-six-tabs.png` | `1e5c5e24188126c4f2e1fd80e7b6a79941e048b77b459f805a7a807caf04cc0e` | 87880 |
 | 设置 | `/settings` | `04-settings.png` | `e786d32f22395dac4f5691a40e97a257bb08de814f353ca366f94af3b6b58ff1` | 154046 |
-| 资产 | `/assets` | `05-assets.png` | `c5adc17f6ac7fb8ea003be4b47c9a9cf3f343c438a86e8bd83f2d15405db3261` | 265580 |
+| 资产 | `/assets` | `05-assets.png` | `c07a37101f7000f32c92a55543af827790cb9a76d6fcdb463ab54d6b0d1189b9` | 265579 |
 
 所有 PNG 已用 `file` 核验为 `1366 x 900`、RGB PNG；manifest 逐项记录 route、文件、宽高、DPR、
 SHA-256 与 bytes。浏览器四类问题计数均为 `0`。

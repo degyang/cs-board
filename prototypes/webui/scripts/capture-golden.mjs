@@ -77,6 +77,17 @@ try {
 
   browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport: { width: 1366, height: 900 }, deviceScaleFactor: 1 })
+  await context.addInitScript(() => {
+    const fixedTime = 1_777_777_777_000
+    const NativeDate = Date
+    class FrozenDate extends NativeDate {
+      constructor(...args) {
+        super(...(args.length ? args : [fixedTime]))
+      }
+      static now() { return fixedTime }
+    }
+    globalThis.Date = FrozenDate
+  })
   const issues = []
   const captured = []
   for (const pageSpec of pages) {

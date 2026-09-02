@@ -53,8 +53,8 @@
       "width": 1366,
       "height": 900,
       "dpr": 1,
-      "sha256": "39c949805ee6c4acd5907816d199b86b5372b37f939a4b211c90445fdeee21d9",
-      "bytes": 87879
+      "sha256": "1e5c5e24188126c4f2e1fd80e7b6a79941e048b77b459f805a7a807caf04cc0e",
+      "bytes": 87880
     },
     {
       "id": "04-settings",
@@ -75,8 +75,8 @@
       "width": 1366,
       "height": 900,
       "dpr": 1,
-      "sha256": "c5adc17f6ac7fb8ea003be4b47c9a9cf3f343c438a86e8bd83f2d15405db3261",
-      "bytes": 265580
+      "sha256": "c07a37101f7000f32c92a55543af827790cb9a76d6fcdb463ab54d6b0d1189b9",
+      "bytes": 265579
     }
   ]
 }
