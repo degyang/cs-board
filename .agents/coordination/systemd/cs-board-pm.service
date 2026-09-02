@@ -3,6 +3,7 @@ Description=CS Board event-gated Codex PM recovery
 
 [Service]
 Type=oneshot
+TimeoutStartSec=180s
 WorkingDirectory=/mnt/d/workstation/projects/cs-board-mountain-v2
 Environment=PATH=/home/ubuntu/.local/share/mise/installs/node/24/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/mnt/d/workstation/projects/cs-board-mountain-v2/.agents/coordination/scripts/run_pm_if_needed.sh /mnt/d/workstation/projects/cs-board-mountain-v2
