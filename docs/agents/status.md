@@ -44,6 +44,8 @@
   `WEB-INTAKE-003=APPROVED`，同 Owner 队列顺序优先于 P1 `WEB-WO-003`。
 - `DASH-STATS-003@45a3fba` 的独立审核已通过，CEO 批准；`WEB-INTAKE-003@672f820` 尚无已提交的
   独立审核结论，继续保持 `REVIEW_READY`，不提前释放同 Owner 后续任务。
+- 用户将已停止的 5182 只读 prototype dist 定为 `WEB-PARITY-004` 的正式 golden；任务使用同尺寸截图逐页
+  对照，但生产实现只保留 Task 术语与真实 `/api/v1`，不得迁移 mock、localStorage、`/projects` 或明文 Secret。
 
 ## 队列规则
 
