@@ -1,7 +1,7 @@
 # WEB-PARITY-004：WebUI 原型逐页对齐审计与修复
 
 - Owner: WEB
-- Status: CHANGES_REQUESTED
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: `WEB-INTAKE-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -148,4 +148,4 @@ WEB 分支已推送且报告记录全部契约门禁正常退出；本节只登�
 移除该旧契约引用，同时把已批准 prototype-to-Task 视觉映射保留在 evidence/manifest；重新运行全部原
 门禁。不得修改 prototype、backend、Work Order 或领取 `WEB-WO-003`。
 
-- Attempt 3 dispatch state: not dispatched
+- Attempt 3 dispatch state: `DISPATCHED`

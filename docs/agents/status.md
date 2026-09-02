@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `WEB-PARITY-004` | WEB | CHANGES_REQUESTED | `docs/agents/tasks/WEB-PARITY-004.md` | `cdda872` | attempt 3 verifier legacy `/projects` removal; not dispatched |
+| `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | `cdda872` | attempt 3 verifier legacy `/projects` removal dispatched |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
@@ -140,7 +140,8 @@
   `MEDIA-E2E-003` 继续阻塞。
 - `WEB-PARITY-004@cdda872` attempt 2 独立评审提交 `de37fe1` 结论为 `CHANGES_REQUESTED`：五组视觉
   证据与工程门禁均通过，唯一缺口是 verifier 源码新增 `/projects` 字面量触发 forbidden scan。CEO 记录
-  仅移除 verifier legacy 引用的 bounded attempt 3，本轮不派发，`WEB-WO-003` 不得越过。
+  仅移除 verifier legacy 引用的 bounded attempt 3；本轮提交 `DISPATCHED` 后仅调用 supervised Worker
+  dispatcher，沿用 `gpt-5.6-luna + medium`，不等待门禁。`WEB-WO-003` 不得越过。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。
