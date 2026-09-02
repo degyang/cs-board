@@ -101,7 +101,18 @@ class PMEventProbeTest(unittest.TestCase):
         )
         self.write_runtime("PM", task_id="CEO-RECOVERY-1", heartbeat_at="2026-09-02T03:00:00Z")
         actions = json.loads(self.probe())["actions"]
-        self.assertEqual(actions, [{"kind": "review", "task_id": "WEB-1", "owner": "WEB", "status": "REVIEW_READY"}])
+        self.assertEqual(
+            actions,
+            [
+                {
+                    "kind": "review",
+                    "review_digest": None,
+                    "task_id": "WEB-1",
+                    "owner": "WEB",
+                    "status": "REVIEW_READY",
+                }
+            ],
+        )
 
     def test_worker_review_runtime_requests_tracked_review_ready(self) -> None:
         for status in ("DISPATCHED", "IN_PROGRESS"):
@@ -154,6 +165,23 @@ class PMEventProbeTest(unittest.TestCase):
             check=True,
         )
         self.assertEqual(self.probe(), "")
+
+    def test_new_or_revised_review_reopens_acknowledged_event(self) -> None:
+        self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])
+        first = json.loads(self.probe())
+        subprocess.run(
+            ["python3", str(SOURCE / "pm_event_probe.py"), "ack", "--project", str(self.root), "--signature", first["signature"]],
+            check=True,
+        )
+        reviews = self.root / "docs/agents/reviews"
+        reviews.mkdir(parents=True)
+        (reviews / "CORE-1.md").write_text("Verdict: `CHANGES_REQUESTED`\n", encoding="utf-8")
+        second = json.loads(self.probe())
+        self.assertNotEqual(second["signature"], first["signature"])
+        first_digest = second["actions"][0]["review_digest"]
+        (reviews / "CORE-1.md").write_text("Verdict: `APPROVED`\n", encoding="utf-8")
+        third = json.loads(self.probe())
+        self.assertNotEqual(third["actions"][0]["review_digest"], first_digest)
 
     def test_satisfied_backlog_dependency_requests_promotion(self) -> None:
         self.write_status(

@@ -84,6 +84,15 @@ def runtime_state(root: Path, owner: str) -> str | None:
     return runtime.get("state")
 
 
+def review_digest(root: Path, task_id: str) -> str | None:
+    review_path = root / "docs/agents/reviews" / f"{task_id}.md"
+    try:
+        content = review_path.read_bytes()
+    except FileNotFoundError:
+        return None
+    return hashlib.sha256(content).hexdigest()
+
+
 def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600) -> list[dict[str, object]]:
     tasks = read_tasks(root)
     current_time = now or datetime.now(timezone.utc)
@@ -101,7 +110,13 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
             if reason:
                 actions.append({"kind": "recover-stale", "reason": reason, **task})
         elif task["status"] == "REVIEW_READY":
-            actions.append({"kind": "review", **task})
+            actions.append(
+                {
+                    "kind": "review",
+                    "review_digest": review_digest(root, task["task_id"]),
+                    **task,
+                }
+            )
         elif task["status"] == "READY" and task["owner"] not in busy_owners:
             actions.append({"kind": "dispatch", **task})
         elif task["status"] == "BACKLOG":
