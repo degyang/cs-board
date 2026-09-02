@@ -39,6 +39,8 @@ export const ERROR_ENDPOINT = {
   description: 'Unified error response',
 }
 
+export const DEFAULT_REQUEST_TIMEOUT_MS = 5_000
+
 export const FIXTURE_MAP = [
   { fixture: 'service-list.json', interface: 'ServiceListResponse' },
   { fixture: 'service-definition.json', interface: 'ServiceDefinition' },
@@ -357,26 +359,43 @@ export function verifyResponse(tsContent, data, type, description, violations) {
 /**
  * Fetch with explicit HTTP method. Returns { status, body }.
  * Accept optional fetchFn for test injection.
+ * @param {object} [options]
+ * @param {number} [options.timeoutMs] - Abort deadline in milliseconds
  */
-export async function fetchWithMethod(url, method, fetchFn) {
+export async function fetchWithMethod(url, method, fetchFn, options = {}) {
   const fn = fetchFn || fetch
-  const res = await fn(url, { method })
-  const status = res.status
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
-  if (status === 404) {
-    try {
-      const body = await res.json()
-      return { status, body }
-    } catch {
-      return { status, body: null }
+  try {
+    const requestInit = { method }
+    if (!fetchFn) requestInit.signal = controller.signal
+    const res = await fn(url, requestInit)
+    const status = res.status
+
+    if (status === 404) {
+      try {
+        const body = await res.json()
+        return { status, body }
+      } catch {
+        return { status, body: null }
+      }
     }
-  }
 
-  if (!res.ok) {
-    throw new Error('HTTP ' + status + ': ' + res.statusText)
-  }
+    if (!res.ok) {
+      throw new Error('HTTP ' + status + ': ' + res.statusText)
+    }
 
-  return { status, body: await res.json() }
+    return { status, body: await res.json() }
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error('Request timed out after ' + timeoutMs + 'ms')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 /**
@@ -386,17 +405,19 @@ export async function fetchWithMethod(url, method, fetchFn) {
  * @param {object} [options]
  * @param {string} [options.serviceId] - Override service ID
  * @param {function} [options.fetchFn] - Custom fetch for testing
+ * @param {number} [options.requestTimeoutMs] - Per-request abort deadline
  * @returns {Promise<string[]>} violations
  */
 export async function checkRealBackend(tsContent, base, options = {}) {
-  const fetchFn = options.fetchFn || fetch
+  const fetchFn = options.fetchFn
+  const requestOptions = { timeoutMs: options.requestTimeoutMs }
   const violations = []
 
   // Check static endpoints
   for (const ep of ENDPOINTS) {
     const url = base + ep.path
     try {
-      const { status, body } = await fetchWithMethod(url, ep.method, fetchFn)
+      const { status, body } = await fetchWithMethod(url, ep.method, fetchFn, requestOptions)
 
       if (status === 404) {
         violations.push(ep.description + ': 404 Not Found')
@@ -415,7 +436,7 @@ export async function checkRealBackend(tsContent, base, options = {}) {
   if (!serviceId) {
     try {
       const servicesUrl = base + '/services?limit=1'
-      const { body: servicesData } = await fetchWithMethod(servicesUrl, 'GET', fetchFn)
+      const { body: servicesData } = await fetchWithMethod(servicesUrl, 'GET', fetchFn, requestOptions)
       const services = servicesData.items || []
       if (services.length > 0) {
         serviceId = services[0].service_id
@@ -431,7 +452,7 @@ export async function checkRealBackend(tsContent, base, options = {}) {
     for (const de of DYNAMIC_ENDPOINTS) {
       const url = base + '/services/' + encodeURIComponent(serviceId) + de.suffix
       try {
-        const { status, body } = await fetchWithMethod(url, de.method, fetchFn)
+        const { status, body } = await fetchWithMethod(url, de.method, fetchFn, requestOptions)
 
         if (status === 404) {
           violations.push(de.description + ': 404 Not Found')
@@ -448,7 +469,7 @@ export async function checkRealBackend(tsContent, base, options = {}) {
   // Check unified error response
   try {
     const url = base + ERROR_ENDPOINT.path
-    const { status, body } = await fetchWithMethod(url, ERROR_ENDPOINT.method, fetchFn)
+    const { status, body } = await fetchWithMethod(url, ERROR_ENDPOINT.method, fetchFn, requestOptions)
 
     if (body) {
       verifyResponse(tsContent, body, ERROR_ENDPOINT.type, ERROR_ENDPOINT.description, violations)

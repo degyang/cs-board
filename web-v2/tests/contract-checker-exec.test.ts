@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -402,6 +403,53 @@ describe('contract checker execution: network failure', () => {
     })
 
     expect(violations.length).toBeGreaterThan(0)
+  })
+})
+
+describe('contract checker execution: silent backend deadline', () => {
+  it('makes the CLI exit non-zero on its own and cleans up the child process', async () => {
+    const server = http.createServer(() => {})
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()))
+    const addr = server.address() as { port: number }
+    const base = 'http://127.0.0.1:' + addr.port + '/api/v1'
+    const script = path.join(ROOT, 'scripts/check-api-contract.mjs')
+    let timedOut = false
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; output: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [script], {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          MOUNTAIN_API_BASE: base,
+          MOUNTAIN_CONTRACT_SERVICE_ID: 'test-svc',
+          MOUNTAIN_API_REQUEST_TIMEOUT_MS: '25',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let output = ''
+      child.stdout.on('data', chunk => { output += chunk.toString() })
+      child.stderr.on('data', chunk => { output += chunk.toString() })
+      const cleanupTimer = setTimeout(() => {
+        timedOut = true
+        child.kill('SIGKILL')
+      }, 3_000)
+      child.on('error', error => {
+        clearTimeout(cleanupTimer)
+        reject(error)
+      })
+      child.on('close', (code, signal) => {
+        clearTimeout(cleanupTimer)
+        resolve({ code, signal, output })
+      })
+    })
+
+    if (typeof server.closeAllConnections === 'function') server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+
+    expect(timedOut).toBe(false)
+    expect(result.code).not.toBe(0)
+    expect(result.signal).toBeNull()
+    expect(result.output).toContain('Request timed out after 25ms')
   })
 })
 

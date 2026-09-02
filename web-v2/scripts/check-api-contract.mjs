@@ -20,6 +20,7 @@ const FIXTURES_DIR = path.join(ROOT, 'tests/fixtures/contracts')
 
 const BASE = process.env.MOUNTAIN_API_BASE || ''
 const SERVICE_ID = process.env.MOUNTAIN_CONTRACT_SERVICE_ID || ''
+const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.MOUNTAIN_API_REQUEST_TIMEOUT_MS || '', 10)
 
 async function main() {
   const tsContent = fs.readFileSync(TYPES_FILE, 'utf-8')
@@ -30,7 +31,10 @@ async function main() {
     // The public server URL is accepted for CI and manual verification; API-root
     // callers remain compatible to avoid silently testing the Vite HTML fallback.
     const apiBase = BASE.replace(/\/$/, '').endsWith('/api/v1') ? BASE.replace(/\/$/, '') : BASE.replace(/\/$/, '') + '/api/v1'
-    violations = await checkRealBackend(tsContent, apiBase, { serviceId: SERVICE_ID })
+    violations = await checkRealBackend(tsContent, apiBase, {
+      serviceId: SERVICE_ID,
+      requestTimeoutMs: Number.isFinite(REQUEST_TIMEOUT_MS) && REQUEST_TIMEOUT_MS > 0 ? REQUEST_TIMEOUT_MS : undefined,
+    })
 
     if (violations.length === 0) {
       console.log('\nAll contracts aligned against real backend ✓')
