@@ -63,3 +63,29 @@ Candidate import, validation, acceptance, rejection and retry are deliberately
 not implemented. Their command arrays remain empty and the response states the
 next action explicitly; no formal Artifact is fabricated and no candidate can
 be accepted by this slice.
+
+## Attempt 2 — readiness semantic correction
+
+Code commit: `b3500e0 fix(mountain): enforce work order readiness`.
+
+- Missing required upstream Artifacts now produce `DEPENDENCY_NOT_READY` with
+  stable `missing_artifact_keys` from both API and CLI. No current WO directory
+  is created for a previously unseen missing dependency; an existing WO is
+  archived stale if its dependency later disappears.
+- Non-external stages now expose exactly one structured `commands.run` command
+  with argv array, deterministic UUID idempotency key, and revision/input
+  preconditions. Their next action is `RUN_AVAILABLE` or
+  `MANUAL_TRIGGER_REQUIRED` from persisted `ExecutionPlan`.
+- `generate-illustrations` remains explicitly unavailable with no run command;
+  no candidate side effect was added. Its directory is now exactly
+  `manual/illustrations/candidates/<work_order_id>`.
+- The JSON schema now rejects unknown fields and validates nested identity,
+  scope, artifact, command, argv, next-action and relative-path structure.
+
+### Attempt 2 verification
+
+- Focused gate: `23 passed`, exit 0.
+- Full backend groups all exited 0: `25 passed`; `72 passed, 3 subtests`;
+  `29 passed`; `34 passed`; `96 passed, 4 skipped`; `243 passed, 1 skipped`.
+- `git diff --check e1bc3d5...HEAD` and the fixture sensitive-path scan both
+  exited 0.
