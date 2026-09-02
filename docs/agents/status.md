@@ -19,7 +19,7 @@
 | `WEB-PARITY-004` | WEB | BACKLOG | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0; waits for WEB-INTAKE-003 approval; ahead of WEB-WO-003 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
-| `DASH-STATS-003` | DASH | REVIEW_READY | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | committed dashboard delivery; independent review pending |
+| `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
 ## 当前决策
 
@@ -42,6 +42,8 @@
 - `WEB-INTAKE-003@672f820` 与 `DASH-STATS-003@45a3fba` 已完成 Worker 交付并进入独立审核，不在本轮跑长门禁。
 - 用户确认 `127.0.0.1:5181` 仍是旧 `c221947` 表面且偏离原型；新增 P0 `WEB-PARITY-004`，依赖
   `WEB-INTAKE-003=APPROVED`，同 Owner 队列顺序优先于 P1 `WEB-WO-003`。
+- `DASH-STATS-003@45a3fba` 的独立审核已通过，CEO 批准；`WEB-INTAKE-003@672f820` 尚无已提交的
+  独立审核结论，继续保持 `REVIEW_READY`，不提前释放同 Owner 后续任务。
 
 ## 队列规则
 

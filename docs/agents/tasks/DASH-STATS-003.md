@@ -1,7 +1,7 @@
 # DASH-STATS-003：原团队看板统计横栏与动态成员证明
 
 - Owner: DASH
-- Status: REVIEW_READY
+- Status: APPROVED
 - Priority: P1
 - Depends on: `PM-AUTO-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/POS-agent-coordination/00-System/Skills/skills-pos-magents/pos-magents/scripts/team-dashboard`
@@ -64,3 +64,8 @@ curl -fsS http://127.0.0.1:4317/api/team
 - State: `REVIEW_READY`
 
 Worker 已提交 Dashboard 实现并把 runtime 转为 review；等待独立 Reviewer，不代表 CEO 批准。
+
+## Final verdict
+
+交付 `45a3fba` 已由独立 Reviewer 复核并由 CEO 批准；见
+`docs/agents/reviews/DASH-STATS-003.md`。本批准不构成合并授权。
