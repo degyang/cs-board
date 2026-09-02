@@ -132,12 +132,13 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(action["reason"], "runtime_missing")
 
     def test_idle_and_blocked_in_progress_emit_recovery(self) -> None:
-        for state in ("idle", "blocked"):
-            with self.subTest(state=state):
-                self.write_status(["| `CORE-1` | CORE | IN_PROGRESS | pending | pending | pending |"])
-                self.write_runtime("CORE", state=state)
-                action = json.loads(self.probe())["actions"][0]
-                self.assertEqual(action["reason"], f"runtime_{state}")
+        for status in ("DISPATCHED", "IN_PROGRESS"):
+            for state in ("idle", "blocked"):
+                with self.subTest(status=status, state=state):
+                    self.write_status([f"| `CORE-1` | CORE | {status} | pending | pending | pending |"])
+                    self.write_runtime("CORE", state=state)
+                    action = json.loads(self.probe())["actions"][0]
+                    self.assertEqual(action["reason"], f"runtime_{state}")
 
     def test_ready_is_suppressed_while_same_owner_has_active_task(self) -> None:
         for status in ("DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"):

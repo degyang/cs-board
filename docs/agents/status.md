@@ -17,7 +17,7 @@
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | pending | P0 independent backend/runtime gate |
+| `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `7a74378` | attempt 2: execute five skipped boundaries; zero-skip gate unchanged |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | pending | P0 independent fail-closed readiness gate |
@@ -69,6 +69,9 @@
   输入，再派发同一任务的有界纠正。`WEB-WO-003` 继续等待，不得越过该 P0 blocker。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
+- `CORE-RUNTIME-006@7a74378` 已修复造成全量挂起的启动边界，pytest 由 180 秒超时恢复为 76.32 秒正常
+  exit 0；但仍有 5 个 skip，未满足契约。CEO 已派发 attempt 2：把四个 legacy skip 迁移为当前 `/api/v1`
+  等价断言，并修正一个误把类名漂移当成“缺少 httpx”的 conformance 测试；禁止删断言或继续 skip。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

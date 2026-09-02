@@ -66,3 +66,13 @@ git diff --check 7ac3cb0...HEAD
 
 提交并推送当前 CORE 分支；报告记录逐门禁真实终态。全部 acceptance 满足才置为 `REVIEW_READY` 并通知
 PM；若真实环境或缺陷阻止正常门禁，置为 `BLOCKED` 并提交可复现证据。不得自行批准或等待 Reviewer。
+
+## Attempt 2 recovery
+
+- Recovery base: `7a74378`
+- Trigger: attempt 1 已修复真实挂起，但全量仍有 5 个 skip，不能满足既定零 skip 门禁。
+- 授权范围：继续沿用本契约；将 `tests/test_mountain_api.py` 中四个被整类 skip 的旧接口断言迁移为当前
+  `/api/v1` 的等价可执行边界测试，不得删除断言；将 `tests/test_port_conformance.py` 中错误引用已不存在
+  类名的测试改为当前 `OpenAITextAdapter` 构造和 Protocol 断言，不得用 ImportError 吞掉产品回归。
+- 完成条件：重新运行全部原 Gates，只有全量正常 exit 0、0 failed、0 skipped 才能交付。
+- Dispatch state: `DISPATCHED`（返工 attempt 2）。
