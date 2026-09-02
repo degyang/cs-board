@@ -11,9 +11,9 @@
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | BLOCKED | `docs/agents/tasks/WEB-INTAKE-003.md` | `e573dea` | blocked by missing native capabilities API; see task |
+| `WEB-INTAKE-003` | WEB | IN_PROGRESS | `docs/agents/tasks/WEB-INTAKE-003.md` | `e573dea` | resumed after CORE-CAP-004 approval |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
-| `CORE-CAP-004` | CORE | CHANGES_REQUESTED | `docs/agents/tasks/CORE-CAP-004.md` | `1cec1dc` | `docs/agents/reviews/CORE-CAP-004.md`; missing alignment dependency |
+| `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 
@@ -25,8 +25,8 @@
 - WEB intake 自动化已真实发现 native Mountain Server 缺少 `/api/v1/capabilities`；前端保持阻塞，后端修复已进入 READY，不允许 WEB 吞掉 404。
 - MEDIA Skills 主体方向正确，但首阶段 Artifact 映射和未实现 illustration retry 说明矛盾，进入有界 attempt 2。
 - PM 协调线程为 `/root/pm`。Worker 完成后必须按注册表直接唤醒 PM，而不是只通知 `/root` 或等待用户追问。
-- `CORE-CAP-004` attempt 1 已消除 native capabilities 404，但必需能力聚合漏掉真实
-  `clone-voice` 的 `speech_alignment` 依赖；同任务进入 attempt 2，WEB intake 继续保持阻塞。
+- `CORE-CAP-004` attempt 2 已补齐真实依赖图并获批准；同一 `WEB-INTAKE-003` 已恢复，先完成 intake
+  浏览器证据，再领取 `WEB-WO-003`。
 
 ## 队列规则
 

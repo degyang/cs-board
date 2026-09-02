@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: BLOCKED
+- Status: IN_PROGRESS
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -79,3 +79,13 @@ Python，也禁止吞掉 HTTP 错误，因此当前停止是正确行为。
 保留已完成 intake 脚本与测试，不继续改 UI。待 `CORE-CAP-004=APPROVED` 后，PM 将本任务恢复为
 attempt 1 continuation；WEB 只需基于同一 commit 重跑真实 E2E、提交三张证据和 manifest，并修复
 当前 report 末尾 `git diff --check` 空行问题。
+
+## Resume after dependency approval
+
+- Dependency: `CORE-CAP-004=APPROVED`
+- Backend delivery: `c567c3a`
+- Resume mode: attempt 1 continuation
+
+继续使用现有 `e573dea` 脚本，不新建重复任务。把 backend delivery `c567c3a` 引入当前 WEB 工作树后，
+只重跑契约中的真实 API/Vite/Playwright 门禁并提交三张截图与安全 manifest。若证据发现当前允许页面的
+真实前端缺陷，可按原契约最小修复；不得进入 Start、Pipeline 或 Work Order 范围。
