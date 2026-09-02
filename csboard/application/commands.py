@@ -337,7 +337,12 @@ class MountainCommands:
                 "command": "task.save_inputs",
             })
 
-        return {"ok": True, "task_id": task_id, "input_saved": True}
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "input_saved": True,
+            "execution_plan": execution_plan.to_dict(),
+        }
 
     def get_inputs(self, task_id: str) -> dict[str, Any]:
         """读取已保存的任务输入。"""
@@ -425,10 +430,7 @@ class MountainCommands:
             unavailable = []
             for stage_name, capability in STAGE_CAPABILITY_MAP.items():
                 try:
-                    service = self.service_resolver.resolve(capability)
-                    registry = getattr(self.service_resolver, "_registry", None)
-                    if registry is not None and not registry.has_required_secrets(service):
-                        raise DomainError("CAPABILITY_NOT_AVAILABLE", "服务必需 Secret 未配置")
+                    self.service_resolver.resolve(capability)
                 except DomainError:
                     unavailable.append({"stage": stage_name, "capability": capability})
             if unavailable:

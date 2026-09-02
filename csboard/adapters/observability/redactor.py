@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any
 
 
-_SENSITIVE_KEY = re.compile(r"(?:api[_-]?key|authorization|cookie|secret|password|token|access[_-]?token|refresh[_-]?token)$", re.I)
+_SENSITIVE_KEY = re.compile(
+    r"(?:api[_-]?key|authorization|cookie|secret|password|token|"
+    r"access[_-]?token|refresh[_-]?token|script|reference(?:[_-]?bytes)?)$",
+    re.I,
+)
 _BEARER = re.compile(r"(?i)(bearer\s+)[^\s]+")
 _QUERY_SECRET = re.compile(r"(?i)([?&](?:api[_-]?key|token|secret|password)=)[^&#\s]+")
 
