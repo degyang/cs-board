@@ -1,7 +1,7 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WORKER_WEB
-- Status: CHANGES_REQUESTED
+- Status: DISPATCHED
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -58,3 +58,6 @@
   required passing browser evidence. Preserve the approved API/DTO boundary and all passing gates;
   do not add orchestration, mocks, backend changes, or a later task. Execution uses the default
   moderate configuration. Worker must return a verified handoff for `TEST_READY`.
+- `2026-09-02T18:30:00+08:00` — Dispatch event
+  `10d62c08a989327cca8fc71843356fc1e7c669b344b7944c41fbc8d29d287eae`: the bounded attempt 2 is
+  committed as `DISPATCHED` for `WORKER_WEB`. No later WEB task is created or dispatched.
