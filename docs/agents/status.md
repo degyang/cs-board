@@ -9,7 +9,7 @@
 | `BASELINE-MEDIA-001` | MEDIA | APPROVED | `docs/agents/tasks/BASELINE-MEDIA-001.md` | `docs/agents/reports/BASELINE-MEDIA-001.md` | PM accepted |
 | `CORE-EXEC-002` | CORE | CHANGES_REQUESTED | `docs/agents/tasks/CORE-EXEC-002.md` | `ea7b54f` | `docs/agents/reviews/CORE-EXEC-002.md` |
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
-| `PM-AUTO-001` | PM | REVIEW_READY | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | root review requested |
+| `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | BACKLOG | `docs/agents/tasks/CORE-WO-003.md` | pending | blocked by CORE-EXEC-002 + MEDIA-WO-002 |
 | `WEB-WO-003` | WEB | BACKLOG | `docs/agents/tasks/WEB-WO-003.md` | pending | blocked by CORE-WO-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |

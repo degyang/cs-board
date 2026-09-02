@@ -1,7 +1,7 @@
 # PM-AUTO-001：独立 PM、依赖队列与真实在线状态
 
 - Owner: PM
-- Status: REVIEW_READY
+- Status: APPROVED
 - Priority: P0
 - Depends on: none
 - Worktree: `/mnt/d/workstation/projects/cs-board-mountain-v2`
