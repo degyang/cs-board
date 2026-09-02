@@ -19,9 +19,9 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | CHANGES_REQUESTED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 3 same-port immediate-reuse correction; not dispatched |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | five golden + manifest delivered; next review after CORE |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | five golden + manifest delivered; independent review in progress |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | review queued behind CORE and critical-path PROTOTYPE |
+| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | review queued behind critical-path PROTOTYPE |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
