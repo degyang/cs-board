@@ -89,3 +89,20 @@ Code commit: `b3500e0 fix(mountain): enforce work order readiness`.
   `29 passed`; `34 passed`; `96 passed, 4 skipped`; `243 passed, 1 skipped`.
 - `git diff --check e1bc3d5...HEAD` and the fixture sensitive-path scan both
   exited 0.
+
+## Attempt 3 — final output and stale-recovery correction
+
+Code commit: `a868ace fix(mountain): restore stale work orders safely`.
+
+- `expected_outputs` is now a per-stage collection: clone voice declares both
+  `audio.voice-manifest` and `timing.timeline`; compose video declares both
+  `output.final-video` and `output.final-manifest`; all other stage keys stay
+  unchanged.
+- A current stale WO is no longer returned merely because its restored inputs
+  reproduce the same fingerprint. Restoration creates a new revision, a new
+  `work_order_id`, and therefore a new structured run idempotency identity.
+
+Verification: focused gate `24 passed`; final broad backend group `244 passed,
+1 skipped`, all exit 0. Full grouped suite evidence from attempt 2 remains
+applicable for unaffected groups; no scope outside these two corrections was
+changed.
