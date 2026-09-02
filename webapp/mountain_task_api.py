@@ -112,6 +112,8 @@ def mountain_task_router(
         min_chars: int = Form(35),
         max_chars: int = Form(140),
         visual_anchor_enabled: bool = Form(True),
+        execution_mode: str = Form("auto"),
+        manual_stages: str = Form("[]"),
     ):
         """上传任务输入（文案和参考音频）— 委托 Application 层。
 
@@ -157,6 +159,13 @@ def mountain_task_router(
                             )
                         f.write(chunk)
 
+            try:
+                parsed_manual_stages = json.loads(manual_stages)
+            except (TypeError, json.JSONDecodeError):
+                return domain_error_response(DomainError("VALIDATION_ERROR", "manual_stages 必须是合法 JSON 数组"), status_code=400)
+            if not isinstance(parsed_manual_stages, list):
+                return domain_error_response(DomainError("VALIDATION_ERROR", "manual_stages 必须是数组"), status_code=400)
+
             # 委托 Application 处理
             result = commands.save_inputs(
                 task_id,
@@ -171,6 +180,8 @@ def mountain_task_router(
                 min_chars=min_chars,
                 max_chars=max_chars,
                 visual_anchor_enabled=visual_anchor_enabled,
+                execution_mode=execution_mode,
+                manual_stages=parsed_manual_stages,
                 context=_context(),
             )
 
@@ -209,7 +220,7 @@ def mountain_task_router(
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            return domain_error_response(error, status_code=409 if error.code == "EXECUTION_PLAN_NOT_READY" else 400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/cancel")
     def cancel_run(task_id: str, run_id: str):

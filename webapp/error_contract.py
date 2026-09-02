@@ -21,7 +21,7 @@ def domain_error_response(
             "message": exc.message,
             "retryable": exc.retryable,
             "unavailable": [],
-            "details": details,
+            "details": details if details is not None else exc.details,
         }
     }
     return JSONResponse(content=body, status_code=status_code)

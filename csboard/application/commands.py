@@ -22,6 +22,7 @@ from csboard.domain.script_preparation import prepare_script
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.models import Task, Run, StageState
+from csboard.domain.execution_plan import ExecutionPlan
 from csboard.ports.providers import AlignmentPort, ImageModelPort, MediaPort, RendererPort, TextModelPort, TextToSpeechPort
 
 
@@ -132,7 +133,9 @@ class MountainCommands:
     def show_task(self, task_id: str) -> dict[str, Any]:
         task = self.repository.get_task(task_id)
         run = self.repository.get_run(task_id, task.active_run_id) if task.active_run_id else None
-        return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None}
+        request = self.repository.get_request(task_id) or {}
+        plan = ExecutionPlan.from_dict(request.get("execution_plan", {}))
+        return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None, "execution_plan": plan.to_dict()}
 
     def list_tasks(
         self,
@@ -247,6 +250,8 @@ class MountainCommands:
         min_chars: int = 35,
         max_chars: int = 140,
         visual_anchor_enabled: bool = True,
+        execution_mode: str = "auto",
+        manual_stages: list[str] | None = None,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """保存任务输入：通过 Application command 和 Repository 接口。
@@ -272,6 +277,7 @@ class MountainCommands:
                 raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
 
         # 验证规则参数
+        execution_plan = ExecutionPlan.create(execution_mode, manual_stages or [])
         try:
             preparation = prepare_script(
                 script.strip(),
@@ -299,6 +305,7 @@ class MountainCommands:
             "min_chars": min_chars,
             "max_chars": max_chars,
             "visual_anchor_enabled": visual_anchor_enabled,
+            "execution_plan": execution_plan.to_dict(),
         }
 
         # 原子提交：request + task preparation + reference
@@ -312,6 +319,7 @@ class MountainCommands:
                 visual_anchor_enabled=visual_anchor_enabled,
                 reference_filename=reference_audio_filename,
                 preserve_reference=(reference_audio_filename is None),
+                execution_plan=execution_plan.to_dict(),
             )
         except Exception as exc:
             # 不暴露绝对路径或异常原文
@@ -339,6 +347,7 @@ class MountainCommands:
                 "saved": False,
                 "inputs": None,
                 "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
+                "execution_plan": ExecutionPlan().to_dict(),
             }
 
         # 从 request.json 读取 reference 元数据（不扫描目录）
@@ -378,6 +387,7 @@ class MountainCommands:
             },
             "script_preparation": preparation,
             "visual_anchor_enabled": visual_anchor_enabled,
+            "execution_plan": ExecutionPlan.from_dict(request_data.get("execution_plan", {})).to_dict(),
         }
 
     def start_run(
@@ -392,6 +402,15 @@ class MountainCommands:
         request_data = self.repository.get_request(task_id)
         if not request_data:
             raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
+
+        execution_plan = ExecutionPlan.from_dict(request_data.get("execution_plan", {}))
+        if execution_plan.mode == "selective":
+            raise DomainError(
+                "EXECUTION_PLAN_NOT_READY",
+                "selective 执行计划尚未启用手动阶段编排",
+                retryable=False,
+                details={"suggestion": "手动阶段编排尚未启用"},
+            )
 
         # 检查 capability 可用性
         if self.service_resolver is not None:

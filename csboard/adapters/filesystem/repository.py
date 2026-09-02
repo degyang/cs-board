@@ -135,6 +135,7 @@ class FilesystemTaskRepository:
         visual_anchor_enabled: bool,
         reference_filename: str | None = None,
         preserve_reference: bool = False,
+        execution_plan: dict | None = None,
     ) -> None:
         """原子提交：request + task preparation + reference。
 
@@ -166,6 +167,10 @@ class FilesystemTaskRepository:
             existing_task["script_preparation"] = preparation
             existing_task["visual_anchor_enabled"] = visual_anchor_enabled
             self._write_json(tmp_task, existing_task)
+
+            if execution_plan is not None:
+                request_data = {**request_data, "execution_plan": execution_plan}
+                self._write_json(tmp_request, request_data)
 
             # 准备 reference（如果有）
             tmp_ref: Path | None = None

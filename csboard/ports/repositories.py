@@ -27,6 +27,7 @@ class TaskRepository(Protocol):
         preparation: dict,
         visual_anchor_enabled: bool,
         reference_filename: str | None = None,
+        execution_plan: dict | None = None,
     ) -> None: ...
 
 
