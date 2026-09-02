@@ -10,9 +10,9 @@
 | `CORE-EXEC-002` | CORE | APPROVED | `docs/agents/tasks/CORE-EXEC-002.md` | `e1bc3d5` | `docs/agents/reviews/CORE-EXEC-002.md` |
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
-| `CORE-WO-003` | CORE | DISPATCHED | `docs/agents/tasks/CORE-WO-003.md` | pending | dependencies approved; dispatched |
-| `WEB-INTAKE-003` | WEB | DISPATCHED | `docs/agents/tasks/WEB-INTAKE-003.md` | pending | independent pre-run browser E2E |
-| `MEDIA-SKILLS-003` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | pending | independent Skills contract automation |
+| `CORE-WO-003` | CORE | IN_PROGRESS | `docs/agents/tasks/CORE-WO-003.md` | pending | worker active |
+| `WEB-INTAKE-003` | WEB | IN_PROGRESS | `docs/agents/tasks/WEB-INTAKE-003.md` | pending | worker active |
+| `MEDIA-SKILLS-003` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | pending | waiting only for one runtime agent slot |
 | `WEB-WO-003` | WEB | BACKLOG | `docs/agents/tasks/WEB-WO-003.md` | pending | blocked by CORE-WO-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 
@@ -21,6 +21,7 @@
 - `CORE-EXEC-002` attempt 2 已批准；`CORE-WO-003` 的两个依赖均满足并已派发。
 - `MEDIA-WO-002` 契约已批准但未合并；CORE 通过固定 commit/path 只读消费该契约，不改写其产品语义。
 - WEB 与 MEDIA 各增加一个不依赖 Work Order 生产 DTO 的真实并行切片；它们不改变原三个 BACKLOG 的依赖关系。
+- 当前 orchestrator 只有四个活跃槽位（含 `/root` 和 `/root/pm`）；CORE、WEB 已启动，MEDIA 已派发并将在 PM 释放槽位后立即唤醒。这是运行时容量，不是代码依赖。
 - PM 协调线程为 `/root/pm`。Worker 完成后必须按注册表直接唤醒 PM，而不是只通知 `/root` 或等待用户追问。
 
 ## 队列规则
