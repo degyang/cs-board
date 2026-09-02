@@ -25,6 +25,10 @@
 
 ## Recovery record
 
+- `2026-09-02T18:30:00+08:00` — `recover-stale(runtime_idle)` re-dispatch authorized while
+  status remains `DISPATCHED`; no Worker handoff or report exists. After this tracked record is
+  committed and pushed, invoke only the restored supervised dispatcher asynchronously. Do not
+  create an orchestrator Worker or write Worker runtime state.
 - `2026-09-02T18:30:00+08:00` — `recover-stale` received for a missing `WORKER_WEB`
   runtime while this task remained `DISPATCHED`. No Worker delivery/report exists. The required
   `dispatch_cli_agent.sh` supervised dispatcher is unavailable from this checkout and the command
