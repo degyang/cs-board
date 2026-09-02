@@ -27,3 +27,14 @@
 - 首次未注入 Vite 同源变量时另复现 CORS preflight 400；按既有证据流程修正后仍稳定复现 capability 404。
 - 未生成可接受的 intake manifest；任何截图仅为失败运行中间产物，不应作为通过证据。
 
+## Resume attempt 1 continuation
+
+按协调提交 `d0e0439` 引入 CORE capability delivery `1cec1dc`、`c567c3a`（本工作树对应 cherry-pick commits `ff7fe87`、`40027de`）后重跑：
+
+- contract checker：`All contracts aligned against real backend ✓`。
+- 创建 Task、保存 inputs、GET inputs 回读、工作台导航和队列搜索均完成。
+- 真实 API 浏览器门禁仍失败：`500 GET /api/v1/capabilities`，console 同步出现 500 resource error。
+- 后端原始 traceback：`csboard/application/capabilities.py:102` 调用 `self._registry.has_required_secrets(service)`，但 [csboard/adapters/filesystem/service_registry.py](/mnt/d/workstation/projects/cs-board/.claude/worktrees/mountain-webui-surface-parity/csboard/adapters/filesystem/service_registry.py) 的 `FilesystemServiceRegistry` 没有该方法。
+- 因 HTTP >=400、console error 均非零，未生成可接受 manifest；中间截图不作为证据。
+
+该问题属于 CORE capability delivery 的 Python 实现错误。WEB 不修改 Python、API client、types/DTO，也不吞掉 HTTP 错误；任务继续 BLOCKED，等待 CORE 修复并由 PM 重新批准后再重跑。
