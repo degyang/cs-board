@@ -211,3 +211,11 @@ docs(mountain): prove create task flow against real backend
 - 前端：尝试固定 5175，但环境已有端口占用，Vite 自动落到 5180；该进程已终止。
 - 证据脚本/README：脚本增加六个 create 路径且不创建 Task；当前环境缺少 Playwright Chromium，安装下载失败，六张新截图和 SHA-256 无法生成。现存截图 15 张，未宣称 21 张完成。
 - 本报告不宣布审核通过，等待 PM 复审及可用浏览器环境下的截图复验。
+
+## CCF 浏览器证据最终报告（待 PM 复审）
+
+- 已按 26 号指令使用指定 Chromium 路径尝试真实浏览器流程；未修改 `CreateTaskPage.tsx`、CSS、API client 或测试，未创建 Task、未填写文案、未上传音频。
+- 隔离后端 contract checker 真实结果：`All contracts aligned against real backend ✓`。
+- `npm --prefix web-v2 run dev -- --host 127.0.0.1 --port 5175 --strictPort` 因环境外部端口占用启动失败；按禁止项未终止其他会话。备用 5180 流程亦未能完成服务就绪，因此未运行截图断言。
+- 新建任务六张截图均未生成，SHA-256 无可报告；证据目录现有 PNG 总数仍为 15，未冒充 21 张。Playwright 浏览器二进制存在，但本轮没有产生新截图。
+- 所有本轮启动的进程均已终止，临时数据目录与临时日志已精确清理；工作树 clean。等待 PM 提供可用 5175 端口后复审。

@@ -31,3 +31,7 @@
 ### 新建任务纠偏证据（2026-09-02）
 
 专项测试已按真实六 Tab 用户路径重写并通过；隔离临时数据目录中的真实后端 contract checker 返回 `All contracts aligned against real backend ✓`。证据脚本已扩展六个 create 截图路径且不调用创建 Task API。当前环境缺少 Playwright Chromium，安装下载失败，因此六张新截图及 SHA-256 尚未生成；现存截图总数为 15，未冒充 21 张完成。
+
+### 浏览器证据最终尝试（2026-09-02）
+
+本轮已改用文档指定 Chromium `/home/ubuntu/.cache/ms-playwright/chromium-1187/chrome-linux/chrome`。真实后端 contract checker 通过；5175 `--strictPort` 因外部端口占用无法启动，备用端口流程未完成服务就绪。未创建 Task，未生成六张新图或 SHA-256；PNG 总数仍为 15，等待 PM 复审。
