@@ -16,7 +16,7 @@
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `WEB-PARITY-004` | WEB | READY | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0 dependency satisfied; next WEB task ahead of WEB-WO-003 |
+| `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0 dispatched asynchronously ahead of WEB-WO-003 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
@@ -55,6 +55,8 @@
 - `WEB-INTAKE-003@51656c9` 的 attempt 3 独立评审提交 `9885f57` 结论为 `APPROVED`；PM 据此将任务
   置为 `APPROVED`。队列重算后，依赖已满足的 P0 `WEB-PARITY-004` 进入 `READY`，同 Owner 的 P1
   `WEB-WO-003` 保持 `READY` 但排在其后。本决策不构成用户、发布或合并审核批准。
+- `WEB-PARITY-004` 已固定在 WEB 分支 `feat/mountain-webui-surface-parity`、交付基线 `51656c9`，并按
+  P0 顺序异步派发；PM 不等待其长门禁，`WEB-WO-003` 不得并发领取。
 
 ## 队列规则
 

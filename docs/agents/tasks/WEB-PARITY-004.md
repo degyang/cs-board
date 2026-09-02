@@ -1,7 +1,7 @@
 # WEB-PARITY-004：WebUI 原型逐页对齐审计与修复
 
 - Owner: WEB
-- Status: READY
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: `WEB-INTAKE-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -74,3 +74,11 @@ git diff --check <dispatch-base>...HEAD
 `WEB-INTAKE-003` 未获独立审核批准时不得派发。完成后提交并推送当前 WEB 分支，报告列出逐页
 5182 golden/正式实现同尺寸截图、manifest、真实 API 终态、浏览器问题计数和全部门禁结果；置为
 `REVIEW_READY` 并通知 PM。不得领取 `WEB-WO-003`。
+
+## Dispatch
+
+- Attempt: 1（初次）
+- Coordination decision: `090de4c`
+- Dispatch state: `DISPATCHED`
+
+Worker 仅执行本契约并在提交、推送、通知 PM 后停止；不得等待或领取同 Owner 的 `WEB-WO-003`。
