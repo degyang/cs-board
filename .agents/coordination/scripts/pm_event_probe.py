@@ -31,7 +31,7 @@ def read_tasks(root: Path) -> dict[str, dict[str, str]]:
     return tasks
 
 
-ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "BLOCKED"}
+ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
 ACTION_ORDER = {
     "recover-stale": 0,
     "record-review-ready": 1,
@@ -117,6 +117,15 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
                     **task,
                 }
             )
+        elif task["status"] == "CHANGES_REQUESTED":
+            owner_has_other_active_task = any(
+                other["task_id"] != task["task_id"]
+                and other["owner"] == task["owner"]
+                and other["status"] in ACTIVE_STATUSES
+                for other in tasks.values()
+            )
+            if not owner_has_other_active_task:
+                actions.append({"kind": "dispatch", **task})
         elif task["status"] == "READY" and task["owner"] not in busy_owners:
             actions.append({"kind": "dispatch", **task})
         elif task["status"] == "BACKLOG":
