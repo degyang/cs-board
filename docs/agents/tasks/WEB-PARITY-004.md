@@ -126,3 +126,13 @@ CEO 必须先提供以下任一 Git 可验证、不可变输入，才能解除�
 
 仅执行既有独立评审列出的五组 golden/actual 配对、manifest、fail-closed verifier 和必要的正式 WebUI
 最小修正；不得修改 prototype、backend、Work Order 或领取 `WEB-WO-003`。
+
+## Attempt 2 review handoff
+
+- Delivery: `cdda8725e7c23ad8dfa9b3d6548d8d7e4323bd1c`
+- Report head: `eadf15a1f8d706999660d2a42c9ccb4aae579101`
+- Report: `docs/agents/reports/WEB-PARITY-004.md`
+- State: `REVIEW_READY`
+
+WEB 分支已推送且报告记录全部契约门禁正常退出；本节只登记独立审核入口，不代表 CEO、用户、发布或
+合并批准。Reviewer 必须以 attempt 2 交付与已批准 golden 为边界独立复核。

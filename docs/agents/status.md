@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | attempt 2: pair approved immutable golden with actual evidence |
+| `WEB-PARITY-004` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-PARITY-004.md` | `cdda872` | attempt 2 delivered; independent review pending |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | attempt 2 controlled 4xx/full-suite correction dispatched |
