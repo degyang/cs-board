@@ -19,7 +19,7 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | attempt 3 lifecycle correction handed off; review queued |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | CHANGES_REQUESTED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | attempt 2 deterministic immutable capture correction; not dispatched |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | DISPATCHED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | attempt 2 deterministic immutable capture correction dispatched |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | review queued behind critical-path PROTOTYPE |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
@@ -107,8 +107,9 @@
   保持排队，不并发启动其他 Reviewer，也不提前批准后续工作。
 - `PROTOTYPE-GOLDEN-005@069ace1` 独立评审提交 `7f4aaab` 结论为 `CHANGES_REQUESTED`：连续 capture
   会因动画相位改变 PNG hash，且默认脚本会静默改写 manifest。CEO 记录仅限 capture/golden/manifest/
-  报告的 deterministic attempt 2，但本轮不派发；`WEB-PARITY-004` blocker 保持。Reviewer 槽转审已
-  交付的 `CORE-RUNTIME-006` attempt 3，MEDIA 继续排队。
+  报告的 deterministic attempt 2；本轮按纠正优先级使用 `gpt-5.6-terra + medium` 异步派发，不等待
+  Worker 门禁。`WEB-PARITY-004` blocker 保持；Reviewer 槽仍服务 `CORE-RUNTIME-006` attempt 3，
+  MEDIA 继续排队。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。
