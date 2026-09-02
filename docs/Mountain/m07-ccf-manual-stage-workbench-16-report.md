@@ -99,4 +99,3 @@ $ git status --short
 - 轮询资源在 identity 变化时会清理旧快照，调用方不可依赖旧 response 继续展示。
 - 真实文案、参考音频、Codex 插画候选与最终 MP4 仍待用户最终验收；本轮没有创建 Task 或冒充真实制作成果。
 - 本回执不代表 PM 审核通过，也未进入 `USER_ACCEPTANCE`。
-
