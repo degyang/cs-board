@@ -20,10 +20,10 @@
       "capabilities": ["webui", "frontend-contracts", "browser-evidence"]
     },
     "CORE": {
-      "transport": "orchestrator",
-      "thread": "/root/core",
-      "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend",
-      "branch": "feat/mountain-assets-settings-backend",
+      "transport": "codex_cli",
+      "thread": "01a0609b-f71f-7111-93c0-d48d3c325f49",
+      "worktree": "/mnt/d/workstation/projects/cs-board-core-cap-repair",
+      "branch": "fix/mountain-capability-secret-contract",
       "model": "gpt-5.6-terra",
       "reasoning_effort": "medium",
       "capabilities": ["domain", "api", "cli", "persistence", "telemetry"]
