@@ -14,8 +14,11 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
+import signal
 import socket
+import struct
 import sys
 from pathlib import Path
 
@@ -32,11 +35,21 @@ def _ensure_importable(repo_root: Path) -> None:
         sys.path.insert(0, root_str)
 
 
-def _check_port_available(host: str, port: int) -> None:
-    """检查端口是否可用，不可用时给出可操作错误。"""
+def _create_listening_socket(host: str, port: int) -> socket.socket:
+    """Bind the server socket with immediate-reuse shutdown semantics.
+
+    The launcher is repeatedly started by fresh-data-dir smoke tests.  Passing
+    this socket to uvicorn makes the bind lifecycle explicit and ensures a
+    normal SIGTERM shutdown cannot leave recently handled localhost connections
+    holding the test port in TIME_WAIT.
+    """
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((host, port))
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        listener.bind((host, port))
+        listener.listen(socket.SOMAXCONN)
+        return listener
     except OSError:
         print(f"错误: 端口 {port} 不可用", file=sys.stderr)
         print(f"解决: 使用 --port 指定其他端口，或终止占用 {port} 的进程", file=sys.stderr)
@@ -102,18 +115,25 @@ def main() -> None:
         print("解决: 确认在仓库根目录或已正确安装依赖", file=sys.stderr)
         sys.exit(1)
 
-    # 5. 检查端口和 uvicorn
+    # 5. 检查 uvicorn 并创建受 launcher 管理的监听 socket
     _check_dependencies()
-    _check_port_available(args.host, args.port)
+    listener = _create_listening_socket(args.host, args.port)
 
-    # 6. 启动 uvicorn（传入 app 对象而非字符串，避免二次导入问题）
+    # 6. 启动 uvicorn（传入 app 对象与已绑定 socket，避免二次导入问题）
     import uvicorn
-    uvicorn.run(
-        app,
-        host=args.host,
-        port=args.port,
-        log_level=args.log_level,
-    )
+    server = uvicorn.Server(uvicorn.Config(app, log_level=args.log_level))
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def request_graceful_shutdown(_signum, _frame) -> None:
+        server.should_exit = True
+
+    try:
+        signal.signal(signal.SIGTERM, request_graceful_shutdown)
+        server.config.setup_event_loop()
+        asyncio.run(server._serve(sockets=[listener]))
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        listener.close()
 
 
 if __name__ == "__main__":
