@@ -17,11 +17,11 @@
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 2 zero-skip delivery verified; independent review pending |
+| `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 2 zero-skip delivery verified; independent review in progress |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | DISPATCHED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | pending | restores immutable five-page golden; unblocks WEB-PARITY-004 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | stale recovery found committed delivery; independent review pending |
+| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | independent review queued behind CORE correction review |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -84,6 +84,9 @@
   等价断言，并修正一个误把类名漂移当成“缺少 httpx”的 conformance 测试；禁止删断言或继续 skip。
 - `CORE-RUNTIME-006` attempt 2 实现 `4ab3867` 与报告交付 `eb1a248` 已提交推送，CORE 分支干净且与
   远端一致。本轮仅记录 `REVIEW_READY` handoff；独立审核前不批准，也不作下游发布决定。
+- CORE 与 MEDIA 的 review 事件均无已提交 digest；按 Reviewer WIP=1 和返工优先顺序，本轮只启动
+  `CORE-RUNTIME-006` 独立审核，使用 `gpt-5.6-terra + medium`。`MEDIA-PREFLIGHT-004` 保持
+  `REVIEW_READY` 排队，不并发启动第二个 Reviewer。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。
