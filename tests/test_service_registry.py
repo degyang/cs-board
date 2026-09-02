@@ -101,6 +101,37 @@ def test_disabled_excluded(registry: FilesystemServiceRegistry):
     assert len(services) == 0
 
 
+def test_required_secret_availability_is_fail_closed(registry: FilesystemServiceRegistry):
+    service = _make_service("svc-1", required_secrets=["api_key", "client_secret"])
+    registry.create_service(service)
+
+    assert registry.has_required_secrets(service) is False
+
+    registry.set_secret("svc-1", "api_key", "")
+    assert registry.has_required_secrets(service) is False
+
+    registry.set_secret("svc-1", "api_key", "configured-secret")
+    assert registry.has_required_secrets(service) is False
+
+    registry.set_secret("svc-1", "client_secret", "configured-secret")
+    assert registry.has_required_secrets(service) is True
+
+    no_secret_service = _make_service("svc-2", required_secrets=[])
+    registry.create_service(no_secret_service)
+    assert registry.has_required_secrets(no_secret_service) is True
+
+
+def test_required_secret_availability_hides_store_read_failures(tmp_path: Path):
+    class FailingSecretStore:
+        def get(self, key: str) -> str | None:
+            raise OSError("secret store unavailable")
+
+    registry = FilesystemServiceRegistry(tmp_path, FailingSecretStore())
+    service = _make_service("svc-1")
+
+    assert registry.has_required_secrets(service) is False
+
+
 def test_persistence_reload(tmp_path: Path):
     """持久化重载。"""
     secret_store = PlaintextSecretStore(tmp_path / ".secrets")
