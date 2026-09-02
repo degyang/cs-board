@@ -49,7 +49,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let apiError: ApiError | null = null
     try {
       const body = await res.json()
-      apiError = typeof body.detail === 'object' ? body.detail : null
+      // Domain errors use the stable `{ error: {...} }` envelope.  Retain
+      // `detail` support for older FastAPI endpoints while they migrate.
+      apiError = typeof body.error === 'object'
+        ? body.error as ApiError
+        : typeof body.detail === 'object'
+          ? body.detail as ApiError
+          : null
     } catch {
       // ignore parse errors
     }
@@ -90,7 +96,11 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
     let apiError: ApiError | null = null
     try {
       const body = await res.json()
-      apiError = typeof body.detail === 'object' ? body.detail : null
+      apiError = typeof body.error === 'object'
+        ? body.error as ApiError
+        : typeof body.detail === 'object'
+          ? body.detail as ApiError
+          : null
     } catch {
       // ignore
     }

@@ -11,11 +11,28 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
 import { BackButton } from '../components/ui/BackButton'
 import { STAGE_KEYS, STAGE_NAMES } from '../lib/api/types'
+import type { ExecutionMode, StageKey } from '../lib/api/types'
+import { MountainApiError } from '../lib/api/client'
 
 // ── Polling helper ──────────────────────────────────────────────────────
 
 function isTerminal(status: string): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+}
+
+function canonicalManualStages(stages: readonly StageKey[]): StageKey[] {
+  return STAGE_KEYS.filter((stage) => stages.includes(stage))
+}
+
+/** Only the documented plan error and its string suggestion may reach the UI. */
+function executionPlanNotice(error: unknown): string | null {
+  if (!(error instanceof MountainApiError)) return null
+  const domain = error.apiError
+  if (error.status !== 409 || domain?.code !== 'EXECUTION_PLAN_NOT_READY' || domain.retryable !== false) return null
+  const suggestion = domain.details?.suggestion
+  return typeof suggestion === 'string' && suggestion.trim()
+    ? `当前执行计划暂不能启动。${suggestion.trim()}`
+    : '当前执行计划暂不能启动，请调整执行计划后重试。'
 }
 
 // ── Component ───────────────────────────────────────────────────────────
@@ -114,6 +131,8 @@ export function TaskWorkbenchPage() {
   const [includeSubtitles, setIncludeSubtitles] = useState(false)
   const [penText, setPenText] = useState('')
   const [strokeDetail, setStrokeDetail] = useState('')
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('auto')
+  const [manualStages, setManualStages] = useState<StageKey[]>([])
 
   // Restore saved inputs when readback data arrives.
   // Only initializes on first load (inputsSaved is false) to avoid overwriting edits.
@@ -124,6 +143,9 @@ export function TaskWorkbenchPage() {
     setIncludeSubtitles(inputsData.inputs.include_subtitles)
     setPenText(inputsData.inputs.pen_text)
     setStrokeDetail(inputsData.inputs.stroke_detail)
+    const plan = inputsData.execution_plan ?? { mode: 'auto' as const, manual_stages: [] }
+    setExecutionMode(plan.mode)
+    setManualStages(canonicalManualStages(plan.manual_stages))
     if (inputsData.reference_audio.uploaded) {
       setSavedAudioFilename(inputsData.reference_audio.filename)
       setSavedAudioSize(inputsData.reference_audio.size_bytes)
@@ -163,9 +185,21 @@ export function TaskWorkbenchPage() {
       form.set('include_subtitles', String(includeSubtitles))
       if (penText) form.set('pen_text', penText)
       if (strokeDetail) form.set('stroke_detail', strokeDetail)
+      form.set('execution_mode', executionMode)
+      form.set('manual_stages', JSON.stringify(
+        executionMode === 'selective' ? canonicalManualStages(manualStages) : [],
+      ))
 
       const res = await uploadInputs(taskId, form)
       if (res.ok) {
+        // Older saved-input deployments omit the echoed plan; the submitted
+        // canonical values remain the truthful local readback in that case.
+        const plan = res.execution_plan ?? {
+          mode: executionMode,
+          manual_stages: executionMode === 'selective' ? canonicalManualStages(manualStages) : [],
+        }
+        setExecutionMode(plan.mode)
+        setManualStages(canonicalManualStages(plan.manual_stages))
         setInputsSaved(true)
         setActionSuccess('制作输入已保存')
       }
@@ -186,7 +220,7 @@ export function TaskWorkbenchPage() {
       setActionSuccess('运行已启动')
       setPollMs(10_000) // resume polling
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '启动失败')
+      setActionError(executionPlanNotice(err) ?? (err instanceof Error ? err.message : '启动失败'))
     } finally {
       setActionLoading(null)
     }
@@ -419,6 +453,53 @@ export function TaskWorkbenchPage() {
               <input id="input-pen" className="input" value={penText} onChange={(e) => { setPenText(e.target.value); setInputsSaved(false) }} placeholder="白板动画中的手写文字" disabled={actionLoading === 'inputs'} />
             </div>
           </div>
+
+          <fieldset className="field" disabled={actionLoading === 'inputs'}>
+            <legend>执行计划</legend>
+            <label style={{ display: 'block', marginBottom: 6 }}>
+              <input
+                type="radio"
+                name="execution-mode"
+                checked={executionMode === 'auto'}
+                onChange={() => { setExecutionMode('auto'); setInputsSaved(false) }}
+              /> 自动执行全部阶段
+            </label>
+            <label style={{ display: 'block', marginBottom: 6 }}>
+              <input
+                type="radio"
+                name="execution-mode"
+                checked={executionMode === 'selective'}
+                onChange={() => { setExecutionMode('selective'); setInputsSaved(false) }}
+              /> 选择手动阶段
+            </label>
+            {executionMode === 'selective' && (
+              <div className="hint" aria-label="手动阶段">
+                {STAGE_KEYS.map((stage) => (
+                  <label key={stage} style={{ display: 'block', marginTop: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={manualStages.includes(stage)}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? [...manualStages, stage]
+                          : manualStages.filter((item) => item !== stage)
+                        setManualStages(canonicalManualStages(next))
+                        setInputsSaved(false)
+                      }}
+                    /> {STAGE_NAMES[stage]}
+                  </label>
+                ))}
+                <span style={{ display: 'block', marginTop: 4 }}>所选阶段将按流程顺序保存。</span>
+              </div>
+            )}
+            {inputsSaved && (
+              <p className="hint" style={{ marginTop: 6 }}>
+                已保存执行计划：{executionMode === 'auto'
+                  ? '自动执行全部阶段'
+                  : `手动阶段：${canonicalManualStages(manualStages).map((stage) => STAGE_NAMES[stage]).join('、')}`}
+              </p>
+            )}
+          </fieldset>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">

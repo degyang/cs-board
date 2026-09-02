@@ -13,6 +13,14 @@ export type StageKey =
   | 'render-visuals'
   | 'compose-video'
 
+export type ExecutionMode = 'auto' | 'selective'
+
+/** Persisted execution decision. `manual_stages` is always canonical stage order. */
+export interface ExecutionPlan {
+  mode: ExecutionMode
+  manual_stages: StageKey[]
+}
+
 export const STAGE_KEYS: StageKey[] = [
   'generate-visual-anchors',
   'clone-voice',
@@ -254,6 +262,7 @@ export interface SaveInputsResponse {
   ok: boolean
   task_id: string
   input_saved: boolean
+  execution_plan: ExecutionPlan
 }
 
 export interface VoiceUnitDTO {
@@ -294,6 +303,7 @@ export interface InputsReadback {
   rules: InputsRules | null
   script_preparation: ScriptPreparation | null
   visual_anchor_enabled: boolean
+  execution_plan: ExecutionPlan
 }
 
 export interface ApiError {
