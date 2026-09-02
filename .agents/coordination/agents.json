@@ -45,6 +45,15 @@
       "model": "gpt-5.6-terra",
       "reasoning_effort": "medium",
       "capabilities": ["dashboard", "runtime-accounting", "ui-contracts"]
+    },
+    "REVIEWER": {
+      "transport": "orchestrator",
+      "thread": "/root/web_intake_reviewer",
+      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
+      "branch": "integration/mountain-v2",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "high",
+      "capabilities": ["independent-review", "gate-reproduction", "verdict"]
     }
   }
 }
