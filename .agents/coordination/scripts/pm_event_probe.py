@@ -42,10 +42,10 @@ def task_delivery(root: Path, task_id: str) -> str:
 ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "WORKING", "TEST_READY", "TESTING", "PM_DECISION", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
 ACTION_ORDER = {
     "recover-stale": 0,
-    "resolve-blocker": 3,
+    "resolve-blocker": 4,
     "record-test-ready": 1,
     "record-test-result": 2,
-    "pm-review": 3,
+    "pm-review": 2,
     "promote-ready": 3,
     "dispatch": 4,
     "retire-agent": 6,
