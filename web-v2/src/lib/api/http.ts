@@ -201,7 +201,7 @@ export function del<T>(path: string): Promise<T> {
 }
 
 /**
- * POST multipart/form-data — browser auto-sets Content-Type with boundary.
+ * POST multipart/form-data — browser sets Content-Type with boundary.
  * Never set Content-Type manually.
  */
 export function postForm<T>(path: string, form: FormData): Promise<T> {

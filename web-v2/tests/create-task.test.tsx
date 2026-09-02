@@ -1,436 +1,81 @@
-/**
- * CCF-CREATE-TASK-13 (§3Q) — CreateTaskPage behavior suite
- *
- * Strategy: stub global.fetch (NOT the client module). The component uses the
- * REAL createTask / uploadInputs from src/lib/api/client, so MountainApiError
- * identity, JSON multipart boundary handling, and the two-step request sequence
- * are all exercised at the real HTTP boundary — not just mock call counts.
- *
- * This file is gate-scanned for forbidden browser-storage / audio-read /
- * secondary-engine / gated-execution patterns; none are used here.
- */
+/** CCF-TASK-CREATE-SIX-TAB-18 — explicit test fixtures for the real API boundary. */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { CreateTaskPage } from '../src/pages/CreateTaskPage'
 
-// ── fetch helpers (match web-v2/tests/http-contract.test.ts) ─────────────
-
-function jsonResponse(body: unknown, status = 200) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: () => Promise.resolve(body),
-    headers: new Headers({ 'content-type': 'application/json' }),
-  }
+const OPTIONS = {
+  engines: [{ id: 'whiteboard', label: '白板动画', available: true }, { id: 'infographic', label: '动态信息图', available: false, reason: 'CAPABILITY_NOT_AVAILABLE' }],
+  visual_sources: [{ id: 'preset', label: '预设风格', available: true }, { id: 'custom-reference', label: '自定义参考', available: false, reason: 'CAPABILITY_NOT_AVAILABLE' }],
+  voice_sources: [{ id: 'voice-asset', label: '真实音色资产', available: true }, { id: 'uploaded-reference', label: '上传参考音频', available: true }],
+  limits: { script_min_chars: 10, target_chars_min: 1, target_chars_max: 500, brand_text_max_chars: 12 },
+  defaults: { engine: 'whiteboard', visual_source: 'preset', target_chars: 80, shots_per_image: 2, line_density: 'rich', visual_anchor_enabled: true, include_subtitles: true },
 }
-
-const CREATE_OK = {
-  ok: true,
-  command: 'task.create',
-  task_id: 't/special', // contains '/' → verifies encodeURIComponent navigation
-  run_id: 'r1',
-  trace_id: 'tr-1',
-  command_id: 'c-1',
-  event_sequence: 1,
-}
-const SAVE_OK = { ok: true, task_id: 't/special', input_saved: true }
-
-function defaultFetch(url: string) {
-  const u = String(url)
-  if (u.endsWith('/inputs')) return jsonResponse(SAVE_OK)
-  if (u.endsWith('/tasks')) return jsonResponse(CREATE_OK)
-  return jsonResponse({ detail: { code: 'NOT_FOUND', message: 'not found' } }, 404)
-}
-
+const VOICES = { items: [{ voice_id: 'voice-real', name: '真实女声', description: '测试音色', tags: ['中文'], duration_ms: 3200, sample_rate: 48000, channels: 1, format: 'wav', enabled: true, status: 'active', content_url: null, created_at: '', updated_at: '' }, { voice_id: 'voice-disabled', name: '已停用音色', description: '', tags: [], duration_ms: 1000, sample_rate: 48000, channels: 1, format: 'wav', enabled: false, status: 'inactive', content_url: null, created_at: '', updated_at: '' }], next_cursor: null, total: 2 }
+const STYLES = { items: [{ style_id: 'style-real', kind: 'preset', name: '真实水彩', description: '测试风格', engine: 'whiteboard', status: 'active', revision: 1, tags: ['水彩'], prompt_text: null, negative_prompt: null, preview_asset_id: 'preview-1', config: {}, created_at: '', updated_at: '' }, { style_id: 'style-disabled', kind: 'preset', name: '停用风格', description: '', engine: 'whiteboard', status: 'inactive', revision: 1, tags: [], prompt_text: null, negative_prompt: null, preview_asset_id: null, config: {}, created_at: '', updated_at: '' }], next_cursor: null, total: 2 }
+const CREATED = { ok: true, command: 'task.create', task_id: 'task-new', run_id: 'run-new', trace_id: 'trace-new', command_id: 'cmd-new', event_sequence: 1 }
+const SAVED = { ok: true, task_id: 'task-new', input_saved: true, execution_plan: { mode: 'legacy' } }
 const fetchMock = vi.fn()
 
-beforeEach(() => {
-  fetchMock.mockReset()
-  fetchMock.mockImplementation(defaultFetch)
-  vi.stubGlobal('fetch', fetchMock)
-})
-afterEach(() => {
-  vi.unstubAllGlobals()
-  vi.restoreAllMocks()
-})
-
-function renderPage() {
-  return render(
-    <MemoryRouter initialEntries={['/tasks/new']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Routes>
-        <Route path="/tasks/new" element={<CreateTaskPage />} />
-        <Route path="/tasks/:id" element={<div>task-detail</div>} />
-        <Route path="/" element={<div>task-list</div>} />
-      </Routes>
-    </MemoryRouter>,
-  )
+function json(body: unknown, status = 200) { return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body), headers: new Headers({ 'content-type': 'application/json' }) } }
+function defaultFetch(url: string) {
+  const value = String(url)
+  if (value.endsWith('/tasks/create-options')) return json(OPTIONS)
+  if (value.includes('/assets/voices')) return json(VOICES)
+  if (value.includes('/assets/styles')) return json(STYLES)
+  if (value.endsWith('/inputs')) return json(SAVED)
+  if (value.endsWith('/tasks')) return json(CREATED)
+  return json({ error: { code: 'NOT_FOUND', message: '未找到' } }, 404)
 }
+beforeEach(() => { fetchMock.mockReset(); fetchMock.mockImplementation(defaultFetch); vi.stubGlobal('fetch', fetchMock) })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+function renderPage() { return render(<MemoryRouter initialEntries={['/tasks/new']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Routes><Route path="/tasks/new" element={<CreateTaskPage />} /><Route path="/tasks/:id" element={<div>任务工作台</div>} /><Route path="/" element={<div>任务队列</div>} /></Routes></MemoryRouter>) }
+function next() { fireEvent.click(screen.getByRole('button', { name: '下一步' })) }
+function goFinal() { for (let i = 0; i < 4; i += 1) next() }
+function createCalls() { return fetchMock.mock.calls.filter((call) => String(call[0]).endsWith('/tasks')) }
+function inputCalls() { return fetchMock.mock.calls.filter((call) => String(call[0]).endsWith('/inputs')) }
+async function ready() { await waitFor(() => expect(screen.getByRole('tab', { name: '任务介绍' })).toBeInTheDocument()) }
+function fillIntroAndScript() { fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '测试任务' } }); fireEvent.change(screen.getByLabelText('任务摘要'), { target: { value: '用于自动化验收的摘要' } }); next(); fireEvent.change(screen.getByLabelText('原始文案'), { target: { value: '第一句完整内容。第二句完整内容！第三句完整内容？' } }) }
 
-const SCRIPT = '这是一段不少于十字的量子计算科普文案内容。'
-
-function fillValid() {
-  fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
-  fireEvent.change(screen.getByLabelText('文案'), { target: { value: SCRIPT } })
-}
-
-const createCalls = () => fetchMock.mock.calls.filter(c => String(c[0]).endsWith('/tasks'))
-const uploadCalls = () => fetchMock.mock.calls.filter(c => String(c[0]).endsWith('/inputs'))
-
-// ───────────────────────────────────────────────────────────────────────────
-// Form rendering
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('CreateTaskPage — form rendering', () => {
-  it('renders all core input fields with whiteboard engine fixed (no infographic)', () => {
-    renderPage()
-    expect(screen.getByRole('heading', { name: '新建任务' })).toBeInTheDocument()
-    expect(screen.getByLabelText('任务名称')).toBeInTheDocument()
-    expect(screen.getByLabelText('文案')).toBeInTheDocument()
-    expect(screen.getByLabelText('最小')).toBeInTheDocument()
-    expect(screen.getByLabelText('目标')).toBeInTheDocument()
-    expect(screen.getByLabelText('最大')).toBeInTheDocument()
-    expect(screen.getByLabelText('参考音频（可选）')).toBeInTheDocument()
-    // engine is fixed to whiteboard (shown via the dedicated hint)
-    expect(screen.getByText('引擎：白板动画（固定）')).toBeInTheDocument()
-    // forbidden features MUST NOT appear
-    expect(screen.queryByText(/动态信息图/)).toBeNull()
-    expect(screen.queryByText(/manual|gated/i)).toBeNull()
+describe('CreateTaskPage six-tab preview-first flow', () => {
+  it('shows tabs in the contract order and preserves fields across navigation', async () => {
+    renderPage(); await ready()
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual(['任务介绍', '视频文案0', '声音生成', '输出类型', '视觉设置', '成片设置'])
+    fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '跨 Tab 状态' } }); next(); fireEvent.change(screen.getByLabelText('原始文案'), { target: { value: '保留这段跨 Tab 的测试文案。' } }); fireEvent.click(screen.getByRole('tab', { name: '任务介绍' })); expect(screen.getByLabelText('任务名称')).toHaveValue('跨 Tab 状态'); next(); expect(screen.getByLabelText('原始文案')).toHaveValue('保留这段跨 Tab 的测试文案。')
   })
-
-  it('cancel navigates to task list', () => {
-    renderPage()
-    fireEvent.click(screen.getByRole('link', { name: '取消' }))
-    expect(screen.getByText('task-list')).toBeInTheDocument()
+  it('renders complete-sentence preview and live character count', async () => {
+    renderPage(); await ready(); next(); const script = screen.getByLabelText('原始文案'); fireEvent.change(script, { target: { value: '甲句。乙句！丙句？' } }); fireEvent.change(screen.getByLabelText('目标分段长度'), { target: { value: '3' } }); expect((document.querySelector('textarea.preview') as HTMLTextAreaElement).value).toBe('甲句。\n\n乙句！\n\n丙句？'); expect(screen.getByText('实时字数：').parentElement).toHaveTextContent('9'); expect(screen.getByText(/提交前预览/)).toBeInTheDocument()
+  })
+  it('loads real voice/style assets with preview URLs and visible disabled state', async () => {
+    renderPage(); await ready(); fireEvent.click(screen.getByRole('tab', { name: '声音生成' })); await waitFor(() => expect(screen.getByText('真实女声')).toBeInTheDocument()); expect(screen.getByText('已停用音色（不可用）')).toBeInTheDocument(); expect(document.querySelector('audio')).toHaveAttribute('src', expect.stringContaining('/assets/voices/voice-real/content')); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); await waitFor(() => expect(screen.getByText('真实水彩')).toBeInTheDocument()); expect(screen.getByText('停用风格（不可用）')).toBeInTheDocument(); expect(screen.getByAltText('真实水彩 预览')).toHaveAttribute('src', expect.stringContaining('/assets/blobs/preview-1'))
+  })
+  it('keeps unavailable engine/source visible and disabled with server reason', async () => {
+    renderPage(); await ready(); fireEvent.click(screen.getByRole('tab', { name: '输出类型' })); expect(screen.getByRole('button', { name: /动态信息图/ })).toBeDisabled(); expect(screen.getByText(/CAPABILITY_NOT_AVAILABLE/)).toBeInTheDocument(); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); expect(screen.getByRole('button', { name: /自定义参考/ })).toBeDisabled()
+  })
+  it('shows a real options error and keeps preview navigation available', async () => {
+    fetchMock.mockImplementation((url) => String(url).endsWith('/tasks/create-options') ? json({ error: { code: 'OPTIONS_UNAVAILABLE', message: '选项接口待联调' } }, 503) : defaultFetch(url))
+    renderPage(); await waitFor(() => expect(screen.getByText(/选项接口待联调/)).toBeInTheDocument()); next(); expect(screen.getByLabelText('原始文案')).toBeInTheDocument(); goFinal(); expect(screen.getByRole('button', { name: '创建并保存 Task' })).toBeDisabled()
+  })
+  it('renders the final summary from all six-tab selections', async () => {
+    renderPage(); await ready(); fillIntroAndScript(); next(); await waitFor(() => expect(screen.getByText('真实女声')).toBeInTheDocument()); next(); next(); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); await waitFor(() => expect(screen.getByText('真实水彩')).toBeInTheDocument()); next(); expect(screen.getByText('最终汇总')).toBeInTheDocument(); expect(screen.getByText(/测试任务/)).toBeInTheDocument(); expect(screen.getByText(/真实水彩/)).toBeInTheDocument()
   })
 })
 
-// ───────────────────────────────────────────────────────────────────────────
-// Validation (no request sent on invalid input)
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('CreateTaskPage — validation blocks the request', () => {
-  it('empty title → field error, no request', async () => {
-    renderPage()
-    fireEvent.change(screen.getByLabelText('文案'), { target: { value: SCRIPT } })
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('请输入任务名称')).toBeInTheDocument())
-    expect(fetchMock).not.toHaveBeenCalled()
+describe('CreateTaskPage real submission contract', () => {
+  it('sends one create JSON then one multipart input payload and never starts a run', async () => {
+    renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(screen.getByText('任务工作台')).toBeInTheDocument()); expect(createCalls()).toHaveLength(1); expect(inputCalls()).toHaveLength(1)
+    const createOptions = createCalls()[0][1]; expect(JSON.parse(createOptions.body)).toMatchObject({ title: '测试任务', summary: '用于自动化验收的摘要', engine: 'whiteboard', pipeline_id: 'mountain-av-v1' }); expect(JSON.parse(createOptions.body).submission_id).toEqual(expect.any(String)); const inputOptions = inputCalls()[0][1]; expect(inputOptions.method).toBe('POST'); expect(inputOptions.body).toBeInstanceOf(FormData); const body = inputOptions.body as FormData; expect(body.get('script')).toContain('第一句'); expect(body.get('target_chars')).toBe('80'); expect(body.get('voice_source')).toBe('voice-asset'); expect(body.get('voice_asset_id')).toBe('voice-real'); expect(body.get('visual_source')).toBe('preset'); expect(body.get('style_asset_id')).toBe('style-real'); expect(body.get('shots_per_image')).toBe('2'); expect(body.get('line_density')).toBe('rich'); expect(body.get('visual_anchor_enabled')).toBe('true'); expect(body.get('include_subtitles')).toBe('true'); expect(fetchMock.mock.calls.some((call) => String(call[0]).includes('/start'))).toBe(false)
   })
-
-  it('empty script → field error, no request', async () => {
-    renderPage()
-    fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '量子计算科普' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('请输入文案')).toBeInTheDocument())
-    expect(fetchMock).not.toHaveBeenCalled()
+  it('double submit creates only one Task', async () => {
+    let resolveCreate!: (value: unknown) => void; fetchMock.mockImplementation((url) => String(url).endsWith('/tasks') ? new Promise((resolve) => { resolveCreate = resolve }) : defaultFetch(url)); renderPage(); await ready(); fillIntroAndScript(); goFinal(); const form = screen.getByRole('button', { name: '创建并保存 Task' }).closest('form')!; fireEvent.submit(form); fireEvent.submit(form); expect(createCalls()).toHaveLength(1); await act(async () => resolveCreate(json(CREATED))); await waitFor(() => expect(inputCalls()).toHaveLength(1)); expect(createCalls()).toHaveLength(1)
   })
-
-  it('non-integer char field → field error, no request', async () => {
-    renderPage()
-    fillValid()
-    fireEvent.change(screen.getByLabelText('目标'), { target: { value: '1.5' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('字数必须为整数')).toBeInTheDocument())
-    expect(fetchMock).not.toHaveBeenCalled()
+  it('create failure keeps all entered fields and sends no input request', async () => {
+    fetchMock.mockImplementation((url) => String(url).endsWith('/tasks') ? json({ error: { code: 'CREATE_FAILED', message: '创建失败（测试）' } }, 400) : defaultFetch(url)); renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(screen.getByText(/创建失败（测试）/)).toBeInTheDocument()); expect(inputCalls()).toHaveLength(0); fireEvent.click(screen.getByRole('tab', { name: '任务介绍' })); expect(screen.getByLabelText('任务名称')).toHaveValue('测试任务')
   })
-
-  it('char out of bounds (max>500) → field error, no request', async () => {
-    renderPage()
-    fillValid()
-    fireEvent.change(screen.getByLabelText('最大'), { target: { value: '9999' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText(/字数范围超出合理界限/)).toBeInTheDocument())
-    expect(fetchMock).not.toHaveBeenCalled()
+  it('input failure exposes task/run and retry only calls input save', async () => {
+    let attempts = 0; fetchMock.mockImplementation((url) => { if (String(url).endsWith('/inputs')) { attempts += 1; return attempts === 1 ? json({ error: { code: 'INPUT_FAILED', message: '输入保存失败（测试）' } }, 400) : json(SAVED) }; return defaultFetch(url) }); renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(screen.getByText(/输入保存失败（测试）/)).toBeInTheDocument()); expect(screen.getByText(/task_id：task-new · run_id：run-new/)).toBeInTheDocument(); expect(createCalls()).toHaveLength(1); fireEvent.click(screen.getByRole('button', { name: '重试保存输入' })); await waitFor(() => expect(screen.getByText('任务工作台')).toBeInTheDocument()); expect(createCalls()).toHaveLength(1); expect(inputCalls()).toHaveLength(2)
   })
-
-  it('inverted rule (min>target) → field error, no request', async () => {
-    renderPage()
-    fillValid()
-    fireEvent.change(screen.getByLabelText('最小'), { target: { value: '100' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText(/需满足 1 ≤ 最小 ≤ 目标 ≤ 最大 ≤ 500/)).toBeInTheDocument())
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-})
-
-// ───────────────────────────────────────────────────────────────────────────
-// Two-step save: create (JSON) then upload (FormData) at the real HTTP boundary
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('CreateTaskPage — two-step save (create → upload)', () => {
-  it('POST /tasks JSON then POST /inputs FormData, navigates to encoded task id', async () => {
-    renderPage()
-    fillValid()
-    const file = new File(['audio-bytes'], 'ref.wav', { type: 'audio/wav' })
-    fireEvent.change(screen.getByLabelText('参考音频（可选）'), { target: { files: [file] } })
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('task-detail')).toBeInTheDocument())
-
-    // exactly two HTTP calls
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-
-    // 1) create: POST /tasks, JSON body, Content-Type application/json
-    const [createUrl, createOpts] = fetchMock.mock.calls[0]
-    expect(String(createUrl)).toContain('/api/v1/tasks')
-    expect(String(createUrl)).not.toContain('/inputs')
-    expect(createOpts.method).toBe('POST')
-    expect(createOpts.headers['Content-Type']).toBe('application/json')
-    expect(JSON.parse(createOpts.body)).toEqual({
-      title: '量子计算科普',
-      engine: 'whiteboard',
-      pipeline_id: 'mountain-av-v1',
-    })
-
-    // 2) upload: POST /tasks/{encodedId}/inputs, FormData body, NO manual Content-Type
-    const [uploadUrl, uploadOpts] = fetchMock.mock.calls[1]
-    expect(String(uploadUrl)).toContain('/api/v1/tasks/t%2Fspecial/inputs')
-    expect(uploadOpts.method).toBe('POST')
-    expect(uploadOpts.body).toBeInstanceOf(FormData)
-    // browser must set multipart Content-Type itself — client must not set it
-    expect(uploadOpts.headers).toBeUndefined()
-
-    const form = uploadOpts.body as FormData
-    expect(form.get('script')).toBe(SCRIPT)
-    expect(form.get('target_chars')).toBe('80')
-    expect(form.get('min_chars')).toBe('35')
-    expect(form.get('max_chars')).toBe('140')
-    expect(form.get('visual_anchor_enabled')).toBe('true')
-    expect(form.get('include_subtitles')).toBe('true')
-    expect(form.get('style')).toBe('极简粗线简笔白板风')
-    expect(form.get('stroke_detail')).toBe('detailed')
-    expect(form.get('pen_text')).toBe('')
-    expect(form.get('reference')).toBe(file)
-  })
-
-  it('without reference audio: FormData has no reference key', async () => {
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('task-detail')).toBeInTheDocument())
-    const form = fetchMock.mock.calls[1][1].body as FormData
-    expect(form.get('reference')).toBeNull()
-    expect(form.get('script')).toBe(SCRIPT)
-  })
-
-  it('create failure → no upload, safe error shown, no navigation', async () => {
-    fetchMock.mockImplementation(url =>
-      String(url).endsWith('/tasks')
-        ? jsonResponse({ detail: { code: 'VALIDATION', message: '任务名称不能为空' } }, 400)
-        : jsonResponse(SAVE_OK),
-    )
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('任务名称不能为空')).toBeInTheDocument())
-    expect(screen.getByText('代码：VALIDATION')).toBeInTheDocument()
-    // no upload attempted
-    expect(uploadCalls()).toHaveLength(0)
-    expect(createCalls()).toHaveLength(1)
-    expect(screen.queryByText('task-detail')).toBeNull()
-    // form still editable (title input not disabled) — createdTask is null
-    expect(screen.getByLabelText('任务名称')).not.toBeDisabled()
-  })
-})
-
-// ───────────────────────────────────────────────────────────────────────────
-// Partial failure: keep task_id/run_id, retry only re-uploads, enter workbench
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('CreateTaskPage — partial failure & retry', () => {
-  function uploadFailsFirst() {
-    fetchMock.mockImplementation(url => {
-      if (String(url).endsWith('/inputs')) {
-        return jsonResponse({ detail: { code: 'UPLOAD_FAILED', message: '保存输入失败' } }, 400)
-      }
-      return jsonResponse(CREATE_OK)
-    })
-  }
-
-  it('create ok + upload fail → keeps task, no navigation, no re-create, shows retry + workbench', async () => {
-    uploadFailsFirst()
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('任务已创建、输入保存失败')).toBeInTheDocument())
-    // safe message + code from MountainApiError
-    expect(screen.getByText('保存输入失败')).toBeInTheDocument()
-    expect(screen.getByText('代码：UPLOAD_FAILED')).toBeInTheDocument()
-    // Task was created exactly once (no duplicate create)
-    expect(createCalls()).toHaveLength(1)
-    // upload was attempted once
-    expect(uploadCalls()).toHaveLength(1)
-    // no navigation to workbench
-    expect(screen.queryByText('task-detail')).toBeNull()
-    // retry + enter-workbench actions present
-    expect(screen.getByRole('button', { name: '重试保存输入' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '进入任务工作台' })).toBeInTheDocument()
-    // the original "创建任务" submit button is gone (cannot re-create)
-    expect(screen.queryByRole('button', { name: '创建任务' })).toBeNull()
-  })
-
-  it('retry → re-calls only upload (not create), success → navigate to encoded id', async () => {
-    let inputsCount = 0
-    fetchMock.mockImplementation(url => {
-      if (String(url).endsWith('/inputs')) {
-        inputsCount++
-        return inputsCount === 1
-          ? jsonResponse({ detail: { code: 'UPLOAD_FAILED', message: '保存输入失败' } }, 400)
-          : jsonResponse(SAVE_OK) // retry succeeds
-      }
-      return jsonResponse(CREATE_OK)
-    })
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('任务已创建、输入保存失败')).toBeInTheDocument())
-    // initial state: 1 create + 1 upload
-    expect(createCalls()).toHaveLength(1)
-    expect(uploadCalls()).toHaveLength(1)
-
-    // act: retry
-    fireEvent.click(screen.getByRole('button', { name: '重试保存输入' }))
-
-    await waitFor(() => expect(screen.getByText('task-detail')).toBeInTheDocument())
-    // create NOT re-called; upload called a 2nd time
-    expect(createCalls()).toHaveLength(1)
-    expect(uploadCalls()).toHaveLength(2)
-  })
-
-  it('enter workbench from partial failure → navigate to encoded task id', async () => {
-    uploadFailsFirst()
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('任务已创建、输入保存失败')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: '进入任务工作台' }))
-
-    await waitFor(() => expect(screen.getByText('task-detail')).toBeInTheDocument())
-    // no extra create or upload from entering workbench
-    expect(createCalls()).toHaveLength(1)
-    expect(uploadCalls()).toHaveLength(1)
-  })
-})
-
-// ───────────────────────────────────────────────────────────────────────────
-// Concurrency & unmount safety
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('CreateTaskPage — concurrency & unmount safety', () => {
-  it('shows loading state (创建中…)', async () => {
-    fetchMock.mockImplementation(url =>
-      String(url).endsWith('/tasks') ? new Promise(() => {}) : jsonResponse(SAVE_OK),
-    )
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '创建中…' })).toBeDisabled())
-    // create was called once, upload not yet
-    expect(createCalls()).toHaveLength(1)
-    expect(uploadCalls()).toHaveLength(0)
-  })
-
-  it('double submit → single create (no duplicate Task)', async () => {
-    fetchMock.mockImplementation(url =>
-      String(url).endsWith('/tasks') ? new Promise(() => {}) : jsonResponse(SAVE_OK),
-    )
-    const { container } = renderPage()
-    fillValid()
-    const formEl = container.querySelector('form')!
-    fireEvent.submit(formEl)
-    fireEvent.submit(formEl) // 2nd synchronous submit
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '创建中…' })).toBeInTheDocument())
-    expect(createCalls()).toHaveLength(1)
-  })
-
-  it('unmount during upload → no state update, no navigation, 0 warnings', async () => {
-    let uploadResolve!: (v: ReturnType<typeof jsonResponse>) => void
-    fetchMock.mockImplementation(url => {
-      if (String(url).endsWith('/inputs')) {
-        return new Promise(r => { uploadResolve = r })
-      }
-      return jsonResponse(CREATE_OK)
-    })
-    // call-through spy: must NOT suppress — proves no warning is emitted
-    const spy = vi.spyOn(console, 'error')
-
-    const { unmount } = renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    // wait until create resolved + upload fetch is in flight
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-    // task was created → component now awaiting upload
-    unmount()
-
-    // resolve the pending upload AFTER unmount; component must not setState/navigate
-    await act(async () => {
-      uploadResolve(jsonResponse(SAVE_OK))
-    })
-
-    const warnings = spy.mock.calls
-      .map(args => String(args[0]))
-      .filter(s => /unmounted|can't perform a react state update|not wrapped in act/i.test(s))
-    expect(warnings).toHaveLength(0)
-    spy.mockRestore()
-  })
-})
-
-// ───────────────────────────────────────────────────────────────────────────
-// Error security: only safe message/code rendered; never path/token/secret/traceback/reference
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('CreateTaskPage — error security', () => {
-  it('renders only safe message/code; never sensitive detail fields', async () => {
-    fetchMock.mockImplementation(url => {
-      if (String(url).endsWith('/inputs')) {
-        return jsonResponse(
-          {
-            detail: {
-              code: 'SENSITIVE',
-              message: '安全错误信息',
-              details: {
-                path: '/etc/secret/key',
-                command: 'rm -rf /',
-                token: 'sk-live-secret-token',
-                secret: 'topsecret-value',
-                traceback: 'Traceback (most recent call last)',
-                reference: 'audio-bytes-content',
-              },
-            },
-          },
-          400,
-        )
-      }
-      return jsonResponse(CREATE_OK)
-    })
-    renderPage()
-    fillValid()
-    fireEvent.click(screen.getByRole('button', { name: '创建任务' }))
-
-    await waitFor(() => expect(screen.getByText('任务已创建、输入保存失败')).toBeInTheDocument())
-    // safe fields ARE shown
-    expect(screen.getByText('安全错误信息')).toBeInTheDocument()
-    expect(screen.getByText('代码：SENSITIVE')).toBeInTheDocument()
-    // sensitive detail fields are NEVER rendered
-    expect(screen.queryByText('/etc/secret/key')).toBeNull()
-    expect(screen.queryByText('rm -rf /')).toBeNull()
-    expect(screen.queryByText('sk-live-secret-token')).toBeNull()
-    expect(screen.queryByText('topsecret-value')).toBeNull()
-    expect(screen.queryByText('Traceback (most recent call last)')).toBeNull()
-    expect(screen.queryByText('audio-bytes-content')).toBeNull()
+  it('unmount during pending save produces no warning or navigation', async () => {
+    let resolveSave!: (value: unknown) => void; fetchMock.mockImplementation((url) => String(url).endsWith('/inputs') ? new Promise((resolve) => { resolveSave = resolve }) : defaultFetch(url)); const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); const view = renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(inputCalls()).toHaveLength(1)); view.unmount(); await act(async () => resolveSave(json(SAVED))); expect(errorSpy).not.toHaveBeenCalled(); errorSpy.mockRestore()
   })
 })
