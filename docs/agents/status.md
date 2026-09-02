@@ -71,6 +71,9 @@
 - WEB 的 golden blocker 不再无人认领：新增独立 P0 `PROTOTYPE-GOLDEN-005`，只恢复已跟踪原型的构建
   外壳并冻结五组 golden/hash manifest，禁止修改 `web-v2` 或原型视觉；独立审核通过后 CEO 才解除并
   重派 `WEB-PARITY-004` attempt 2。
+- Agent 默认按适中能力派工；同一任务连续三次返工仍未解决，CEO 才可提出升级申请。任何 `gpt-5.6-sol`
+  的 high/xhigh/max/ultra 使用必须先获用户针对该任务的明确审批。PROTOTYPE 已停止未审批高配会话，改用
+  `gpt-5.6-terra + medium` 执行，停止前均无文件变更。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - `MEDIA-PREFLIGHT-004` 的 idle runtime 对应已完成而非遗失执行：实现 `d9f3a41` 与报告交付 `8532302`

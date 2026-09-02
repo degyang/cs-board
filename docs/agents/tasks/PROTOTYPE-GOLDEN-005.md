@@ -61,5 +61,8 @@ git diff --check 0f56e82...HEAD
 
 - Attempt: 1（初次）
 - Coordination decision: `8fbed11`
-- Worker: `/root/prototype_golden_worker`
+- Worker: `/root/prototype_golden_worker_medium`
 - State: `DISPATCHED`
+
+先前误启动的 `sol + ultra` 与随后仍偏高的 `terra + high` 会话均已在产生文件变更前终止；正式执行使用
+`gpt-5.6-terra + medium`。未经用户审批不得升级；连续三次返工仍未解决时，CEO 才可提出升级申请。
