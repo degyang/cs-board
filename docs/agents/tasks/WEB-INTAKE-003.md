@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: IN_PROGRESS
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -107,3 +107,11 @@ WEB 已引入 capability delivery 并重跑真实浏览器门禁，但 `GET /api
 WEB 工作树当前固定在 `0b99b50`；只引入其直接子提交 `6699d20`，随后沿用现有 intake 自动化重跑
 真实 API、Vite 与 Playwright 门禁，补齐三张截图、安全 manifest 和报告。WEB 已恢复为注册表中的真实
 Codex CLI 会话。本任务关闭前不得领取或实现 `WEB-WO-003`。
+
+## Review handoff
+
+- Delivery: `672f820`
+- Report: `docs/agents/reports/WEB-INTAKE-003.md`
+- State: `REVIEW_READY`
+
+Worker 已提交并推送真实浏览器报告、三张截图与 manifest；等待独立 Reviewer，不代表 CEO 批准。

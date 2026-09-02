@@ -1,7 +1,7 @@
 # DASH-STATS-003：原团队看板统计横栏与动态成员证明
 
 - Owner: DASH
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P1
 - Depends on: `PM-AUTO-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/POS-agent-coordination/00-System/Skills/skills-pos-magents/pos-magents/scripts/team-dashboard`
@@ -57,3 +57,10 @@ curl -fsS http://127.0.0.1:4317/api/team
 
 提交原 Dashboard 分支并返回 commit；重启原 4317 server，验证 API stats、动态成员列表和页面资源。不得
 创建第二套页面或服务，不得改 cs-board 产品 UI。
+
+## Review handoff
+
+- Delivery: `45a3fba`
+- State: `REVIEW_READY`
+
+Worker 已提交 Dashboard 实现并把 runtime 转为 review；等待独立 Reviewer，不代表 CEO 批准。
