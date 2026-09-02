@@ -18,7 +18,7 @@
 | `CEO-RECOVERY-002` | PM | SUPERSEDED | `docs/agents/tasks/CEO-RECOVERY-002.md` | `38a98f8` | archived; replaced by independent CEO timer and separate PM |
 | `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `CORE-RUNTIME-007` | WORKER_CORE | PM_DECISION | `docs/agents/tasks/CORE-RUNTIME-007.md` | `09009f103439d5d17e44fc6d30ebc1dfb1b1ec8e` | Tester pending |
+| `CORE-RUNTIME-007` | WORKER_CORE | BLOCKED | `docs/agents/tasks/CORE-RUNTIME-007.md` | `09009f103439d5d17e44fc6d30ebc1dfb1b1ec8e` | no bound Tester report; dispatcher dependency unavailable |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WORKER_WEB | BLOCKED | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | supervised dispatcher unavailable; attempt 2 cannot start until restored |
@@ -195,6 +195,9 @@
 - `CORE-RUNTIME-007` 的 `resolve-blocker` 事件 `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`
   再次作幂等 PM 决定：外部 dispatcher/wrapper 依赖仍未恢复，维持 `BLOCKED`；M1 当前不需要下一任务，未派发
   `WORKER_CORE`，`MEDIA-PREFLIGHT-004` 与 `MEDIA-E2E-003` 继续保持 `BLOCKED`。
+- `CORE-RUNTIME-007` 的 `pm-review` 事件 `96d0dedbc4e7fd105e143c6095ed14bde3ddc38b7627d371c7ab32a9bdf8abc1`：未找到
+  bound Tester report，且任务契约记录的 dispatcher/wrapper 外部依赖未恢复，因此 PM 决定为 `BLOCKED`。M1 当前
+  不需要下一任务；未派发 `WORKER_CORE`，`MEDIA-PREFLIGHT-004` 与 `MEDIA-E2E-003` 继续保持 `BLOCKED`。
 
 ## 队列规则
 

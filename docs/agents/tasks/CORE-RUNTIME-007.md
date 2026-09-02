@@ -1,7 +1,7 @@
 # CORE-RUNTIME-007: full-suite input/start boundary diagnosis
 
 - Owner: WORKER_CORE
-- Status: PM_DECISION
+- Status: BLOCKED
 - Priority: P0
 - Depends on: `CORE-RUNTIME-006=APPROVED`
 - Branch: `feat/mountain-core-runtime`
@@ -24,6 +24,7 @@
   dispatch is authorized while it remains unavailable.
 - PM disposition: `BLOCKED`; no next task is required until the dependency is restored.
 - Latest PM decision for event `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`: `BLOCKED` (idempotent); no dispatch, and M1 requires no next task until the dependency is restored.
+- PM review event `96d0dedbc4e7fd105e143c6095ed14bde3ddc38b7627d371c7ab32a9bdf8abc1`: `BLOCKED`. No bound Tester report exists, and the unchanged unavailable-dispatcher record means no valid Worker handoff or Tester result can support approval. No next task is required until the dependency is restored.
 
 ## Goal
 
