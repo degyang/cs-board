@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: REVIEW_READY
+- Status: APPROVED
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -170,3 +170,8 @@ E2E、截图、manifest、`WEB-PARITY-004` 或 `WEB-WO-003`。Worker 必须提�
 - State: `REVIEW_READY`
 
 Worker 已提交并推送有界 deadline/test/report 纠正；本节只记录交接，不代表 CEO 批准或释放后续 WEB 工作。
+
+## PM final decision
+
+独立评审提交 `9885f57` 已核对 attempt 3 交付 `51656c9`，Verdict 为 `APPROVED`。PM 将本任务置为
+`APPROVED` 并释放依赖队列；本状态决策不构成用户、发布、合并或里程碑审核批准。

@@ -1,12 +1,12 @@
 # WEB-PARITY-004：WebUI 原型逐页对齐审计与修复
 
 - Owner: WEB
-- Status: BACKLOG
+- Status: READY
 - Priority: P0
 - Depends on: `WEB-INTAKE-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
-- Branch: dispatch 时由 PM 固定
-- Base commit: dispatch 时由 PM 固定
+- Branch: `feat/mountain-webui-surface-parity`
+- Base commit: `51656c91bb378d3a62ce5668d9d1c8b861de4847`
 
 ## Goal
 

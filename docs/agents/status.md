@@ -11,13 +11,13 @@
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-INTAKE-003.md` | `51656c9` | attempt 3 handoff verified; review `9885f57` awaits CEO status decision |
+| `WEB-INTAKE-003` | WEB | APPROVED | `docs/agents/tasks/WEB-INTAKE-003.md` | `51656c9` | `docs/agents/reviews/WEB-INTAKE-003.md` |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `WEB-PARITY-004` | WEB | BACKLOG | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0; waits for WEB-INTAKE-003 approval; ahead of WEB-WO-003 |
-| `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
+| `WEB-PARITY-004` | WEB | READY | `docs/agents/tasks/WEB-PARITY-004.md` | pending | P0 dependency satisfied; next WEB task ahead of WEB-WO-003 |
+| `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -52,6 +52,9 @@
   deadline 与 fresh 后端 voice-alignment 的 5 秒 probe 形成边界竞态。attempt 3 已由 `51656c9`
   有界纠正并完成 Worker handoff；本轮仅记为 `REVIEW_READY`，不在 record-review-ready 事件中作 CEO
   批准决定，也不释放 `WEB-PARITY-004`、`WEB-WO-003` 或其他后续 WEB 工作。
+- `WEB-INTAKE-003@51656c9` 的 attempt 3 独立评审提交 `9885f57` 结论为 `APPROVED`；PM 据此将任务
+  置为 `APPROVED`。队列重算后，依赖已满足的 P0 `WEB-PARITY-004` 进入 `READY`，同 Owner 的 P1
+  `WEB-WO-003` 保持 `READY` 但排在其后。本决策不构成用户、发布或合并审核批准。
 
 ## 队列规则
 
