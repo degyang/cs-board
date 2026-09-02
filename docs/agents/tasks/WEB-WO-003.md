@@ -1,7 +1,7 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WORKER_WEB
-- Status: PM_DECISION
+- Status: CHANGES_REQUESTED
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -45,6 +45,11 @@
   `WEB-WO-003` to make the real browser Task flow pass and provide its required browser evidence;
   do not create or dispatch a later task while this owner has this non-terminal work. `MEDIA-E2E-003`
   remains blocked on this approval and `MEDIA-PREFLIGHT-004`.
+- `2026-09-02T18:30:00+08:00` — PM review event
+  `626ba7c1d48c6107aa2aa48ff12e9f14467afc4960f00d5345a5209cd22493a7`: the bound `TESTER_WEB`
+  report is complete and records a failing required browser Task-flow gate with no passing replacement
+  evidence. Decision: `CHANGES_REQUESTED`. The stage requires the already-defined bounded attempt 2,
+  not a new or later task; no dispatch is made while `WORKER_WEB` has this non-terminal work.
 
 ## Attempt 2 dispatch
 
