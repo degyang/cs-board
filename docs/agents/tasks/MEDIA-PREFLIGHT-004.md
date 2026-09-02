@@ -1,7 +1,7 @@
 # MEDIA-PREFLIGHT-004：真实媒体依赖 fail-closed 预检
 
 - Owner: MEDIA
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `MEDIA-SKILLS-003=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-media`
@@ -75,3 +75,13 @@ git diff --check 6fc2924...HEAD
 
 本任务只为 `docs/agents/milestone-m1-manual-skills-closure.md` 的人工闭环做前置验证，不授权自动或
 selective 编排。
+
+## Review handoff
+
+- Implementation: `d9f3a41`
+- Delivery: `8532302`
+- Report: `docs/agents/reports/MEDIA-PREFLIGHT-004.md`
+- State: `REVIEW_READY`
+
+stale recovery 已核验 MEDIA 分支与远端一致、工作树干净且报告已提交；本节只恢复已完成的 Worker
+handoff，不代表 CEO 批准。live readiness 仍为非零环境结果，`MEDIA-E2E-003` 不得派发。

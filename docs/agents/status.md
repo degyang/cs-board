@@ -20,7 +20,7 @@
 | `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `7a74378` | attempt 2: execute five skipped boundaries; zero-skip gate unchanged |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | pending | P0 independent fail-closed readiness gate |
+| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | stale recovery found committed delivery; independent review pending |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -69,6 +69,9 @@
   输入，再派发同一任务的有界纠正。`WEB-WO-003` 继续等待，不得越过该 P0 blocker。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
+- `MEDIA-PREFLIGHT-004` 的 idle runtime 对应已完成而非遗失执行：实现 `d9f3a41` 与报告交付 `8532302`
+  已提交推送，分支干净并与远端一致。CEO 未重复唤醒 MEDIA，只恢复为 `REVIEW_READY`；live readiness
+  仍非全绿，独立审核与环境就绪前不派发 `MEDIA-E2E-003`。
 - `CORE-RUNTIME-006@7a74378` 已修复造成全量挂起的启动边界，pytest 由 180 秒超时恢复为 76.32 秒正常
   exit 0；但仍有 5 个 skip，未满足契约。CEO 已派发 attempt 2：把四个 legacy skip 迁移为当前 `/api/v1`
   等价断言，并修正一个误把类名漂移当成“缺少 httpx”的 conformance 测试；禁止删断言或继续 skip。
