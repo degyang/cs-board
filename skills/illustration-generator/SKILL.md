@@ -13,5 +13,4 @@ description: Produce or inspect Mountain illustration stage results from persist
 
 ```bash
 python -m cli.csboard stage run --task <task-id> --run <run-id> --stage generate-illustrations --json
-python -m cli.csboard stage retry --task <task-id> --run <run-id> --stage generate-illustrations --visual <visual-id> --json
 ```

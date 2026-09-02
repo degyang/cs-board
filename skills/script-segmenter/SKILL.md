@@ -8,7 +8,7 @@ description: Generate visual anchors from the persisted Task preparation for the
 
 从 WebUI 已保存的 `task_id`、`run_id` 和持久化文案整理结果执行 `generate-visual-anchors`。只读取持久化参数、run-root 相对路径、结构化结果、事件和 Artifact；不从聊天或日志猜输入。
 
-输入 Artifact：`planning.av-plan` 的已保存文案整理/锚定设置。输出 Artifact：`planning.av-plan`。不得改写 Voice Unit、范围或顺序；锚定关闭时登记确定性 skipped/default 结果。
+输入：WebUI 已持久化的 `script_preparation`、visual-anchor 开关和文本服务设置。输出 Artifact：`planning.av-plan`。不得改写 Voice Unit、范围或顺序；锚定关闭时登记确定性 skipped/default 结果。
 
 ```bash
 python -m cli.csboard stage run --task <task-id> --run <run-id> --stage generate-visual-anchors --json
