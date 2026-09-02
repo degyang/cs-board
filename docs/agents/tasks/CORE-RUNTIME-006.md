@@ -1,7 +1,7 @@
 # CORE-RUNTIME-006：后端全量门禁、冷启动边界与进程清理
 
 - Owner: CORE
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `CORE-CAP-005=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-core-cap-repair`
@@ -98,3 +98,13 @@ Worker 已提交并推送有界 zero-skip 返工，分支干净且与远端一�
 在同一端口顺序冷启动的真实测试：必须观察两次 child return code、停止后立即 bind 成功和临时目录清理。
 不得增加 sleep、放宽 bind 断言、依赖 timeout/信号退出作为成功，或按模糊进程名清理。完成后重新运行
 原四项 Gates；保留 attempt 2 已通过的 456 passed、0 skipped 和结构化错误边界。
+
+## Attempt 3 review handoff
+
+- Implementation: `706ab2e`
+- Delivery: `de57fab`
+- Report: `docs/agents/reports/CORE-RUNTIME-006.md`
+- State: `REVIEW_READY`
+
+Worker 已提交并推送同端口立即复用的有界 lifecycle 纠正，分支干净且与远端一致；本节只记录独立评审
+交接，不代表 CEO 批准。Reviewer WIP 仍由 `PROTOTYPE-GOLDEN-005` 占用，本任务等待其后审核。
