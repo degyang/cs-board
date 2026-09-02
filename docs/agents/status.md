@@ -21,7 +21,7 @@
 | `CORE-RUNTIME-007` | WORKER_CORE | BLOCKED | `docs/agents/tasks/CORE-RUNTIME-007.md` | pending | supervised dispatcher unavailable; bounded diagnosis for `MEDIA-PREFLIGHT-004` full-suite timeout |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
-| `WEB-WO-003` | WORKER_WEB | DISPATCHED | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | attempt 2 dispatched to fix the real browser Task flow and deliver passing browser evidence |
+| `WEB-WO-003` | WORKER_WEB | TEST_READY | `docs/agents/tasks/WEB-WO-003.md` | `7adc8f5` | attempt 2 dispatched to fix the real browser Task flow and deliver passing browser evidence |
 | `MEDIA-PREFLIGHT-004` | WORKER_MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
 | `MEDIA-E2E-003` | WORKER_MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
