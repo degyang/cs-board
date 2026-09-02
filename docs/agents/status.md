@@ -19,6 +19,7 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `7a74378` | attempt 2: execute five skipped boundaries; zero-skip gate unchanged |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | pending | restores immutable five-page golden; unblocks WEB-PARITY-004 |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | stale recovery found committed delivery; independent review pending |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
@@ -67,6 +68,9 @@
   门禁通过，但缺少五张 golden、hash/来源 manifest 与真实 prototype 访问。Git 中现有 prototype source
   不可构建且冻结截图只覆盖 settings，CEO 将任务置为 `BLOCKED`；先提供不可变、可复现的五页 golden
   输入，再派发同一任务的有界纠正。`WEB-WO-003` 继续等待，不得越过该 P0 blocker。
+- WEB 的 golden blocker 不再无人认领：新增独立 P0 `PROTOTYPE-GOLDEN-005`，只恢复已跟踪原型的构建
+  外壳并冻结五组 golden/hash manifest，禁止修改 `web-v2` 或原型视觉；独立审核通过后 CEO 才解除并
+  重派 `WEB-PARITY-004` attempt 2。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - `MEDIA-PREFLIGHT-004` 的 idle runtime 对应已完成而非遗失执行：实现 `d9f3a41` 与报告交付 `8532302`
