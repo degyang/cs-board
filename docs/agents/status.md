@@ -20,7 +20,7 @@
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
-| `WEB-WO-003` | WORKER_WEB | DISPATCHED | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; WEB-PARITY-004 approved; dispatched on base `9db741f` |
+| `WEB-WO-003` | WORKER_WEB | BLOCKED | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; missing Worker runtime; supervised dispatcher unavailable, recovery blocked |
 | `MEDIA-PREFLIGHT-004` | WORKER_MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
 | `MEDIA-E2E-003` | WORKER_MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
@@ -155,6 +155,10 @@
 - `WEB-WO-003` 的前置 `CORE-WO-003` 与同 Owner P0 `WEB-PARITY-004` 均已批准；PM 固定 base
   `9db741f` 并置为 `DISPATCHED`，交由受监督 Worker dispatcher 异步执行。该任务直接服务 M1 的
   人工可读 Work Order 面，完成后仍需 Tester 证据与 PM 决策；暂不生成后续任务。
+- `WEB-WO-003` 收到 `recover-stale(runtime_missing)` 时仍为 `DISPATCHED`，且没有 Worker handoff
+  或报告。PM 已确认当前 checkout 与命令路径均无法取得 `dispatch_cli_agent.sh`，因此不能合规唤醒
+  受监督 Worker；任务改为 `BLOCKED`，等待恢复该 dispatcher。未创建 orchestrator Worker、未手写
+  runtime，也未派发后续任务。
 
 ## 队列规则
 

@@ -1,7 +1,7 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WORKER_WEB
-- Status: DISPATCHED
+- Status: BLOCKED
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -22,3 +22,11 @@
 
 `CORE-WO-003` 已批准，代码依赖满足。WEB 当前仍被 `WEB-INTAKE-003 → CORE-CAP-004` 占用，
 不得重叠派发；待 intake 关闭后由 PM 固定 API commit/DTO、页面范围、截图场景与门禁。
+
+## Recovery record
+
+- `2026-09-02T18:30:00+08:00` — `recover-stale` received for a missing `WORKER_WEB`
+  runtime while this task remained `DISPATCHED`. No Worker delivery/report exists. The required
+  `dispatch_cli_agent.sh` supervised dispatcher is unavailable from this checkout and the command
+  path, so no compliant asynchronous recovery can be invoked. Blocked pending restoration of that
+  dispatcher; do not create an orchestrator Worker or write a runtime record manually.
