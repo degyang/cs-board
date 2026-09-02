@@ -3,6 +3,7 @@
 - Contract: `docs/agents/tasks/WEB-WO-003.md`
 - Coordination commit: `93b493836e897a14f0a13dd6848dfc4906086a85`
 - Base: `9db741fb5b230603b1cf340bc3e75b31bee31c4d`
+- Delivery commit: `67e5397546746b49460c7ad902a60e86609a3d1d`
 - Attempt 2 scope: repair and verify the real browser Task creation flow; no product-code change was required.
 - Branch: `feat/mountain-webui-surface-parity`
 
