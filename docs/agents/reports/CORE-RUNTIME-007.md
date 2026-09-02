@@ -51,3 +51,13 @@ untouched.
 be resumed from this report: CORE-RUNTIME-007's contract still lacks a
 no-skips full-suite result and a passing required diff gate.  This report does
 not approve, dispatch, or alter MEDIA task status.
+
+The required delivery notification was attempted with the registered PM thread:
+
+```text
+codex queue --thread systemd:cs-board-pm.service --message \
+  'docs/agents/tasks/CORE-RUNTIME-007.md d3becf10410bfcae18b51316a8c4752d26a3b4c6'
+Error: No active session found matching 'systemd:cs-board-pm.service'.
+```
+
+No substitute channel was used.
