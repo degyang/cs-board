@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage-work-order.schema.json",
+  "type": "object",
+  "required": ["schema_version", "work_order_id", "identity", "revision", "input_fingerprint", "status", "scope", "input_artifacts", "parameters_path", "instructions_path", "output_directory", "expected_outputs", "commands", "next_action"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "work_order_id": {"type": "string", "pattern": "^wo-"},
+    "revision": {"type": "integer", "minimum": 1},
+    "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"enum": ["ready", "waiting-manual-trigger", "running", "waiting-external-output", "validating", "waiting-acceptance", "succeeded", "failed", "stale"]},
+    "identity": {"type": "object", "required": ["task_id", "run_id", "stage", "skill", "pipeline_id", "engine"]},
+    "scope": {"type": "object", "properties": {"kind": {"const": "stage"}}, "required": ["kind"]},
+    "input_artifacts": {"type": "array"},
+    "parameters_path": {"type": "string"}, "instructions_path": {"type": "string"}, "output_directory": {"type": "string"},
+    "expected_outputs": {"type": "array"},
+    "commands": {"type": "object", "required": ["run", "import", "validate", "accept", "reject", "retry"]},
+    "next_action": {"type": "object", "required": ["code", "message"]}
+  }
+}

@@ -328,6 +328,16 @@ def mountain_task_router(
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
 
+    @router.get("/tasks/{task_id}/runs/{run_id}/work-orders/{stage}")
+    def show_work_order(task_id: str, run_id: str, stage: str):
+        """Read or deterministically materialize the Stage Work Order."""
+        try:
+            return commands.work_order_show(task_id, run_id, stage)
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
+
     # ── Voice Units ──────────────────────────────────────────────────────
 
     @router.get("/tasks/{task_id}/runs/{run_id}/units")

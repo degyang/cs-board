@@ -17,6 +17,7 @@ from csboard.application.illustrations import IllustrationService
 from csboard.application.pipeline import PipelineOrchestrator
 from csboard.application.storyboard import StoryboardService
 from csboard.application.voice_units import VoiceUnitService
+from csboard.application.work_orders import WorkOrderService
 from csboard.domain.av_timing import VoiceUnit, segment_script
 from csboard.domain.script_preparation import prepare_script
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
@@ -906,6 +907,10 @@ class MountainCommands:
         """Load the sole persisted execution decision source for every entrypoint."""
         request = self.repository.get_request(task_id) or {}
         return ExecutionPlan.from_dict(request.get("execution_plan", {}))
+
+    def work_order_show(self, task_id: str, run_id: str, stage: str) -> dict[str, Any]:
+        """Return the deterministic persisted Stage Work Order view."""
+        return WorkOrderService(self.repository).show(task_id, run_id, stage)
 
     # ── Stage executor wrappers ──────────────────────────────────────
 

@@ -76,6 +76,14 @@ def parser() -> argparse.ArgumentParser:
     artifact_show.add_argument("--run", required=True)
     artifact_show.add_argument("--key", required=True, help="Artifact key (如 planning.av-plan)")
 
+    # ── work-order ───────────────────────────────────────────────────
+    work_order = resources.add_parser("work-order")
+    work_order_actions = work_order.add_subparsers(dest="action", required=True)
+    work_order_show = work_order_actions.add_parser("show")
+    work_order_show.add_argument("--task", required=True)
+    work_order_show.add_argument("--run", required=True)
+    work_order_show.add_argument("--stage", required=True)
+
     # ── pipeline ─────────────────────────────────────────────────────
     pipeline = resources.add_parser("pipeline")
     pipeline_actions = pipeline.add_subparsers(dest="action", required=True)
@@ -270,6 +278,9 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     # ── artifact ─────────────────────────────────────────────────────
     if (args.resource, args.action) == ("artifact", "show"):
         return commands.artifact_show(args.task, args.run, args.key)
+
+    if (args.resource, args.action) == ("work-order", "show"):
+        return commands.work_order_show(args.task, args.run, args.stage)
 
     # ── pipeline ─────────────────────────────────────────────────────
     if (args.resource, args.action) == ("pipeline", "run"):
