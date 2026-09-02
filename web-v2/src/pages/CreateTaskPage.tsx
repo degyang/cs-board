@@ -1,310 +1,48 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { createTask, uploadInputs } from '../lib/api/client'
+import { Tabs } from '../components/ui/Tabs'
 import { BackButton } from '../components/ui/BackButton'
+import { createTask, uploadInputs } from '../lib/api/client'
+import { fetchStyles, fetchVoices } from '../lib/api/assets'
+import type { StyleTemplate, VoiceDefinition } from '../lib/api/types'
 
-// 标准 whiteboard 配置（固定，非用户可选）
-const ENGINE = 'whiteboard'
-const PIPELINE_ID = 'mountain-av-v1'
-const STYLE_DEFAULT = '极简粗线简笔白板风'
-const PEN_TEXT_DEFAULT = ''
-const STROKE_DETAIL_DEFAULT = 'detailed'
-
-function parseIntField(t: string): number | null {
-  const s = t.trim()
-  if (s === '') return null
-  const n = Number(s)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return null
-  return n
-}
-
-interface SafeError {
-  message: string
-  code: string | null
-}
-
-// 只暴露 MountainApiError 的安全 message/code；不渲染 path、command、token、secret、traceback 或参考音频内容
-function safeErrorText(err: unknown): SafeError {
-  if (err && typeof err === 'object' && 'apiError' in err) {
-    const e = err as { message: string; apiError: { code: string } | null }
-    return { message: e.message, code: e.apiError?.code ?? null }
-  }
-  if (err instanceof Error) return { message: err.message, code: null }
-  return { message: '请求失败', code: null }
-}
-
-interface CreatedTask {
-  task_id: string
-  run_id: string
-}
+const TABS = [
+  { key: 'intro', label: '任务介绍' }, { key: 'script', label: '视频文案' },
+  { key: 'voice', label: '声音生成' }, { key: 'output', label: '输出类型' },
+  { key: 'visual', label: '视觉设置' }, { key: 'final', label: '成片设置' },
+] as const
+const ENGINE = 'whiteboard'; const PIPELINE_ID = 'mountain-av-v1'; const DEFAULT_STYLE = '极简粗线简笔白板风'
+type SafeError = { message: string; code: string | null }
+function safeErrorText(err: unknown): SafeError { if (err && typeof err === 'object' && 'apiError' in err) { const e = err as { message: string; apiError: { code: string } | null }; return { message: e.message, code: e.apiError?.code ?? null } }; return { message: err instanceof Error ? err.message : '请求失败', code: null } }
+function integer(value: string) { const n = Number(value); return value.trim() !== '' && Number.isInteger(n) ? n : null }
 
 export function CreateTaskPage() {
-  const navigate = useNavigate()
-  const [title, setTitle] = useState('')
-  const [script, setScript] = useState('')
-  const [targetChars, setTargetChars] = useState('80')
-  const [minChars, setMinChars] = useState('35')
-  const [maxChars, setMaxChars] = useState('140')
-  const [visualAnchorEnabled, setVisualAnchorEnabled] = useState(true)
-  const [includeSubtitles, setIncludeSubtitles] = useState(true)
-  const [referenceFile, setReferenceFile] = useState<File | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string> | null>(null)
-  const [createdTask, setCreatedTask] = useState<CreatedTask | null>(null)
-  const [createErr, setCreateErr] = useState<SafeError | null>(null)
-  const [uploadErr, setUploadErr] = useState<SafeError | null>(null)
-
-  const submittingRef = useRef(false)
-  const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
-
-  function validate(): Record<string, string> | null {
-    const errors: Record<string, string> = {}
-    if (!title.trim()) errors.title = '请输入任务名称'
-    if (!script.trim()) errors.script = '请输入文案'
-    const min = parseIntField(minChars)
-    const target = parseIntField(targetChars)
-    const max = parseIntField(maxChars)
-    if (min === null || target === null || max === null) {
-      errors.chars = '字数必须为整数'
-    } else if (min < 1 || max > 500) {
-      errors.chars = '字数范围超出合理界限（1–500）'
-    } else if (min > target || target > max) {
-      errors.chars = '需满足 1 ≤ 最小 ≤ 目标 ≤ 最大 ≤ 500'
-    }
-    return Object.keys(errors).length ? errors : null
-  }
-
-  function buildFormData(): FormData {
-    const form = new FormData()
-    form.set('script', script)
-    if (referenceFile) form.set('reference', referenceFile)
-    form.set('style', STYLE_DEFAULT)
-    form.set('pen_text', PEN_TEXT_DEFAULT)
-    form.set('stroke_detail', STROKE_DETAIL_DEFAULT)
-    form.set('include_subtitles', String(includeSubtitles))
-    form.set('target_chars', targetChars)
-    form.set('min_chars', minChars)
-    form.set('max_chars', maxChars)
-    form.set('visual_anchor_enabled', String(visualAnchorEnabled))
-    return form
-  }
-
-  async function runUpload(taskId: string) {
-    submittingRef.current = true
-    setSubmitting(true)
-    setUploadErr(null)
-    try {
-      await uploadInputs(taskId, buildFormData())
-      if (!mountedRef.current) return
-      navigate(`/tasks/${encodeURIComponent(taskId)}`)
-    } catch (err) {
-      if (mountedRef.current) setUploadErr(safeErrorText(err))
-    } finally {
-      if (mountedRef.current) setSubmitting(false)
-      submittingRef.current = false
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (submittingRef.current) return
-    const errs = validate()
-    if (errs) { setFieldErrors(errs); return }
-    setFieldErrors(null)
-    // 已创建过任务（安全网）：表单重复提交时只重试上传，不重复创建 Task
-    if (createdTask) { return runUpload(createdTask.task_id) }
-
-    submittingRef.current = true
-    setSubmitting(true)
-    setCreateErr(null)
-    setUploadErr(null)
-    let res
-    try {
-      res = await createTask({ title: title.trim(), engine: ENGINE, pipeline_id: PIPELINE_ID })
-    } catch (err) {
-      if (mountedRef.current) { setCreateErr(safeErrorText(err)); setSubmitting(false) }
-      submittingRef.current = false
-      return
-    }
-    if (!mountedRef.current) { submittingRef.current = false; return }
-    setCreatedTask({ task_id: res.task_id, run_id: res.run_id })
-    await runUpload(res.task_id)
-  }
-
-  async function handleRetryUpload() {
-    if (submittingRef.current) return
-    const errs = validate()
-    if (errs) { setFieldErrors(errs); return }
-    setFieldErrors(null)
-    if (createdTask) await runUpload(createdTask.task_id)
-  }
-
-  function enterWorkbench() {
-    if (createdTask) navigate(`/tasks/${encodeURIComponent(createdTask.task_id)}`)
-  }
-
-  return (
-    <div className="page page-narrow">
-      <BackButton to="/" label="返回" />
-      <header className="page-head">
-        <h1 className="page-title">新建任务</h1>
-        <p className="page-desc">填写任务名称与文案，提交后创建任务并保存制作输入。引擎固定为白板动画，不自动启动运行。</p>
-      </header>
-
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="card">
-          <div className="field">
-            <label htmlFor="title">任务名称</label>
-            <input
-              id="title"
-              className="input"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              disabled={submitting || !!createdTask}
-              autoComplete="off"
-            />
-            {fieldErrors?.title && <div className="hint error" role="alert">{fieldErrors.title}</div>}
-          </div>
-
-          <div className="field">
-            <label htmlFor="script">文案</label>
-            <textarea
-              id="script"
-              className="textarea"
-              rows={6}
-              value={script}
-              onChange={e => setScript(e.target.value)}
-              disabled={submitting}
-              placeholder="输入完整文案（不少于 10 字）"
-            />
-            {fieldErrors?.script && <div className="hint error" role="alert">{fieldErrors.script}</div>}
-          </div>
-
-          <div className="field">
-            <label>字数规则</label>
-            <div className="chars-row">
-              <label htmlFor="min_chars" className="chip-label">最小</label>
-              <input
-                id="min_chars"
-                className="input input-sm"
-                type="number"
-                min={1}
-                value={minChars}
-                onChange={e => setMinChars(e.target.value)}
-                disabled={submitting}
-              />
-              <label htmlFor="target_chars" className="chip-label">目标</label>
-              <input
-                id="target_chars"
-                className="input input-sm"
-                type="number"
-                min={1}
-                value={targetChars}
-                onChange={e => setTargetChars(e.target.value)}
-                disabled={submitting}
-              />
-              <label htmlFor="max_chars" className="chip-label">最大</label>
-              <input
-                id="max_chars"
-                className="input input-sm"
-                type="number"
-                max={500}
-                value={maxChars}
-                onChange={e => setMaxChars(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            <div className="hint">1 ≤ 最小 ≤ 目标 ≤ 最大 ≤ 500</div>
-            {fieldErrors?.chars && <div className="hint error" role="alert">{fieldErrors.chars}</div>}
-          </div>
-
-          <div className="field">
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={visualAnchorEnabled}
-                onChange={e => setVisualAnchorEnabled(e.target.checked)}
-                disabled={submitting}
-              />
-              启用画面锚定（visual_anchor_enabled）
-            </label>
-          </div>
-
-          <div className="field">
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={includeSubtitles}
-                onChange={e => setIncludeSubtitles(e.target.checked)}
-                disabled={submitting}
-              />
-              包含字幕（include_subtitles）
-            </label>
-          </div>
-
-          <div className="field">
-            <label htmlFor="reference">参考音频（可选）</label>
-            <input
-              id="reference"
-              className="input"
-              type="file"
-              accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac"
-              onChange={e => setReferenceFile(e.target.files?.[0] ?? null)}
-              disabled={submitting}
-            />
-            <div className="hint">首次保存需提供参考音频；浏览器不会读取、打印、缓存或 base64 化音频内容。</div>
-          </div>
-
-          <div className="field">
-            <span className="hint">引擎：白板动画（固定）</span>
-            <br />
-            <span className="hint">标准白板配置：style={STYLE_DEFAULT} / stroke_detail={STROKE_DETAIL_DEFAULT}</span>
-          </div>
-        </div>
-
-        {createErr && (
-          <div className="error-card" role="alert">
-            <span className="code">{createErr.message}</span>
-            {createErr.code && <span className="sug">代码：{createErr.code}</span>}
-          </div>
-        )}
-
-        {uploadErr && (
-          <div className="error-card" role="alert">
-            <span className="code">任务已创建、输入保存失败</span>
-            <span className="sug">{uploadErr.message}</span>
-            {uploadErr.code && <span className="sug">代码：{uploadErr.code}</span>}
-          </div>
-        )}
-
-        <div className="actions">
-          {!createdTask ? (
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? '创建中…' : '创建任务'}
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleRetryUpload}
-                disabled={submitting}
-              >
-                {submitting ? '保存中…' : '重试保存输入'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={enterWorkbench}
-              >
-                进入任务工作台
-              </button>
-            </>
-          )}
-          <Link to="/" className="btn btn-ghost">取消</Link>
-        </div>
-      </form>
-    </div>
-  )
+  const navigate = useNavigate(); const [tab, setTab] = useState('intro')
+  const [title, setTitle] = useState(''); const [script, setScript] = useState('')
+  const [minChars, setMinChars] = useState('35'); const [targetChars, setTargetChars] = useState('80'); const [maxChars, setMaxChars] = useState('140')
+  const [referenceFile, setReferenceFile] = useState<File | null>(null); const [voiceId, setVoiceId] = useState('')
+  const [styles, setStyles] = useState<StyleTemplate[]>([]); const [voices, setVoices] = useState<VoiceDefinition[]>([])
+  const [assets, setAssets] = useState({ styles: 'loading', voices: 'loading' } as Record<'styles'|'voices', 'loading'|'empty'|'error'|'success'>)
+  const [styleName, setStyleName] = useState(DEFAULT_STYLE); const [visualAnchorEnabled, setVisualAnchorEnabled] = useState(true)
+  const [includeSubtitles, setIncludeSubtitles] = useState(true); const [penText, setPenText] = useState(''); const [strokeDetail, setStrokeDetail] = useState('detailed')
+  const [errors, setErrors] = useState<Record<string, string>>({}); const [submitting, setSubmitting] = useState(false)
+  const [createdTask, setCreatedTask] = useState<{ task_id: string; run_id: string } | null>(null); const [createErr, setCreateErr] = useState<SafeError | null>(null); const [uploadErr, setUploadErr] = useState<SafeError | null>(null)
+  const submittingRef = useRef(false); const mountedRef = useRef(true); useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => { fetchStyles({ status: 'active', engine: ENGINE }).then(r => { if (!mountedRef.current) return; const items = Array.isArray(r?.items) ? r.items : []; setStyles(items); setAssets(a => ({ ...a, styles: items.length ? 'success' : 'empty' })) }).catch(() => setAssets(a => ({ ...a, styles: 'error' }))); fetchVoices({ status: 'active' }).then(r => { if (!mountedRef.current) return; const items = Array.isArray(r?.items) ? r.items : []; setVoices(items); setAssets(a => ({ ...a, voices: items.length ? 'success' : 'empty' })) }).catch(() => setAssets(a => ({ ...a, voices: 'error' }))) }, [])
+  function validate() { const e: Record<string, string> = {}; if (!title.trim()) e.title = '请输入任务名称'; if (script.trim().length < 10) e.script = '文案不少于 10 字'; const min = integer(minChars), target = integer(targetChars), max = integer(maxChars); if (min === null || target === null || max === null) e.chars = '字数必须为整数'; else if (min < 1 || target < 1 || max > 500 || min > target || target > max) e.chars = '需满足 1 ≤ 最小 ≤ 目标 ≤ 最大 ≤ 500'; if (!referenceFile) e.reference = '首次保存必须上传参考音频文件'; if (penText.length > 12) e.penText = '笔身文字最长 12 字符'; return e }
+  function validateTab(key: string) { const e = validate(); const fields = key === 'intro' ? ['title'] : key === 'script' ? ['script', 'chars'] : key === 'voice' ? ['reference'] : key === 'final' ? ['penText'] : []; return Object.fromEntries(fields.filter(k => e[k]).map(k => [k, e[k]])) }
+  function goNext() { const e = validateTab(tab); if (Object.keys(e).length) { setErrors(e); return }; setErrors({}); const i = TABS.findIndex(t => t.key === tab); if (i < TABS.length - 1) setTab(TABS[i + 1].key) }
+  function formData() { const f = new FormData(); f.set('script', script); f.set('min_chars', minChars); f.set('target_chars', targetChars); f.set('max_chars', maxChars); f.set('style', styleName); f.set('visual_anchor_enabled', String(visualAnchorEnabled)); f.set('include_subtitles', String(includeSubtitles)); f.set('pen_text', penText); f.set('stroke_detail', strokeDetail); if (referenceFile) f.set('reference', referenceFile); return f }
+  async function saveInputs(taskId: string) { submittingRef.current = true; setSubmitting(true); setUploadErr(null); try { await uploadInputs(taskId, formData()); if (mountedRef.current) navigate(`/tasks/${encodeURIComponent(taskId)}`) } catch (err) { if (mountedRef.current) setUploadErr(safeErrorText(err)) } finally { submittingRef.current = false; if (mountedRef.current) setSubmitting(false) } }
+  async function submit(e: React.FormEvent) { e.preventDefault(); if (submittingRef.current) return; const errs = validate(); if (Object.keys(errs).length) { setErrors(errs); const first = ['title','script','chars','reference','penText'].find(k => errs[k]); if (first) setTab(first === 'title' ? 'intro' : first === 'script' || first === 'chars' ? 'script' : first === 'reference' ? 'voice' : 'final'); return }; setErrors({}); if (createdTask) return saveInputs(createdTask.task_id); submittingRef.current = true; setSubmitting(true); setCreateErr(null); setUploadErr(null); try { const r = await createTask({ title: title.trim(), engine: ENGINE, pipeline_id: PIPELINE_ID }); if (!mountedRef.current) return; setCreatedTask({ task_id: r.task_id, run_id: r.run_id }); await saveInputs(r.task_id) } catch (err) { if (mountedRef.current) { setCreateErr(safeErrorText(err)); setSubmitting(false) }; submittingRef.current = false } }
+  const fieldError = (key: string) => errors[key] && <div className="hint error" role="alert">{errors[key]}</div>
+  return <div className="page create-task-page"><BackButton to="/" label="返回" /><header className="page-head"><h1 className="page-title">新建任务</h1><p className="page-desc">按六个步骤填写任务并保存制作输入；“创建并保存”只保存任务，不会启动运行。</p></header><Tabs items={TABS.map(t => t.key === 'script' ? { ...t, count: script.length } : t)} active={tab} onChange={setTab} />
+    <form onSubmit={submit} noValidate><div className="card tab-card">
+      {tab === 'intro' && <><div className="field"><label htmlFor="title">任务名称</label><input id="title" className="input" value={title} onChange={e => setTitle(e.target.value)} disabled={submitting || !!createdTask} placeholder="例如：量子计算十分钟科普" />{fieldError('title')}</div><p className="hint">任务创建后可在工作台继续查看和处理。</p></>}
+      {tab === 'script' && <div className="copy-split"><div className="copy-col"><label htmlFor="script">原始文案</label><textarea id="script" className="textarea" value={script} onChange={e => setScript(e.target.value)} disabled={submitting} placeholder="输入完整文案（不少于 10 字）" /><div className="copy-count">实时字符数：<b>{script.length}</b>{fieldError('script')}</div></div><div className="copy-col"><label>提交前预估</label><div className="preview-box">按最小 {minChars} / 目标 {targetChars} / 最大 {maxChars} 字符向后端规则提交。前端仅展示字符统计，不冒充服务端分段结果。</div><div className="chars-row"><label htmlFor="min_chars" className="chip-label">最小</label><input id="min_chars" className="input input-sm" value={minChars} onChange={e => setMinChars(e.target.value)} /><label htmlFor="target_chars" className="chip-label">目标</label><input id="target_chars" className="input input-sm" value={targetChars} onChange={e => setTargetChars(e.target.value)} /><label htmlFor="max_chars" className="chip-label">最大</label><input id="max_chars" className="input input-sm" value={maxChars} onChange={e => setMaxChars(e.target.value)} /></div>{fieldError('chars')}</div></div>}
+      {tab === 'voice' && <><div className="field"><label htmlFor="reference">参考音频文件</label><input id="reference" aria-label="参考音频文件" className="input" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" onChange={e => setReferenceFile(e.target.files?.[0] ?? null)} disabled={submitting} />{fieldError('reference')}<div className="hint">参考音频会以 multipart 文件上传；选择音色资产不会替代该文件。</div></div><div className="asset-state"><b>可用音色（真实 API）</b>{assets.voices === 'loading' && <p>正在加载音色…</p>}{assets.voices === 'empty' && <p>暂无可用音色</p>}{assets.voices === 'error' && <p role="alert">音色加载失败，请稍后重试</p>}{assets.voices === 'success' && voices.map(v => <label className={'choice-card' + (voiceId === v.voice_id ? ' selected' : '')} key={v.voice_id}><input type="radio" name="voice" checked={voiceId === v.voice_id} onChange={() => setVoiceId(v.voice_id)} />{v.name}</label>)}</div></>}
+      {tab === 'output' && <div className="choice-grid"><div className="choice-card selected"><b>白板动画</b><span>当前唯一可用输出类型</span></div><div className="choice-card disabled"><b>动态信息图</b><span>尚未开放</span></div></div>}
+      {tab === 'visual' && <div className="field"><label>视觉来源与风格</label>{assets.styles === 'loading' && <p className="hint">正在加载风格…</p>}{assets.styles === 'empty' && <p className="hint">暂无可用风格，将使用标准白板风格</p>}{assets.styles === 'error' && <p className="hint error">风格加载失败，暂不可选择资产</p>}{assets.styles === 'success' && <div className="choice-grid">{styles.map(s => <button type="button" className={'choice-card' + (styleName === s.name ? ' selected' : '')} key={s.style_id} onClick={() => setStyleName(s.name)}>{s.name}<span>{s.kind === 'preset' ? '预置' : '自定义'}</span></button>)}</div>}<div className="hint">当前提交字段：style（名称）。不会提交 style_id。</div></div>}
+      {tab === 'final' && <><label className="checkbox-row"><input type="checkbox" checked={visualAnchorEnabled} onChange={e => setVisualAnchorEnabled(e.target.checked)} />画面锚定文字</label><label className="checkbox-row"><input type="checkbox" checked={includeSubtitles} onChange={e => setIncludeSubtitles(e.target.checked)} />生成字幕</label><div className="field"><label htmlFor="pen_text">笔身文字（最长 12 字符）</label><input id="pen_text" className="input" maxLength={12} value={penText} onChange={e => setPenText(e.target.value)} />{fieldError('penText')}</div><div className="field"><label htmlFor="stroke_detail">线条绘制量</label><select id="stroke_detail" className="select" value={strokeDetail} onChange={e => setStrokeDetail(e.target.value)}><option value="light">精简</option><option value="standard">标准</option><option value="detailed">丰富</option><option value="full">完整</option></select></div></>}
+    </div>{createErr && <div className="error-card" role="alert"><span className="code">{createErr.message}</span>{createErr.code && <span className="sug">代码：{createErr.code}</span>}</div>}{uploadErr && <div className="error-card" role="alert"><span className="code">任务已创建、输入保存失败</span><span className="sug">{uploadErr.message}</span>{uploadErr.code && <span className="sug">代码：{uploadErr.code}</span>}</div>}<div className="actions"><button type="button" className="btn btn-ghost" onClick={() => { const i = TABS.findIndex(t => t.key === tab); if (i > 0) setTab(TABS[i - 1].key) }} disabled={tab === 'intro' || submitting}>上一步</button>{tab !== 'final' && <button type="button" className="btn btn-primary" onClick={goNext} disabled={submitting}>下一步</button>}{tab === 'final' && <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? (createdTask ? '保存中…' : '创建中…') : createdTask ? '重试保存' : '创建并保存'}</button>}<Link to="/" className="btn btn-ghost">取消</Link>{createdTask && uploadErr && <button type="button" className="btn btn-ghost" onClick={() => navigate(`/tasks/${encodeURIComponent(createdTask.task_id)}`)}>进入任务工作台</button>}</div></form></div>
 }
