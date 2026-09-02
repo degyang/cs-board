@@ -138,3 +138,52 @@ All acceptance criteria now hold: the suite exits under 180 seconds with zero
 failures and zero skips; the cold-launch/API/error/cleanup checks pass; and the
 previous hang root cause remains covered by the focused runtime suite. The
 worktree is clean after this report's delivery commit.
+
+## Attempt 3 lifecycle correction — REVIEW_READY
+
+Review correction commit: `706ab2ef1d2b191f769577645b27077a8b921e83`
+(`fix(runtime): release launcher port on shutdown`).
+
+The independent review reproduced a successful smoke whose process and
+directory were gone, but a plain immediate bind on its port still raised
+`EADDRINUSE`. The launcher now owns its listening socket, enables immediate
+reuse/abortive-close semantics before passing it to uvicorn, and maps SIGTERM
+to a graceful `Server.should_exit` request. It uses `Server._serve` directly
+so this installed uvicorn version does not re-raise SIGTERM after graceful
+shutdown and convert a normal launcher stop into child exit `-15`.
+
+`tests/test_backend_runtime_17.py` now has a real sequential regression: two
+different fresh data directories start the actual launcher on one fixed port.
+For each round it checks health, the actual child return code is `0`, its PID
+is dead, the directory is deleted, and a plain socket bind succeeds immediately
+before the next round. No sleep, timeout-success condition, or broad process
+matching is used.
+
+All contractual gates were rerun in this attempt:
+
+```text
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS timeout --signal=TERM --kill-after=5s \
+  180s /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+exit 0 in 82.47s
+457 passed, 4 warnings, 3 subtests passed
+
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q \
+  tests/test_backend_runtime_17.py tests/test_mountain_server.py
+35 passed in 32.35s
+
+/mnt/d/workstation/projects/cs-board/.venv/bin/python \
+  scripts/smoke_real_backend_contract.py
+exit 0
+```
+
+The real smoke used fresh encrypted storage on port 45979, reached health
+`ok`, completed the services/assets/settings checks and structured unknown-route
+404, and confirmed PID `290258` exited with its temporary directory deleted.
+
+```text
+git diff --check 7ac3cb0...HEAD
+exit 0
+```
+
+The branch is clean after this report's delivery commit. This completes the
+attempt-3 bounded correction and restores `REVIEW_READY`.
