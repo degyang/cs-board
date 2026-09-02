@@ -22,6 +22,7 @@
 - PM resolve-blocker event: `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`
   reconfirmed this external dependency; no duplicate diagnosis task or Worker
   dispatch is authorized while it remains unavailable.
+- PM disposition: `BLOCKED`; no next task is required until the dependency is restored.
 
 ## Goal
 
