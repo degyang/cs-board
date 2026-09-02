@@ -1,40 +1,73 @@
-# WEB-INTAKE-003 阻塞报告
+# WEB-INTAKE-003 交付报告
 
-状态：`BLOCKED`
+状态：`REVIEW_READY`
 
-基线：`7dc2a93`，分支 `feat/mountain-webui-surface-parity`
+基线：`7dc2a93`，恢复 HEAD：`0b99b50`，分支：`feat/mountain-webui-surface-parity`
 
-## 已完成
+## Delivery
 
-- 新增 `web-v2/scripts/verify-task-intake-e2e.mjs`，覆盖六 Tab 填写、最小 WAV、Task/inputs 请求观测、输入回读、队列搜索、工作台回读、截图和脱敏 manifest。
-- `npm --prefix web-v2 run build`：通过。
-- `npm --prefix web-v2 test -- --run`：16 files / 347 tests passed。
-- `MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs`：`All contracts aligned against real backend ✓`。
-- 浏览器脚本依赖缺失、服务未启动和 HTTP 错误均会非零退出；未调用 start、pipeline、stage run/retry。
+- 仅消费已审核、自包含后端实现 `6699d20`，其直接子提交在本工作树中为
+  `113dc2e fix(mountain): expose fail-closed secret availability`。
+- 推送分支：`feat/mountain-webui-surface-parity`。
+- 后端改动仅来自上述消费提交：补齐
+  `FilesystemServiceRegistry.has_required_secrets` 及行为测试。
+- 新增真实浏览器证据：
+  `docs/Mountain/webui-parity-evidence/tasks/intake-created.png`、
+  `intake-queue.png`、`intake-workbench.png` 和 `intake-manifest.json`。
+- 未修改 `WEB-WO-003`，未进入 Pipeline/Work Order 页面，未合并任何分支。
 
-## 阻塞证据
+## Real run
 
-使用隔离后端（8000）、同源 Vite `/api` 代理（5275）执行真实浏览器脚本时，工作台产生 `404 GET /api/v1/capabilities`。真实后端入口 [webapp/mountain_server.py](/mnt/d/workstation/projects/cs-board/.claude/worktrees/mountain-webui-surface-parity/webapp/mountain_server.py) 只挂载 `mountain_task_router`，其 [webapp/mountain_task_api.py](/mnt/d/workstation/projects/cs-board/.claude/worktrees/mountain-webui-surface-parity/webapp/mountain_task_api.py) 没有 capabilities 路由；旧 `mountain_v1_api.py` 的同名路由未被该启动器挂载。
+- API：`127.0.0.1:8000`，临时数据目录 `/tmp/web-intake-003.7Dv4Ts`，测试后已停止。
+- Web：`127.0.0.1:5275`，Vite `/api` 代理到上述 API，测试后已停止。
+- 浏览器创建单个 Task；task ID 仅以 SHA-256 摘要记录：
+  `a5502c295e258623951c30254014d58d70f1a8d704936e05fe8dc58fa9b9de80`。
+- 脱敏文案 SHA-256：
+  `4aaaa812cdbdf24ea8f378fbb0226b38522f94f246a3b6a367a42542dfc9b1f5`，长度 `45`。
+- 浏览器请求未包含 `/start`、`/pipeline/` 或 stage `run/retry`；console error/warning、pageerror、failed request 和 HTTP >=400 均为 `0`。
 
-浏览器原始结果：`404 GET /api/v1/capabilities`，页面 console 同步记录 `Failed to load resource: the server responded with a status of 404`。该结果违反任务门禁“HTTP >=400 为 0”。
+## Required gates
 
-契约禁止 Python、API client/types/DTO 变更；当前仅允许在浏览器证明确有问题时做最小 UI 修复。需要 PM 明确是否授权将 Workbench 的 capability 查询延后/改为可用入口。未获授权前不修改产品 UI，不提交伪造证据。
+每项最终执行均正常退出（exit `0`）：
 
-## 运行环境
+```text
+npm --prefix web-v2 run build
+  ✓ Vite production build
 
-- API：`127.0.0.1:8000`，临时 data dir；已停止。
-- Web：`127.0.0.1:5275`，`VITE_API_BASE_URL=/api/v1`；已停止。
-- 首次未注入 Vite 同源变量时另复现 CORS preflight 400；按既有证据流程修正后仍稳定复现 capability 404。
-- 未生成可接受的 intake manifest；任何截图仅为失败运行中间产物，不应作为通过证据。
+npm --prefix web-v2 test -- --run
+  ✓ 16 files / 347 tests passed
 
-## Resume attempt 1 continuation
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs
+  ✓ All contracts aligned against real backend
 
-按协调提交 `d0e0439` 引入 CORE capability delivery `1cec1dc`、`c567c3a`（本工作树对应 cherry-pick commits `ff7fe87`、`40027de`）后重跑：
+WEBUI_BASE=http://127.0.0.1:5275 \
+MOUNTAIN_API_BASE=http://127.0.0.1:8000 \
+PLAYWRIGHT_CHROMIUM_EXECUTABLE=/home/ubuntu/.cache/ms-playwright/chromium-1187/chrome-linux/chrome \
+node web-v2/scripts/verify-task-intake-e2e.mjs
+  ✓ six-tab create/save/readback, queue search, workbench readback, 3 screenshots, browser_issues=0
 
-- contract checker：`All contracts aligned against real backend ✓`。
-- 创建 Task、保存 inputs、GET inputs 回读、工作台导航和队列搜索均完成。
-- 真实 API 浏览器门禁仍失败：`500 GET /api/v1/capabilities`，console 同步出现 500 resource error。
-- 后端原始 traceback：`csboard/application/capabilities.py:102` 调用 `self._registry.has_required_secrets(service)`，但 [csboard/adapters/filesystem/service_registry.py](/mnt/d/workstation/projects/cs-board/.claude/worktrees/mountain-webui-surface-parity/csboard/adapters/filesystem/service_registry.py) 的 `FilesystemServiceRegistry` 没有该方法。
-- 因 HTTP >=400、console error 均非零，未生成可接受 manifest；中间截图不作为证据。
+git diff --check 7dc2a93...HEAD
+  ✓ exit 0
 
-该问题属于 CORE capability delivery 的 Python 实现错误。WEB 不修改 Python、API client、types/DTO，也不吞掉 HTTP 错误；任务继续 BLOCKED，等待 CORE 修复并由 PM 重新批准后再重跑。
+! rg -n 'Project|project_id|/projects|mockResolvedValue' web-v2/scripts/verify-task-intake-e2e.mjs
+  ✓ exit 0; no matches
+```
+
+The first browser launch attempt also ran the required script but exited non-zero because
+the default Playwright Chromium headless shell was absent. The same gate was rerun to
+normal exit with the already-installed Chromium executable above; no source or acceptance
+criteria were changed.
+
+## Evidence manifest
+
+Manifest: `docs/Mountain/webui-parity-evidence/tasks/intake-manifest.json`
+
+- `intake-created.png`: `feb51a3d556f0ef48f0311e9931a1fbfdc136bd109eb2f48c796800f6593ad9b`
+- `intake-queue.png`: `3e084e4213543413f7f4e13b49c0321621d88933c4d18d6154ab4cd326409e89`
+- `intake-workbench.png`: `fd27d8bab16a5a463fe3a1cf9faedb179fa747ecb1acac3b5cfd8a2b18c48bb2`
+- manifest SHA-256: `bc1b5f7e5b5bc3857706721d19fe8ddc6abeb02dd35514421e7720ae8e6b36eb`
+
+## Final state
+
+- Report and evidence are ready to commit and push with the delivery.
+- No known product gaps remain for this contract.

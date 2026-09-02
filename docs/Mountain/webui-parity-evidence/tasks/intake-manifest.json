@@ -1,0 +1,23 @@
+{
+  "task_id_sha256": "a5502c295e258623951c30254014d58d70f1a8d704936e05fe8dc58fa9b9de80",
+  "title_sha256": "45c616ec686277e775a3abe53b3fe6845829fe3bf5a83b6e993533c953d1adca",
+  "script_sha256": "4aaaa812cdbdf24ea8f378fbb0226b38522f94f246a3b6a367a42542dfc9b1f5",
+  "script_length": 45,
+  "screenshots": [
+    {
+      "file": "intake-created.png",
+      "sha256": "feb51a3d556f0ef48f0311e9931a1fbfdc136bd109eb2f48c796800f6593ad9b",
+      "bytes": 108888
+    },
+    {
+      "file": "intake-queue.png",
+      "sha256": "3e084e4213543413f7f4e13b49c0321621d88933c4d18d6154ab4cd326409e89",
+      "bytes": 63304
+    },
+    {
+      "file": "intake-workbench.png",
+      "sha256": "fd27d8bab16a5a463fe3a1cf9faedb179fa747ecb1acac3b5cfd8a2b18c48bb2",
+      "bytes": 108925
+    }
+  ]
+}
