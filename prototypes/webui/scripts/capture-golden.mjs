@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { chromium } from 'playwright'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
@@ -12,6 +13,7 @@ const outputDir = join(repoDir, 'docs/Mountain/webui-prototype-baseline/screensh
 const manifestPath = join(repoDir, 'docs/Mountain/webui-prototype-baseline/WEB-PARITY-004-manifest.json')
 const port = 5182
 const origin = `http://127.0.0.1:${port}`
+const update = process.argv.slice(2).join(' ') === '--update'
 const sourceCommit = git(['rev-parse', '0f56e824c0d49ab5c090e7ea07086dc9d47f47a9'])
 const pages = [
   { id: '01-brand-shell', route: '/help', purpose: '品牌壳' },
@@ -59,11 +61,41 @@ async function stop(child) {
   })
 }
 
+function manifestFor(captured) {
+  return {
+    schema_version: 1,
+    source: { kind: 'git-tracked prototype', commit: sourceCommit, path: 'prototypes/webui', origin, mode: 'loopback read-only preview' },
+    capture: { viewport: { width: 1366, height: 900 }, dpr: 1, zoom: '100%', browser: 'Playwright Chromium', browser_issues: { console_error: 0, pageerror: 0, failed_request: 0, http_gte_400: 0 } },
+    goldens: captured,
+  }
+}
+
+async function freezeMotion(page) {
+  await page.evaluate(() => new Promise((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(resolveFrame))))
+}
+
+async function verifyFrozenCapture(captured, manifestText) {
+  const frozenManifest = await readFile(manifestPath, 'utf8').catch(() => {
+    throw new Error('frozen manifest is missing; rerun with --update to explicitly generate the baseline')
+  })
+  if (manifestText !== frozenManifest) throw new Error('captured manifest differs from the frozen manifest; refusing to overwrite baseline')
+  for (const pageSpec of captured) {
+    const frozenFile = join(repoDir, pageSpec.golden_file)
+    const frozenContent = await readFile(frozenFile).catch(() => {
+      throw new Error(`frozen golden is missing: ${pageSpec.golden_file}`)
+    })
+    const frozenHash = createHash('sha256').update(frozenContent).digest('hex')
+    if (frozenHash !== pageSpec.sha256 || frozenContent.length !== pageSpec.bytes) {
+      throw new Error(`captured ${pageSpec.id} differs from its frozen golden; refusing to overwrite baseline`)
+    }
+  }
+}
+
 let server
 let browser
+let captureDir
 try {
-  await mkdir(outputDir, { recursive: true })
-  for (const page of pages) await rm(join(outputDir, `${page.id}.png`), { force: true })
+  captureDir = await mkdtemp(join(tmpdir(), 'prototype-golden-'))
 
   server = spawn(join(prototypeDir, 'node_modules/.bin/vite'), ['preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
     cwd: prototypeDir,
@@ -87,6 +119,25 @@ try {
       static now() { return fixedTime }
     }
     globalThis.Date = FrozenDate
+    const style = document.createElement('style')
+    style.textContent = `
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        caret-color: transparent !important;
+      }
+    `
+    const applyFreeze = () => {
+      if (!document.documentElement) return false
+      document.documentElement.append(style)
+      return true
+    }
+    if (!applyFreeze()) {
+      const observer = new MutationObserver(() => {
+        if (applyFreeze()) observer.disconnect()
+      })
+      observer.observe(document, { childList: true })
+    }
   })
   const issues = []
   const captured = []
@@ -98,14 +149,15 @@ try {
     page.on('response', (response) => { if (response.status() >= 400) issues.push(`${pageSpec.route}: HTTP ${response.status()}: ${response.url()}`) })
     const response = await page.goto(`${origin}${pageSpec.route}`, { waitUntil: 'networkidle' })
     if (!response?.ok()) throw new Error(`${pageSpec.route} returned HTTP ${response?.status() ?? 'no response'}`)
-    await page.screenshot({ path: join(outputDir, `${pageSpec.id}.png`), fullPage: false })
+    await freezeMotion(page)
+    await page.screenshot({ path: join(captureDir, `${pageSpec.id}.png`), fullPage: false })
     await page.close()
   }
   await context.close()
   if (issues.length) throw new Error(`browser evidence failed:\n${issues.join('\n')}`)
 
   for (const pageSpec of pages) {
-    const absoluteFile = join(outputDir, `${pageSpec.id}.png`)
+    const absoluteFile = join(captureDir, `${pageSpec.id}.png`)
     const content = await readFile(absoluteFile)
     const dimensions = pngSize(content)
     if (dimensions.width !== 1366 || dimensions.height !== 900) throw new Error(`${pageSpec.id} dimensions are ${dimensions.width}x${dimensions.height}, expected 1366x900`)
@@ -113,7 +165,7 @@ try {
       id: pageSpec.id,
       purpose: pageSpec.purpose,
       prototype_route: pageSpec.route,
-      golden_file: relative(repoDir, absoluteFile),
+      golden_file: relative(repoDir, join(outputDir, `${pageSpec.id}.png`)),
       width: dimensions.width,
       height: dimensions.height,
       dpr: 1,
@@ -121,15 +173,18 @@ try {
       bytes: (await stat(absoluteFile)).size,
     })
   }
-  const manifest = {
-    schema_version: 1,
-    source: { kind: 'git-tracked prototype', commit: sourceCommit, path: 'prototypes/webui', origin, mode: 'loopback read-only preview' },
-    capture: { viewport: { width: 1366, height: 900 }, dpr: 1, zoom: '100%', browser: 'Playwright Chromium', browser_issues: { console_error: 0, pageerror: 0, failed_request: 0, http_gte_400: 0 } },
-    goldens: captured,
+  const manifestText = `${JSON.stringify(manifestFor(captured), null, 2)}\n`
+  if (update) {
+    await mkdir(outputDir, { recursive: true })
+    for (const pageSpec of pages) await writeFile(join(outputDir, `${pageSpec.id}.png`), await readFile(join(captureDir, `${pageSpec.id}.png`)))
+    await writeFile(manifestPath, manifestText)
+    process.stdout.write(`updated ${captured.length} browser goldens from ${sourceCommit}\n`)
+  } else {
+    await verifyFrozenCapture(captured, manifestText)
+    process.stdout.write(`verified ${captured.length} frozen browser goldens from ${sourceCommit}\n`)
   }
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-  process.stdout.write(`captured ${captured.length} browser goldens from ${sourceCommit}\n`)
 } finally {
   if (browser) await browser.close()
   if (server) await stop(server)
+  if (captureDir) await rm(captureDir, { recursive: true, force: true })
 }
