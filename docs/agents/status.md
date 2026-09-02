@@ -19,7 +19,7 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 2 zero-skip delivery verified; independent review in progress |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | DISPATCHED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | pending | restores immutable five-page golden; unblocks WEB-PARITY-004 |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | five golden + manifest delivered; independent review queued |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | independent review queued behind CORE correction review |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
@@ -76,6 +76,9 @@
   `gpt-5.6-terra + medium` 执行，停止前均无文件变更。
 - DASH 是按任务动态注册的 Worker，不是常驻席位。其唯一任务 `DASH-STATS-003` 已批准且没有后续待办，
   当前已从 Agent 注册表和瞬时运行态回收；历史任务/审核保留，4317 面板服务继续作为团队基础设施运行。
+- 先前 CORE Reviewer 启动失败但留下短期 working runtime，造成待审核任务存在而面板随后显示 idle。CEO 已
+  注册真实 `/root/core_runtime_reviewer_live` 并启动 CORE 独立审核；Reviewer WIP=1，MEDIA 与刚交付
+  `PROTOTYPE-GOLDEN-005@069ace1` 明确排队，不再用运行态冒充并行审核。
 - CORE 与 MEDIA 的空闲资源分别领取独立 P0 `CORE-RUNTIME-006`、`MEDIA-PREFLIGHT-004`；两项都不依赖
   WEB Work Order，不执行 Stage 链。契约提交后由各自 Worker 异步执行，PM 不等待长门禁。
 - `MEDIA-PREFLIGHT-004` 的 idle runtime 对应已完成而非遗失执行：实现 `d9f3a41` 与报告交付 `8532302`
