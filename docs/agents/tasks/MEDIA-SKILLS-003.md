@@ -1,7 +1,8 @@
 # MEDIA-SKILLS-003：七 Skills 执行契约纠偏与机器校验
 
 - Owner: MEDIA
-- Status: DISPATCHED
+- Status: CHANGES_REQUESTED
+- Attempt: 2（返工）
 - Priority: P0
 - Depends on: `MEDIA-WO-002=APPROVED`, `CORE-EXEC-002=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-media`
@@ -63,3 +64,27 @@ git diff --check 7bc8af9...HEAD
 
 提交并推送当前分支，报告列出逐 Skill 的 before/after、linter 规则、失败 fixture 证据和全量测试结果；
 直接唤醒 `/root/pm` 后停止，不领取 MEDIA-E2E-003。
+
+## Attempt 2 bounded correction
+
+权威审核：`docs/agents/reviews/MEDIA-SKILLS-003.md`。保留七 Skills 已完成的 Task/Run、持久化输入、
+旧参数移除和 linter 基础，只修正：
+
+1. `visual-anchor-generator` 的输入是 persisted `script_preparation`、锚定开关和设置，不是自己的输出
+   `planning.av-plan`；输出才是 `planning.av-plan`；linter 必须分开验证 inputs/outputs；
+2. `illustration-generator` 在 external candidate Gate 未实现时不得展示或要求
+   `stage retry ... --visual` 可执行；删除该命令并让 linter 在 Gate 未实现期间禁止它；
+3. linter 的 Stage 映射使用明确 input/output 结构，不能仅以同一文件内出现 Artifact token 视为映射
+   正确；至少新增两个失败 fixture 分别证明“自循环输入”和“未实现 retry”会非零；
+4. 报告填入真实 delivery hash；全量 pytest 若超过合理时限，按测试目录分组运行并定位具体长耗时组，
+   报告每组终态，不能只写“两次未结束”；
+5. 不修改生产代码、CLI/API/WebUI，不进入 Work Order 实现或媒体调用。
+
+门禁沿用 attempt 1，并额外要求：
+
+```bash
+! rg -n '输入 Artifact：`planning.av-plan`' skills/script-segmenter/SKILL.md
+! rg -n 'stage retry .*generate-illustrations' skills/illustration-generator/SKILL.md
+```
+
+更新原报告并提交推送后，直接唤醒 `/root/pm`，停止。

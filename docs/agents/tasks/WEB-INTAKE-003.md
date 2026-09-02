@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: DISPATCHED
+- Status: BLOCKED
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -66,3 +66,16 @@ git diff --check 7dc2a93...HEAD
 
 提交并推送当前分支，报告写入实际端口、命令、task_id 脱敏摘要、截图 manifest 和任何最小 UI 修复。
 直接唤醒 `/root/pm` 后停止，不进入 Pipeline/Work Order 页面。
+
+## Verified blocker
+
+- Partial delivery: `e573dea`
+- Blocking dependency: `CORE-CAP-004`
+
+真实 Mountain Server `webapp/mountain_server.py` 未提供工作台现有客户端请求的
+`GET /api/v1/capabilities`；隔离环境稳定返回 404，并产生 browser console error。契约禁止 WEB 修改
+Python，也禁止吞掉 HTTP 错误，因此当前停止是正确行为。
+
+保留已完成 intake 脚本与测试，不继续改 UI。待 `CORE-CAP-004=APPROVED` 后，PM 将本任务恢复为
+attempt 1 continuation；WEB 只需基于同一 commit 重跑真实 E2E、提交三张证据和 manifest，并修复
+当前 report 末尾 `git diff --check` 空行问题。
