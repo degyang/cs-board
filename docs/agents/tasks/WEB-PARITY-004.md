@@ -115,3 +115,14 @@ CEO 必须先提供以下任一 Git 可验证、不可变输入，才能解除�
 
 解除阻塞后，WEB 只执行独立评审中的 golden/actual 配对、fail-closed verifier、manifest 与逐页目视报告
 纠正；不得修改 prototype 视觉、复制 mock/localStorage/Project 契约，或领取 `WEB-WO-003`。
+
+## Attempt 2 dispatch
+
+- Golden dependency: `PROTOTYPE-GOLDEN-005@b4287d9=APPROVED`
+- Golden review: `2dd4e99`
+- Coordination state: `DISPATCHED`
+- Cycle: 返工
+- Attempt: 2
+
+仅执行既有独立评审列出的五组 golden/actual 配对、manifest、fail-closed verifier 和必要的正式 WebUI
+最小修正；不得修改 prototype、backend、Work Order 或领取 `WEB-WO-003`。

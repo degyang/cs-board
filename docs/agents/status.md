@@ -18,8 +18,8 @@
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | attempt 2 immutable capture correction handed off |
+| `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | attempt 2: pair approved immutable golden with actual evidence |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
 | `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | attempt 2 controlled 4xx/full-suite correction dispatched |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
@@ -122,6 +122,9 @@
 - Worker 调度已统一整改：WEB、MEDIA、PROTOTYPE 及后续动态角色全部改用 `codex_exec` systemd wrapper；
   dispatcher 不写 runtime，只有真实 wrapper 启动后写 working，正常/异常退出分别写 review/blocked，同
   Owner WIP=1。CEO/PM 禁止再创建 orchestrator Worker 或预写 Agent 状态。
+- `PROTOTYPE-GOLDEN-005@b4287d9` attempt 2 独立评审提交 `2dd4e99` 结论为 `APPROVED`：连续复验五张
+  golden 与 manifest 字节稳定、默认 fail closed、显式 `--update` 才更新，且无 `web-v2`/视觉源码越界。
+  CEO 据此批准并解除 WEB golden blocker，立即派发 `WEB-PARITY-004` attempt 2；不构成用户验收或发布批准。
 - `PROTOTYPE-GOLDEN-005` attempt 2 实现 `7db041b` 与报告交付 `b4287d9` 已提交推送且分支干净；本轮
   仅登记 `REVIEW_READY`，不解除 WEB blocker。`MEDIA-PREFLIGHT-004@8532302` 独立评审提交 `a8a4aca`
   结论为 `CHANGES_REQUESTED`：缺少 controlled 4xx 证据，且全量 pytest 未能在评审中复现正常退出；

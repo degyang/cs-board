@@ -100,3 +100,12 @@ manifest 与报告：在捕获环境中冻结动画而不改原型视觉源码�
 
 Worker 已提交并推送 deterministic immutable capture 纠正，分支干净且与远端一致；本节仅记录交接，
 不代表 CEO、Reviewer 或用户批准，也不解除 `WEB-PARITY-004` blocker。
+
+## Attempt 2 independent review
+
+- Review: `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md`
+- Review commit: `2dd4e99`
+- Verdict: `APPROVED`
+- CEO state: `APPROVED`
+
+本批准只解除 WEB 的 immutable golden 输入依赖，不代表用户验收、发布或合并批准。
