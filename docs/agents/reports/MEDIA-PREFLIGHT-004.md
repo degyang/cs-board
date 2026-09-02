@@ -1,7 +1,7 @@
 # MEDIA-PREFLIGHT-004 delivery report
 
 - Status: REVIEW_READY
-- Implementation commit: recorded below after commit
+- Implementation commit: `d9f3a414ece4ae9320df618f8f28d9838aa24508`
 - Branch: `feat/mountain-media-work-orders` (pushed with delivery commit)
 - Scope: fail-closed, no-payload media dependency preflight only. No Stage Work Order or stage chain was run.
 
