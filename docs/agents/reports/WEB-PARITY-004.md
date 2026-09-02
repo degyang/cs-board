@@ -46,4 +46,4 @@ The prior independent review requested immutable five-page golden inputs, per-fi
 | `git diff --check 51656c91bb378d3a62ce5668d9d1c8b861de4847...HEAD` | 0 | PASS |
 | forbidden-pattern audit from the contract | 0 | PASS, no matches |
 
-The live backend used an isolated `/tmp/cs-board-web-parity-data` directory and the WebUI used `VITE_API_BASE_URL=/api/v1` with the Vite proxy. Both temporary servers were stopped after evidence capture; no backend or prototype files were changed. Delivery commits: implementation/evidence commit `PENDING_IMPLEMENTATION_COMMIT`; final report commit `PENDING_REPORT_COMMIT`. Branch: `feat/mountain-webui-surface-parity`.
+The live backend used an isolated `/tmp/cs-board-web-parity-data` directory and the WebUI used `VITE_API_BASE_URL=/api/v1` with the Vite proxy. Both temporary servers were stopped after evidence capture; no backend or prototype files were changed. Implementation/evidence delivery commit: `cdda8725e7c23ad8dfa9b3d6548d8d7e4323bd1c`. Branch: `feat/mountain-webui-surface-parity`.
