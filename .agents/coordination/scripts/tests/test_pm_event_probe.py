@@ -193,6 +193,21 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(action["kind"], "resolve-blocker")
         self.assertEqual(action["task_id"], "MEDIA-1")
 
+    def test_third_dispute_entry_escalates_before_blocker_recovery(self) -> None:
+        runtime = self.root / ".agents/coordination/runtime"
+        runtime.mkdir(parents=True, exist_ok=True)
+        (runtime / "arbitration-state.json").write_text(json.dumps({"tasks": {
+            "MEDIA-1": {"last_status": "BLOCKED", "dispute_entries": 3, "threshold": 3}
+        }}))
+        self.write_status(["| `MEDIA-1` | WORKER_MEDIA | BLOCKED | pending | abc | timeout |"])
+        action = json.loads(self.probe())["actions"][0]
+        self.assertEqual(action["kind"], "escalate-arbitration")
+        self.assertEqual(action["dispute_entries"], 3)
+
+    def test_arbitration_has_no_automatic_pm_action(self) -> None:
+        self.write_status(["| `MEDIA-1` | WORKER_MEDIA | ARBITRATION | pending | abc | human |"])
+        self.assertEqual(self.probe(), "")
+
     def test_blocked_task_discovers_committed_report_in_registered_worktree(self) -> None:
         owner = self.root / "owner"
         owner.mkdir()

@@ -28,4 +28,17 @@ class CEOHealthProbeTest(unittest.TestCase):
   self.audit(['| `CORE-1` | WORKER_CORE | BLOCKED | x | pending | waiting |'],'CORE-1')
   changed=self.audit(['| `WEB-1` | WORKER_WEB | READY | x | pending | waiting |'],'CORE-1')
   self.assertEqual(changed['unchanged_cycles'],1)
+ def test_third_dispute_entry_requires_human_arbitration(self):
+  blocked=['| `WEB-1` | WORKER_WEB | BLOCKED | x | pending | waiting |']
+  working=['| `WEB-1` | WORKER_WEB | DISPATCHED | x | pending | working |']
+  self.audit(blocked,'WEB-1'); self.audit(working,'WEB-1')
+  self.audit(blocked,'WEB-1'); self.audit(working,'WEB-1')
+  third=self.audit(blocked,'WEB-1')
+  escalation=next(item for item in third['alerts'] if item['kind']=='arbitration-required')
+  self.assertEqual(escalation['dispute_entries'],3)
+ def test_arbitration_waits_for_human_without_waking_pm(self):
+  data=self.audit(['| `WEB-1` | WORKER_WEB | ARBITRATION | x | pending | human |'],'WEB-1')
+  self.assertTrue(data['needs_human'])
+  self.assertFalse(data['needs_pm'])
+  self.assertEqual(data['alerts'][0]['kind'],'human-arbitration')
 if __name__=='__main__': unittest.main()

@@ -39,7 +39,7 @@ event_kind="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["actions"]
   --role PM --state working --task "$pm_task" \
   --cycle 调度 --attempt 1 --lease-seconds 180 >/dev/null
 
-if [[ "$event_kind" == "record-test-ready" || "$event_kind" == "record-test-result" || "$event_kind" == "recover-delivery" || "$event_kind" == "recover-dispatch" ]]; then
+if [[ "$event_kind" == "record-test-ready" || "$event_kind" == "record-test-result" || "$event_kind" == "recover-delivery" || "$event_kind" == "recover-dispatch" || "$event_kind" == "escalate-arbitration" ]]; then
   transition=(python3 "$project_root/.agents/coordination/scripts/apply_pm_transition.py" --project "$project_root" --kind "$event_kind" --task "$pm_task")
   if [[ "$event_kind" == "recover-delivery" ]]; then
     delivery="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["actions"][0]["delivery"])' <<<"$event_json")"
@@ -77,6 +77,7 @@ prompt="$prompt A resolve-blocker event requires a concrete bounded diagnosis/re
 prompt="$prompt Treat blocker_facts as verified scheduler evidence. Never append or commit the same blocker decision when those facts have not changed. A recover-delivery or recover-dispatch event is handled deterministically before this model turn."
 prompt="$prompt Worker execution is owned exclusively by dispatch_cli_agent.sh and run_worker_agent.sh. Never create an orchestrator Worker or write working runtime yourself. After committing DISPATCHED, invoke the dispatcher asynchronously; only its supervised wrapper may publish working, review, or blocked."
 prompt="$prompt A retire-agent action is executable policy: recheck that the non-protected owner has only terminal tasks, no active service/lease, and exceeded the reported retention. Then remove only its current registry entry and transient runtime, preserve all history, commit and push. Under capacity pressure process the oldest timed-out candidate first."
+prompt="$prompt ARBITRATION is a human-only holding state. Never dispatch, test, approve, reject, or move a task out of ARBITRATION unless a new ACTIVE agreement records an explicit user decision for that task."
 
 if timeout --signal=TERM --kill-after=5s 90s \
   "$codex_bin" exec --dangerously-bypass-approvals-and-sandbox --model gpt-5.6-terra \

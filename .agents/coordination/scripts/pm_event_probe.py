@@ -40,8 +40,9 @@ def task_delivery(root: Path, task_id: str) -> str:
     return ""
 
 
-ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "WORKING", "TEST_READY", "TESTING", "PM_DECISION", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
+ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "WORKING", "TEST_READY", "TESTING", "PM_DECISION", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED", "ARBITRATION"}
 ACTION_ORDER = {
+    "escalate-arbitration": -1,
     "recover-delivery": 0,
     "recover-dispatch": 0,
     "recover-stale": 0,
@@ -217,10 +218,21 @@ def retirement_actions(root: Path, tasks: dict[str, dict[str, str]], now: dateti
 
 def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600) -> list[dict[str, object]]:
     tasks = read_tasks(root)
+    arbitration = {}
+    try:
+        arbitration = json.loads((root / ".agents/coordination/runtime/arbitration-state.json").read_text(encoding="utf-8")).get("tasks", {})
+    except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+        arbitration = {}
     current_time = now or datetime.now(timezone.utc)
     busy_owners = {task["owner"] for task in tasks.values() if task["status"] in ACTIVE_STATUSES}
     actions: list[dict[str, object]] = []
     for task in tasks.values():
+        dispute = arbitration.get(task["task_id"], {}) if isinstance(arbitration, dict) else {}
+        dispute_entries = int(dispute.get("dispute_entries", 0)) if isinstance(dispute, dict) else 0
+        threshold = max(3, int(dispute.get("threshold", 3))) if isinstance(dispute, dict) else 3
+        if task["status"] in {"BLOCKED", "CHANGES_REQUESTED"} and dispute_entries >= threshold:
+            actions.append({"kind": "escalate-arbitration", **task, "dispute_entries": dispute_entries, "threshold": threshold})
+            continue
         if task["status"] == "BLOCKED":
             delivery = discover_delivery(root, task)
             if delivery:

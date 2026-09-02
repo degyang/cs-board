@@ -105,3 +105,23 @@
 - 检查 PM 是否将 CORE 任务落为 `APPROVED` 并保留“有条件通过”说明；避免 Tester 的既有 FAIL 证据被删除或改写。
 - 检查 Media 恢复是否只消费已解决的 runtime 依赖，不得把遗留 skip/历史空格伪装为已经修复。
 - 在获得用户授权前，遗留问题只登记、不派工、不修改超出原任务允许面的文件。
+
+## HUMAN-ARBITRATION-20260902 — 三次拉锯进入冲裁
+
+- Time: `2026-09-02T20:34:00+08:00`
+- Status: `ACTIVE`
+- Source: `USER-DIRECTIVE`
+
+### 约定内容
+
+1. 标准流程增加“冲裁”泳道，对应状态 `ARBITRATION`。
+2. 同一任务第 3 次重新进入 `BLOCKED` 或 `CHANGES_REQUESTED` 时，CEO 必须标记
+   `arbitration-required`，PM 只执行一次机械迁移，不得继续自动拉锯。
+3. `ARBITRATION` 中的任务停止 Worker 派发、Tester 验证和 PM 自动判定，完整保留任务契约、失败证据、
+   争议次数与现有提交，等待人工干预。
+4. 只有新的明确用户指令可以决定该任务退出冲裁后的状态和动作；CEO、PM、Worker、Tester 均不得自行解除。
+
+### CEO 跟踪
+
+- 每轮显示冲裁任务和累计争议次数，但冲裁任务本身不反复唤醒 PM。
+- 存在冲裁任务时继续调度其他无依赖工作；不得让单个冲裁任务阻塞 CEO 的全局监控。

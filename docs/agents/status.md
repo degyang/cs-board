@@ -204,7 +204,9 @@
 ## 队列规则
 
 标准状态机：`READY → WORKING → TEST_READY → TESTING → PM_DECISION → APPROVED`；失败验证由 PM
-判为 `CHANGES_REQUESTED` 后返回 `READY`，外部依赖不足进入 `BLOCKED`。旧状态只为历史兼容，不用于新任务。
+判为 `CHANGES_REQUESTED` 后返回 `READY`，外部依赖不足进入 `BLOCKED`。同一任务第 3 次重新进入
+`BLOCKED` 或 `CHANGES_REQUESTED` 后转入 `ARBITRATION`（冲裁），停止自动流转并等待用户指令。
+旧状态只为历史兼容，不用于新任务。
 
 1. 优先级按任务契约中的 `Priority`，同优先级按依赖拓扑排序；
 2. `BACKLOG` 只有在全部 `Depends on` 均为 `APPROVED` 后才能由 PM 改成 `READY`；
