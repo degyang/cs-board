@@ -20,7 +20,7 @@
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
-| `WEB-WO-003` | WORKER_WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
+| `WEB-WO-003` | WORKER_WEB | DISPATCHED | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; WEB-PARITY-004 approved; dispatched on base `9db741f` |
 | `MEDIA-PREFLIGHT-004` | WORKER_MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
 | `MEDIA-E2E-003` | WORKER_MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
@@ -152,6 +152,9 @@
   真实 API、五组浏览器 parity、diff 与 forbidden-pattern gates 均通过，且报告记录十张截图的目视核验与
   临时进程清理。PM 据此批准任务。M1 仍需要既有后续任务 `WEB-WO-003`；本 review-only 事件不派发它，
   留待独立 PM dispatch 事件处理。
+- `WEB-WO-003` 的前置 `CORE-WO-003` 与同 Owner P0 `WEB-PARITY-004` 均已批准；PM 固定 base
+  `9db741f` 并置为 `DISPATCHED`，交由受监督 Worker dispatcher 异步执行。该任务直接服务 M1 的
+  人工可读 Work Order 面，完成后仍需 Tester 证据与 PM 决策；暂不生成后续任务。
 
 ## 队列规则
 

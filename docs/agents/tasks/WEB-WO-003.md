@@ -1,12 +1,12 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WORKER_WEB
-- Status: READY
+- Status: DISPATCHED
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
 - Branch: `feat/mountain-webui-surface-parity`
-- Base commit: dispatch 时由 PM 固定
+- Base commit: `9db741f`
 
 ## Goal
 
