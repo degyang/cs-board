@@ -88,7 +88,7 @@ class PMEventProbeTest(unittest.TestCase):
     def test_completed_agent_is_retained_until_idle_timeout(self) -> None:
         self.write_status(["| `DONE-1` | DONE | APPROVED | pending | abc | accepted |"])
         (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": {
-            "PM": {"transport": "codex_cli", "thread": "pm"},
+            "PM": {"transport": "codex_exec", "thread": "pm"},
             "REVIEWER": {"transport": "codex_exec"},
             "DONE": {"transport": "codex_exec"},
         }}))
@@ -110,7 +110,7 @@ class PMEventProbeTest(unittest.TestCase):
             "| `WEB-1` | WEB | READY | pending | pending | pending |",
         ])
         agents = {name: {"transport": "codex_exec"} for name in ("A", "B", "WEB", "X")}
-        agents.update({"PM": {"transport": "codex_cli"}, "REVIEWER": {"transport": "codex_exec"}})
+        agents.update({"PM": {"transport": "codex_exec"}, "REVIEWER": {"transport": "codex_exec"}})
         (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": agents}))
         (self.root / ".agents/coordination/policy.json").write_text(json.dumps({
             "max_registered_agents": 5, "idle_retention_seconds": 600,
@@ -291,7 +291,7 @@ class PMEventProbeTest(unittest.TestCase):
     def test_wrapper_does_not_call_model_when_there_is_no_event(self) -> None:
         self.write_status(["| `CORE-1` | CORE | APPROVED | pending | abc | accepted |"])
         (self.root / ".agents/coordination/agents.json").write_text(
-            json.dumps({"agents": {"PM": {"transport": "codex_cli", "thread": "real-looking-uuid"}}}),
+            json.dumps({"agents": {"PM": {"transport": "codex_exec"}}}),
             encoding="utf-8",
         )
         fake_bin = self.root / "fake-bin"
@@ -313,7 +313,7 @@ class PMEventProbeTest(unittest.TestCase):
     def test_wrapper_failure_does_not_ack_event(self) -> None:
         self.write_status(["| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |"])
         (self.root / ".agents/coordination/agents.json").write_text(
-            json.dumps({"agents": {"PM": {"transport": "codex_cli", "thread": "real-looking-uuid"}}}),
+            json.dumps({"agents": {"PM": {"transport": "codex_exec"}}}),
             encoding="utf-8",
         )
         fake_bin = self.root / "fake-bin"
@@ -334,7 +334,7 @@ class PMEventProbeTest(unittest.TestCase):
     def test_wrapper_success_does_not_ack_unchanged_event(self) -> None:
         self.write_status(["| `CORE-1` | CORE | PM_DECISION | pending | abc | pending |"])
         (self.root / ".agents/coordination/agents.json").write_text(
-            json.dumps({"agents": {"PM": {"transport": "codex_cli", "thread": "real-looking-uuid"}}}),
+            json.dumps({"agents": {"PM": {"transport": "codex_exec"}}}),
             encoding="utf-8",
         )
         fake_bin = self.root / "fake-bin"

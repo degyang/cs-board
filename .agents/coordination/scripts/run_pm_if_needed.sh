@@ -45,8 +45,8 @@ print(pm.get("thread", ""))
 PY
 )
 
-if [[ "${registration[0]}" != "codex_cli" || -z "${registration[1]}" ]]; then
-  printf '{"state":"not-configured","reason":"PM is not a registered codex_cli session"}\n' >"$runtime/pm-scheduler.json"
+if [[ "${registration[0]}" != "codex_exec" ]]; then
+  printf '{"state":"not-configured","reason":"PM is not registered for bounded codex_exec"}\n' >"$runtime/pm-scheduler.json"
   exit 0
 fi
 
@@ -58,7 +58,8 @@ prompt="$prompt Worker execution is owned exclusively by dispatch_cli_agent.sh a
 prompt="$prompt A retire-agent action is executable policy: recheck that the non-protected owner has only terminal tasks, no active service/lease, and exceeded the reported retention. Then remove only its current registry entry and transient runtime, preserve all history, commit and push. Under capacity pressure process the oldest timed-out candidate first."
 
 if timeout --signal=TERM --kill-after=5s 60s \
-  "$codex_bin" exec resume --dangerously-bypass-approvals-and-sandbox "${registration[1]}" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
+  "$codex_bin" exec --dangerously-bypass-approvals-and-sandbox --model gpt-5.6-terra \
+  -c model_reasoning_effort=medium -C "$project_root" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
   signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
   remaining="$(python3 "$probe" probe --project "$project_root" --max-actions 1)"
   remaining_signature="$(python3 -c 'import json,sys; data=sys.stdin.read().strip(); print(json.loads(data)["signature"] if data else "")' <<<"$remaining")"
