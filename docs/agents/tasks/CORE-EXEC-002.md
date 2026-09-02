@@ -1,7 +1,7 @@
 # CORE-EXEC-002：执行计划成为运行决策源
 
 - Owner: CORE
-- Status: CHANGES_REQUESTED
+- Status: APPROVED
 - Attempt: 2（返工）
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
 - Branch: `feat/mountain-assets-settings-backend`
@@ -72,3 +72,8 @@ git diff --check a5d5938...HEAD
 ```
 
 完成后更新原报告，追加 attempt 2 的提交、测试和 `rg` 证据；提交并推送后，直接唤醒注册表中的 PM `/root/pm`。停止，不领取新任务。
+
+## Final review
+
+Attempt 2 delivery `e1bc3d5` 已由 PM 独立复核并批准，最终裁决见
+`docs/agents/reviews/CORE-EXEC-002.md`。批准只覆盖本任务，不构成合并授权。

@@ -7,18 +7,20 @@
 | `BASELINE-WEB-001` | WEB | APPROVED | `docs/agents/tasks/BASELINE-WEB-001.md` | `docs/agents/reports/BASELINE-WEB-001.md` | PM accepted |
 | `BASELINE-CORE-001` | CORE | APPROVED | `docs/agents/tasks/BASELINE-CORE-001.md` | `docs/agents/reports/BASELINE-CORE-001.md` | PM accepted |
 | `BASELINE-MEDIA-001` | MEDIA | APPROVED | `docs/agents/tasks/BASELINE-MEDIA-001.md` | `docs/agents/reports/BASELINE-MEDIA-001.md` | PM accepted |
-| `CORE-EXEC-002` | CORE | CHANGES_REQUESTED | `docs/agents/tasks/CORE-EXEC-002.md` | `ea7b54f` | `docs/agents/reviews/CORE-EXEC-002.md` |
+| `CORE-EXEC-002` | CORE | APPROVED | `docs/agents/tasks/CORE-EXEC-002.md` | `e1bc3d5` | `docs/agents/reviews/CORE-EXEC-002.md` |
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
-| `CORE-WO-003` | CORE | BACKLOG | `docs/agents/tasks/CORE-WO-003.md` | pending | blocked by CORE-EXEC-002 + MEDIA-WO-002 |
+| `CORE-WO-003` | CORE | DISPATCHED | `docs/agents/tasks/CORE-WO-003.md` | pending | dependencies approved; dispatched |
+| `WEB-INTAKE-003` | WEB | DISPATCHED | `docs/agents/tasks/WEB-INTAKE-003.md` | pending | independent pre-run browser E2E |
+| `MEDIA-SKILLS-003` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | pending | independent Skills contract automation |
 | `WEB-WO-003` | WEB | BACKLOG | `docs/agents/tasks/WEB-WO-003.md` | pending | blocked by CORE-WO-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 
 ## 当前决策
 
-- `CORE-EXEC-002` 进入 attempt 2，仅纠正 CLI 仍索取旧参数、构造无效 adapter 的问题；既有执行计划实现与已通过测试必须保留。
-- `MEDIA-WO-002` 契约已批准，但不合并；后续 CORE 实现任务仍需等待 `CORE-EXEC-002` 批准。
-- PM 已提前建立三项依赖队列。依赖未满足的任务保持 `BACKLOG`，不得派发或改成 `READY`。
+- `CORE-EXEC-002` attempt 2 已批准；`CORE-WO-003` 的两个依赖均满足并已派发。
+- `MEDIA-WO-002` 契约已批准但未合并；CORE 通过固定 commit/path 只读消费该契约，不改写其产品语义。
+- WEB 与 MEDIA 各增加一个不依赖 Work Order 生产 DTO 的真实并行切片；它们不改变原三个 BACKLOG 的依赖关系。
 - PM 协调线程为 `/root/pm`。Worker 完成后必须按注册表直接唤醒 PM，而不是只通知 `/root` 或等待用户追问。
 
 ## 队列规则

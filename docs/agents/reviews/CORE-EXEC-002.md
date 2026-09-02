@@ -3,7 +3,7 @@
 - Reviewer: PM (`/root/pm`)
 - Delivery: `ea7b54f`
 - Base: `a5d5938`
-- Verdict: **CHANGES_REQUESTED**
+- Final verdict: **APPROVED**
 - Next attempt: 2
 
 ## 已验证
@@ -41,3 +41,15 @@ subprocess 行为测试。不得推翻已通过的 Application/API 实现，不�
 
 rg -n -- '--script|--reference|--tts-url|--tts-mode|IndexTTSAdapter|WhisperAlignmentAdapter|FFmpegMediaAdapter' cli/csboard.py
 ```
+
+## Attempt 2 final review
+
+- Delivery: `e1bc3d5`（code commit `e6349e9` + report commit）；
+- diff 仅涉及 `cli/csboard.py`、`tests/test_cli_csboard.py` 和原交付报告；
+- `stage run --help` 仅保留 `--task`、`--run`、`--stage`、`--events`；
+- 六个规范 Stage 统一走 persisted-plan dispatch；`clone-voice` 不再要求第二份 reference；
+- stage dispatch 中未使用的 IndexTTS、Whisper、Whiteboard、FFmpeg adapter 构造已移除；
+- 独立定向门禁：`106 passed, 2 warnings`；`git diff --check` 通过。
+
+Attempt 1 的问题和证据保留在上文；attempt 2 已完成有界纠偏，没有进入 Work Order 或 WebUI。
+本裁决不授权合并。
