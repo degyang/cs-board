@@ -2,7 +2,7 @@
   "schema_version": 1,
   "max_registered_agents": 7,
   "idle_retention_seconds": 600,
-  "protected_roles": ["CEO", "PM", "WEB_TESTER", "CORE_TESTER"],
+  "protected_roles": ["CEO", "PM", "TESTER_WEB", "TESTER_CORE"],
   "workflow": ["READY", "WORKING", "TESTING", "PM_DECISION", "APPROVED"],
   "dynamic_tester_retention_seconds": 600,
   "stale_work_seconds": 600,

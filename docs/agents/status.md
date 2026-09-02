@@ -5,24 +5,24 @@
 
 | Task | Owner | Status | Contract | Delivery | Review |
 | --- | --- | --- | --- | --- | --- |
-| `BASELINE-WEB-001` | WEB | APPROVED | `docs/agents/tasks/BASELINE-WEB-001.md` | `docs/agents/reports/BASELINE-WEB-001.md` | PM accepted |
-| `BASELINE-CORE-001` | CORE | APPROVED | `docs/agents/tasks/BASELINE-CORE-001.md` | `docs/agents/reports/BASELINE-CORE-001.md` | PM accepted |
-| `BASELINE-MEDIA-001` | MEDIA | APPROVED | `docs/agents/tasks/BASELINE-MEDIA-001.md` | `docs/agents/reports/BASELINE-MEDIA-001.md` | PM accepted |
-| `CORE-EXEC-002` | CORE | APPROVED | `docs/agents/tasks/CORE-EXEC-002.md` | `e1bc3d5` | `docs/agents/reviews/CORE-EXEC-002.md` |
-| `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
+| `BASELINE-WEB-001` | WORKER_WEB | APPROVED | `docs/agents/tasks/BASELINE-WEB-001.md` | `docs/agents/reports/BASELINE-WEB-001.md` | PM accepted |
+| `BASELINE-CORE-001` | WORKER_CORE | APPROVED | `docs/agents/tasks/BASELINE-CORE-001.md` | `docs/agents/reports/BASELINE-CORE-001.md` | PM accepted |
+| `BASELINE-MEDIA-001` | WORKER_MEDIA | APPROVED | `docs/agents/tasks/BASELINE-MEDIA-001.md` | `docs/agents/reports/BASELINE-MEDIA-001.md` | PM accepted |
+| `CORE-EXEC-002` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-EXEC-002.md` | `e1bc3d5` | `docs/agents/reviews/CORE-EXEC-002.md` |
+| `MEDIA-WO-002` | WORKER_MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
-| `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | APPROVED | `docs/agents/tasks/WEB-INTAKE-003.md` | `51656c9` | `docs/agents/reviews/WEB-INTAKE-003.md` |
-| `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
-| `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
+| `CORE-WO-003` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
+| `WEB-INTAKE-003` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-INTAKE-003.md` | `51656c9` | `docs/agents/reviews/WEB-INTAKE-003.md` |
+| `MEDIA-SKILLS-003` | WORKER_MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
+| `CORE-CAP-004` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
-| `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
-| `WEB-PARITY-004` | WEB | DISPATCHED | `docs/agents/tasks/WEB-PARITY-004.md` | `cdda872` | attempt 3 verifier legacy `/projects` removal dispatched |
+| `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
+| `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
+| `WEB-PARITY-004` | WORKER_WEB | TEST_READY | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | attempt 3 delivered; awaits TESTER_WEB |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
-| `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
-| `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
+| `WEB-WO-003` | WORKER_WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
+| `MEDIA-PREFLIGHT-004` | WORKER_MEDIA | BLOCKED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `4610cbb` | full suite repeats exit 124 at input/start boundary; needs separate runtime diagnosis |
+| `MEDIA-E2E-003` | WORKER_MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
 ## 当前决策
@@ -142,6 +142,9 @@
   证据与工程门禁均通过，唯一缺口是 verifier 源码新增 `/projects` 字面量触发 forbidden scan。CEO 记录
   仅移除 verifier legacy 引用的 bounded attempt 3；本轮提交 `DISPATCHED` 后仅调用 supervised Worker
   dispatcher，沿用 `gpt-5.6-luna + medium`，不等待门禁。`WEB-WO-003` 不得越过。
+- `WEB-PARITY-004` attempt 3 实现 `9a6ec6c` 与报告交付 `9db741f` 已提交推送，分支无 tracked 脏改；
+  legacy `record-review-ready` 事件按最新五泳道约定登记为 `TEST_READY`，等待 WEB_TESTER 独立验证。
+  PM 不运行长门禁、不预标 Tester，`WEB-WO-003` 继续等待。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

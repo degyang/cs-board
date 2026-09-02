@@ -21,7 +21,8 @@
       "reasoning_effort": "medium",
       "capabilities": ["planning", "task-contracts", "final-review", "integration"]
     },
-    "WEB_TESTER": {
+    "TESTER_WEB": {
+      "display_name": "tester_web",
       "role_type": "tester",
       "domain": "web",
       "transport": "codex_exec",
@@ -32,7 +33,8 @@
       "reasoning_effort": "medium",
       "capabilities": ["browser-e2e", "visual-evidence", "frontend-gates"]
     },
-    "CORE_TESTER": {
+    "TESTER_CORE": {
+      "display_name": "tester_core",
       "role_type": "tester",
       "domain": "core",
       "transport": "codex_exec",
@@ -43,7 +45,8 @@
       "reasoning_effort": "medium",
       "capabilities": ["backend-tests", "cli-subprocess", "runtime-gates"]
     },
-    "WEB": {
+    "WORKER_WEB": {
+      "display_name": "worker_web",
       "role_type": "worker",
       "transport": "codex_exec",
       "thread": "systemd:cs-board-agent-web.service",
@@ -53,7 +56,19 @@
       "reasoning_effort": "medium",
       "capabilities": ["webui", "frontend-contracts", "browser-evidence"]
     },
-    "MEDIA": {
+    "WORKER_CORE": {
+      "display_name": "worker_core",
+      "role_type": "worker",
+      "transport": "codex_exec",
+      "thread": "systemd:cs-board-agent-worker-core.service",
+      "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend",
+      "branch": "feat/mountain-assets-settings-backend",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["backend", "cli", "repository", "runtime"]
+    },
+    "WORKER_MEDIA": {
+      "display_name": "worker_media",
       "role_type": "worker",
       "transport": "codex_exec",
       "thread": "systemd:cs-board-agent-media.service",

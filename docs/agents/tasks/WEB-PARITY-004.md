@@ -1,7 +1,7 @@
 # WEB-PARITY-004：WebUI 原型逐页对齐审计与修复
 
-- Owner: WEB
-- Status: DISPATCHED
+- Owner: WORKER_WEB
+- Status: TEST_READY
 - Priority: P0
 - Depends on: `WEB-INTAKE-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -149,3 +149,14 @@ WEB 分支已推送且报告记录全部契约门禁正常退出；本节只登�
 门禁。不得修改 prototype、backend、Work Order 或领取 `WEB-WO-003`。
 
 - Attempt 3 dispatch state: `DISPATCHED`
+
+## Attempt 3 test handoff
+
+- Implementation: `9a6ec6c`
+- Delivery: `9db741f`
+- Report: `docs/agents/reports/WEB-PARITY-004.md`
+- State: `TEST_READY`
+
+Worker 已提交并推送 verifier legacy route 有界纠正，分支无 tracked 脏改且与远端一致；报告记录全部
+契约门禁正常退出。本节只把交付送入 TESTER_WEB 验证泳道，不代表 PM、用户、发布或合并批准，也不释放
+同 Owner 的 `WEB-WO-003`。

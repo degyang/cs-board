@@ -13,7 +13,7 @@
 
 1. CEO 由 timer 短周期触发，只负责阶段目标、全局停滞、资源闲置与跨角色阻塞治理；不实现、不跑长门禁、不作任务验收。
 2. PM 根据 CEO 目标拆分和派发任务；Tester 交付证据进入审核泳道后，PM 只核对证据与范围，写最终状态并判断是否生成后续任务。
-3. WEB_TESTER 与 CORE_TESTER 为固定领域 Tester；其他领域按任务动态注册 Tester，完成后按超时与容量策略回收。
+3. `tester_web` 与 `tester_core` 为固定领域 Tester；`tester_media` 等其他领域 Tester 按任务动态注册，完成后按超时与容量策略回收。
 4. Tester 只运行门禁并提交 PASS、FAIL 或 BLOCKED 证据，不修改实现、不批准任务、不创建或派发任务。
 5. 唯一标准泳道为：待办 → 工作 → 验证 → 审核 → 已完成；不再设置独立 Reviewer 角色。
 6. Worker、Tester、PM、CEO 状态必须来自真实受监督进程；进程失败必须显示 blocked，不得以 idle 掩盖。

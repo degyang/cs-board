@@ -1,6 +1,6 @@
 # MEDIA-E2E-003：六阶段 Skills 手动执行闭环
 
-- Owner: MEDIA
+- Owner: WORKER_MEDIA
 - Status: BACKLOG
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`, `WEB-WO-003=APPROVED`, `MEDIA-PREFLIGHT-004=APPROVED`

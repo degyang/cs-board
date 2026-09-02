@@ -1,6 +1,6 @@
 # MEDIA-PREFLIGHT-004：真实媒体依赖 fail-closed 预检
 
-- Owner: MEDIA
+- Owner: WORKER_MEDIA
 - Status: BLOCKED
 - Priority: P0
 - Depends on: `MEDIA-SKILLS-003=APPROVED`
