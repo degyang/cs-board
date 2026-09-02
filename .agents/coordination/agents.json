@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "agents": {
+    "PM": {
+      "transport": "orchestrator",
+      "thread": "/root",
+      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
+      "branch": "integration/mountain-v2",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["planning", "review", "integration"]
+    },
+    "WEB": {
+      "transport": "orchestrator",
+      "thread": "/root/web",
+      "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity",
+      "branch": "feat/mountain-webui-surface-parity",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "medium",
+      "capabilities": ["webui", "frontend-contracts", "browser-evidence"]
+    },
+    "CORE": {
+      "transport": "orchestrator",
+      "thread": "/root/core",
+      "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend",
+      "branch": "feat/mountain-assets-settings-backend",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["domain", "api", "cli", "persistence", "telemetry"]
+    },
+    "MEDIA": {
+      "transport": "orchestrator",
+      "thread": "/root/media",
+      "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
+      "branch": "integration/mountain-v2",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "capabilities": ["skills", "tts", "illustration", "ffmpeg", "artifact-e2e"]
+    }
+  }
+}
