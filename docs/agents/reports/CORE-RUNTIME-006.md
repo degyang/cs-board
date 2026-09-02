@@ -84,3 +84,57 @@ Therefore this is not REVIEW_READY. The branch must remain `BLOCKED` until the
 task owner authorizes a zero-skip full-suite baseline or an in-scope resolution
 for the legacy/environment skips. At report commit and push, the worktree is
 clean.
+
+## Attempt 2 recovery — REVIEW_READY
+
+Recovery implementation commit: `4ab3867365068bc977ea1e330a5c7ce734e35212`
+(`test(mountain): restore executable zero-skip boundaries`). The recovery uses
+only the two test files explicitly authorized by the amended contract:
+
+- The four formerly class-skipped legacy stage assertions in
+  `tests/test_mountain_api.py` are now executable current `/api/v1` boundary
+  tests. They cover structured NotFound for an unknown task/run, and the real
+  stage/pipeline response for missing inputs (`ok: false` with a nested
+  `VALIDATION_ERROR`), without invoking a removed legacy route.
+- `tests/test_port_conformance.py` now constructs the existing
+  `OpenAITextAdapter` with its actual required `base_url` and asserts its
+  `TextModelPort` conformance. It no longer masks the stale
+  `OpenAICompatibleTextAdapter` class name as a missing-`httpx` skip.
+
+All gates were rerun in this attempt and exited normally:
+
+```text
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q \
+  tests/test_mountain_api.py tests/test_port_conformance.py
+23 passed in 2.26s
+
+env -u CSBOARD_ALLOW_PLAINTEXT_SECRETS timeout --signal=TERM --kill-after=5s 180s \
+  /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+exit 0 in 77.98s
+456 passed, 4 warnings, 3 subtests passed
+
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q \
+  tests/test_backend_runtime_17.py tests/test_mountain_server.py
+34 passed in 29.11s
+
+/mnt/d/workstation/projects/cs-board/.venv/bin/python \
+  scripts/smoke_real_backend_contract.py
+exit 0
+```
+
+The real-launcher smoke used a fresh encrypted data directory and port 46917.
+It observed health `ok`; successful reads for tasks, services, capabilities,
+settings, and assets via the contract checker/smoke table; and structured 404
+for an unknown API route. It confirmed launcher PID `264112` exited and deleted
+its temporary directory `/tmp/csboard-smoke-0vy3f_6h`. No launcher, uvicorn, or
+test child was left by the gate.
+
+```text
+git diff --check 7ac3cb0...HEAD
+exit 0
+```
+
+All acceptance criteria now hold: the suite exits under 180 seconds with zero
+failures and zero skips; the cold-launch/API/error/cleanup checks pass; and the
+previous hang root cause remains covered by the focused runtime suite. The
+worktree is clean after this report's delivery commit.
