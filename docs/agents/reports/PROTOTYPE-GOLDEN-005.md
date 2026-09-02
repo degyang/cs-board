@@ -3,7 +3,7 @@
 - Task / attempt: `PROTOTYPE-GOLDEN-005` / 1（初次）
 - Branch: `feat/mountain-prototype-golden`
 - Source baseline: `0f56e824c0d49ab5c090e7ea07086dc9d47f47a9`
-- Delivery commit: pending at report authoring; this report is committed with the delivery.
+- Delivery commit: `3c537725bb06ce2b2c4ecb01313ca2f034f24253`
 
 ## 交付内容
 
@@ -40,8 +40,8 @@ SHA-256 与 bytes。浏览器四类问题计数均为 `0`。
 | `npm --prefix prototypes/webui run build` | 0 | `tsc --noEmit` 和 `vite build` 均完成。 |
 | `node prototypes/webui/scripts/capture-golden.mjs` | 0 | 真实 Playwright Chromium 访问 5 个 prototype route，写入五张 golden 与 manifest。 |
 | `ss -ltn '( sport = :5182 )'` cleanup check | 0 | 捕获器退出后端口未监听；临时 Vite/Chromium 已清理。 |
-| `git diff --check 0f56e82...HEAD` | pending delivery commit | 提交后执行并记录。 |
-| `! git diff --name-only 0f56e82...HEAD \| rg '^web-v2/'` | pending delivery commit | 提交后执行并记录。 |
+| `git diff --check 0f56e82...HEAD` | 0 | 无空白错误。 |
+| `! git diff --name-only 0f56e82...HEAD \| rg '^web-v2/'` | 0 | 没有 `web-v2/` 改动。 |
 
 ## Reviewer handoff
 
