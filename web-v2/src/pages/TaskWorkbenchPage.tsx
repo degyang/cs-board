@@ -496,8 +496,8 @@ export function TaskWorkbenchPage() {
                 </article>
               )
             })}
-            {stages.filter((stage) => !STAGE_KEYS.includes(stage.stage as StageKey)).map((stage) => (
-              <article key={`unknown-${stage.stage}`} className="stage-contract-card" style={{ padding: '14px 0' }}>
+            {stages.filter((stage) => !STAGE_KEYS.includes(stage.stage as StageKey)).map((stage, index) => (
+              <article key={`unknown-${stage.stage}-${index}`} className="stage-contract-card" style={{ padding: '14px 0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <StatusBadge status={stage.status || 'unknown'} />
                   <strong>未知阶段</strong>
