@@ -92,6 +92,17 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(actions[0]["reason"], "heartbeat_expired")
         self.assertEqual(actions[1]["kind"], "dispatch")
 
+    def test_coordinator_task_never_starves_worker_review(self) -> None:
+        self.write_status(
+            [
+                "| `CEO-RECOVERY-1` | PM | IN_PROGRESS | pending | pending | pending |",
+                "| `WEB-1` | WEB | REVIEW_READY | pending | abc | pending |",
+            ]
+        )
+        self.write_runtime("PM", task_id="CEO-RECOVERY-1", heartbeat_at="2026-09-02T03:00:00Z")
+        actions = json.loads(self.probe())["actions"]
+        self.assertEqual(actions, [{"kind": "review", "task_id": "WEB-1", "owner": "WEB", "status": "REVIEW_READY"}])
+
     def test_missing_runtime_emits_recovery(self) -> None:
         self.write_status(["| `CORE-1` | CORE | IN_PROGRESS | pending | pending | pending |"])
         action = json.loads(self.probe())["actions"][0]

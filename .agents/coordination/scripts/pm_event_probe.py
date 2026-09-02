@@ -33,6 +33,7 @@ def read_tasks(root: Path) -> dict[str, dict[str, str]]:
 
 ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "BLOCKED"}
 ACTION_ORDER = {"recover-stale": 0, "review": 1, "promote-ready": 2, "dispatch": 3}
+COORDINATOR_OWNERS = {"PM"}
 
 
 def parse_instant(value: str) -> datetime | None:
@@ -73,7 +74,7 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
     busy_owners = {task["owner"] for task in tasks.values() if task["status"] in ACTIVE_STATUSES}
     actions: list[dict[str, object]] = []
     for task in tasks.values():
-        if task["status"] == "IN_PROGRESS":
+        if task["status"] == "IN_PROGRESS" and task["owner"] not in COORDINATOR_OWNERS:
             reason = recovery_reason(root, task, current_time, lease_seconds)
             if reason:
                 actions.append({"kind": "recover-stale", "reason": reason, **task})
