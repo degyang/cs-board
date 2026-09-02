@@ -1,6 +1,6 @@
 # MEDIA-PREFLIGHT-004 delivery report
 
-- Status: REVIEW_READY
+- Status: BLOCKED
 - Implementation commit: `d9f3a414ece4ae9320df618f8f28d9838aa24508`
 - Branch: `feat/mountain-media-work-orders` (pushed with delivery commit)
 - Scope: fail-closed, no-payload media dependency preflight only. No Stage Work Order or stage chain was run.
@@ -30,3 +30,25 @@ No service was started or stopped. The temporary artifact check cleaned its work
 ## Known gap
 
 Live media readiness is not green. In particular, the configured local IndexTTS endpoint did not respond, the local Whisper model is absent, and the resolved FFmpeg/ffprobe version commands returned nonzero. `MEDIA-E2E-003` must remain undispatched until a fresh live preflight is fully ready.
+
+## Attempt 2 correction and gate evidence
+
+- Added an independent real controlled-server HTTP 404 case. It asserts the
+  distinct `HTTP_404` reason code and a nonzero CLI exit, alongside the
+  existing HTTP 503 coverage.
+- Focused preflight gate: exit 0; `6 passed` with no skips.
+- Skill-contract validation: exit 0.
+- Live preflight: exit 1, as an environment-readiness result. The observed
+  reason codes were `VERSION_FAILED` (FFmpeg and ffprobe), `HTTP_TIMEOUT`
+  (IndexTTS), and `MODEL_PATH_NOT_FOUND` (Whisper model); Node, both entries,
+  and temporary-artifact cleanup were ready.
+- Full-suite gate was run with the required 180-second TERM/KILL cleanup-only
+  watchdog and exited 124. It was still executing
+  `test_inputs_and_start_boundary` at 50% when the watchdog ended it. This is
+  not normal-exit evidence and prevents `REVIEW_READY`; the watchdog was not
+  used as a passing result. No preflight HTTP, Node, or Python child remained
+  after cleanup.
+
+The correction is limited to the preflight focused test and this report. The
+full-suite timeout is outside this task's permitted change surfaces and needs
+PM direction before any broader diagnosis or fix.

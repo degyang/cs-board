@@ -111,6 +111,15 @@ class MediaPreflightTest(unittest.TestCase):
             self.assertIn("HTTP_503", reasons)
             self.assertIn("MODEL_PATH_NOT_FOUND", reasons)
 
+    def test_controlled_http_4xx_fails_closed_with_distinct_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as raw, _server(status=404) as endpoint:
+            directory = Path(raw)
+            root, data = self._layout(directory, endpoint)
+            completed = self._command(root, data, self._bins(directory))
+            self.assertNotEqual(completed.returncode, 0)
+            reasons = {item["reason_code"] for item in json.loads(completed.stdout)["items"]}
+            self.assertIn("HTTP_404", reasons)
+
     def test_silent_http_and_injected_artifact_failure_leave_no_residue(self) -> None:
         with tempfile.TemporaryDirectory() as raw, _server(delay=0.3) as endpoint:
             directory = Path(raw)
