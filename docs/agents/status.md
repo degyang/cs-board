@@ -177,6 +177,10 @@
   未变：必须先恢复 `dispatch_cli_agent.sh` 及 `run_worker_agent.sh` 的受监督 wrapper。该依赖恢复前不创建
   重复诊断任务、不派发 `WORKER_CORE`，并保持 `CORE-RUNTIME-007`、`MEDIA-PREFLIGHT-004` 与
   `MEDIA-E2E-003` 为 `BLOCKED`。
+- `CORE-RUNTIME-007` 收到 `resolve-blocker` 事件 `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`；
+  PM 依据任务契约中的外部依赖记录确认唯一恢复动作仍是恢复 `dispatch_cli_agent.sh` 与
+  `run_worker_agent.sh` 的受监督 wrapper。依赖未恢复前不创建重复任务、不派发 `WORKER_CORE`，并保持
+  `CORE-RUNTIME-007`、`MEDIA-PREFLIGHT-004` 与 `MEDIA-E2E-003` 为 `BLOCKED`。
 
 ## 队列规则
 
