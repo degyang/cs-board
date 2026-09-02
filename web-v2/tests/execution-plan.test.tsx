@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, waitFor, within, act } from '@testing-library/react'
+import { StrictMode } from 'react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { TaskWorkbenchPage, STAGE_CONTRACTS } from '../src/pages/TaskWorkbenchPage'
@@ -73,6 +74,12 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
+async function flushAsync() {
+  await act(async () => {
+    for (let i = 0; i < 8; i += 1) await Promise.resolve()
+  })
+}
+
 describe('TaskWorkbenchPage manual six-stage baseline', () => {
   beforeEach(() => {
     vi.mocked(fetchTask).mockResolvedValue(task)
@@ -138,6 +145,29 @@ describe('TaskWorkbenchPage manual six-stage baseline', () => {
     taskBRequest.resolve(taskB)
     await screen.findByText('任务 B')
     expect(screen.queryByText('任务 A')).toBeNull()
+  })
+
+  it.each(['resolve', 'reject'] as const)('keeps B visible when pending A later %s', async (outcome) => {
+    const taskA = { ...task, task: { ...task.task, task_id: 'task-a', title: '任务 A pending' } }
+    const taskB = { ...task, task: { ...task.task, task_id: 'task-b', title: '任务 B 完成' }, active_run: null, stages: [], artifacts: [] }
+    const aRequest = deferred<TaskDetail>()
+    const bRequest = deferred<TaskDetail>()
+    vi.mocked(fetchTask).mockImplementation((id) => id === 'task-a' ? aRequest.promise : bRequest.promise)
+    render(
+      <MemoryRouter initialEntries={['/tasks/task-a']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Route path="/tasks/:taskId" element={<><NavigateTo taskId="task-b" /><TaskWorkbenchPage /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.setup().click(screen.getByRole('button', { name: '切换任务' }))
+    bRequest.resolve(taskB)
+    await screen.findByText('任务 B 完成')
+    if (outcome === 'resolve') aRequest.resolve(taskA)
+    else aRequest.reject(new Error('late A task failure'))
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(screen.getByText('任务 B 完成')).toBeInTheDocument()
+    expect(screen.queryByText(/任务 A pending|late A task failure/)).toBeNull()
   })
 
   it('keeps every A marker out of the B page while B is pending and after it completes', async () => {
@@ -215,6 +245,78 @@ describe('TaskWorkbenchPage manual six-stage baseline', () => {
     expect(screen.queryByText(/late A/)).toBeNull()
   })
 
+  it('ignores every late A resource success after B has completed', async () => {
+    const taskA = { ...task, task: { ...task.task, task_id: 'task-a', title: '任务 A 资源延迟' }, active_run: { ...task.active_run!, run_id: 'run-a' } }
+    const taskB = { ...task, task: { ...task.task, task_id: 'task-b', title: '任务 B 资源完成' }, active_run: { ...task.active_run!, run_id: 'run-b' }, artifacts: [{ artifact_key: 'artifact-b', relative_path: 'b', sha256: 'b', size_bytes: 1, producer_stage: 'compose-video', status: 'succeeded' }] }
+    const aInputs = deferred<InputsReadback>()
+    const aUnits = deferred<{ items: Array<Record<string, unknown>> }>()
+    const aEvents = deferred<{ items: Record<string, unknown>[]; next_cursor: number }>()
+    const aLogs = deferred<{ items: Record<string, unknown>[] }>()
+    const bRequest = deferred<TaskDetail>()
+    vi.mocked(fetchTask).mockImplementation((id) => id === 'task-a' ? Promise.resolve(taskA) : bRequest.promise)
+    vi.mocked(fetchInputs).mockImplementation((id) => id === 'task-a' ? aInputs.promise : Promise.resolve({ ...inputs, task_id: 'task-b', inputs: { ...inputs.inputs!, script: '输入 B 保持' } }))
+    vi.mocked(fetchUnits).mockImplementation((id) => id === 'task-a' ? aUnits.promise : Promise.resolve({ items: [{ unit_id: 'unit-b', order: 0, text: '单元 B 保持' }] }))
+    vi.mocked(fetchEvents).mockImplementation((id) => id === 'task-a' ? aEvents.promise : Promise.resolve({ items: [{ event_type: '事件 B 保持', timestamp: '2026-09-02T00:00:00Z', sequence: 1 }], next_cursor: 1 }))
+    vi.mocked(fetchLogs).mockImplementation((id) => id === 'task-a' ? aLogs.promise : Promise.resolve({ items: [{ level: 'INFO', message: '日志 B 保持', timestamp: '2026-09-02T00:00:00Z' }] }))
+    render(
+      <MemoryRouter initialEntries={['/tasks/task-a']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Route path="/tasks/:taskId" element={<><NavigateTo taskId="task-b" /><TaskWorkbenchPage /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('任务 A 资源延迟')
+    await waitFor(() => {
+      expect(fetchInputs).toHaveBeenCalledWith('task-a')
+      expect(fetchUnits).toHaveBeenCalledWith('task-a', 'run-a')
+      expect(fetchEvents).toHaveBeenCalledWith('task-a', 'run-a', 0)
+      expect(fetchLogs).toHaveBeenCalledWith('task-a', 'run-a', undefined)
+    })
+    await userEvent.setup().click(screen.getByRole('button', { name: '切换任务' }))
+    bRequest.resolve(taskB)
+    await screen.findByText('任务 B 资源完成')
+    await screen.findByText('artifact-b')
+    await screen.findByText('单元 B 保持')
+    await screen.findByText('事件 B 保持')
+    await screen.findByText('日志 B 保持')
+    aInputs.resolve({ ...inputs, task_id: 'task-a', inputs: { ...inputs.inputs!, script: '输入 A 迟到' } })
+    aUnits.resolve({ items: [{ unit_id: 'unit-a', order: 0, text: '单元 A 迟到' }] })
+    aEvents.resolve({ items: [{ event_type: '事件 A 迟到', timestamp: '2026-09-02T00:00:00Z', sequence: 1 }], next_cursor: 1 })
+    aLogs.resolve({ items: [{ level: 'INFO', message: '日志 A 迟到', timestamp: '2026-09-02T00:00:00Z' }] })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(screen.getByText('任务 B 资源完成')).toBeInTheDocument()
+    expect(screen.queryByText(/输入 A 迟到|单元 A 迟到|事件 A 迟到|日志 A 迟到/)).toBeNull()
+  })
+
+  it('resets cursor, dedup, units, logs and artifacts for run-a to run-b with the same event sequence', async () => {
+    vi.useFakeTimers()
+    try {
+      const runA = { ...task, task: { ...task.task, title: '同任务 run-a' }, active_run: { ...task.active_run!, run_id: 'run-a', trace_id: 'trace-a', status: 'running' as const }, artifacts: [{ artifact_key: 'artifact-a', relative_path: 'a', sha256: 'a', size_bytes: 1, producer_stage: 'compose-video', status: 'succeeded' }] }
+      const runB = { ...task, task: { ...task.task, title: '同任务 run-b' }, active_run: { ...task.active_run!, run_id: 'run-b', trace_id: 'trace-b', status: 'running' as const }, artifacts: [{ artifact_key: 'artifact-b', relative_path: 'b', sha256: 'b', size_bytes: 1, producer_stage: 'compose-video', status: 'succeeded' }] }
+      vi.mocked(fetchTask).mockResolvedValueOnce(runA).mockResolvedValue(runB)
+      vi.mocked(fetchUnits).mockImplementation((_taskId, runId) => Promise.resolve({ items: [{ unit_id: runId, order: 0, text: `单元 ${runId}` }] }))
+      vi.mocked(fetchEvents).mockImplementation((_taskId, runId) => Promise.resolve({ items: [{ event_type: `事件 ${runId}`, timestamp: '2026-09-02T00:00:00Z', sequence: 1 }], next_cursor: 1 }))
+      vi.mocked(fetchLogs).mockImplementation((_taskId, runId) => Promise.resolve({ items: [{ level: 'INFO', message: `日志 ${runId}`, timestamp: '2026-09-02T00:00:00Z' }] }))
+      renderPage()
+      await flushAsync()
+      expect(screen.getByText('同任务 run-a')).toBeInTheDocument()
+      expect(screen.getByText('artifact-a')).toBeInTheDocument()
+      expect(screen.getByText('单元 run-a')).toBeInTheDocument()
+      expect(screen.getByText('事件 run-a')).toBeInTheDocument()
+      expect(screen.getByText('日志 run-a')).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      await flushAsync()
+      expect(screen.getByText('artifact-b')).toBeInTheDocument()
+      expect(screen.getByText('单元 run-b')).toBeInTheDocument()
+      expect(screen.getByText('事件 run-b')).toBeInTheDocument()
+      expect(screen.getByText('日志 run-b')).toBeInTheDocument()
+      expect(screen.queryByText(/artifact-a|单元 run-a|事件 run-a|日志 run-a/)).toBeNull()
+      expect(fetchEvents).toHaveBeenCalledWith('task-1', 'run-b', 0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('uses an unavailable status for missing stages instead of fabricating pending or attempt zero', async () => {
     vi.mocked(fetchTask).mockResolvedValue({ ...task, active_run: { ...task.active_run!, run_id: 'run-empty' }, stages: [] })
     renderPage()
@@ -223,42 +325,129 @@ describe('TaskWorkbenchPage manual six-stage baseline', () => {
     expect(screen.queryByText('attempt 0')).toBeNull()
   })
 
-  it('preserves every backend stage status, including waiting-review and cancellation', async () => {
+  it.each([
+    ['pending', '待执行', 0], ['running', '运行中', 0], ['waiting-external', 'waiting-external', 0],
+    ['waiting-review', 'waiting-review', 0], ['succeeded', '已成功', 1], ['failed', '失败', 0],
+    ['skipped', '已跳过', 0], ['stale', '已过期', 0], ['cancelled', '已取消', 0],
+  ] as const)('renders canonical %s status with attempt and completed count', async (status, label, completed) => {
     vi.mocked(fetchTask).mockResolvedValue({
       ...task,
       stages: [
-        { stage: 'generate-visual-anchors', status: 'pending', attempt: 0 },
-        { stage: 'clone-voice', status: 'running', attempt: 1 },
-        { stage: 'plan-storyboard', status: 'waiting-external', attempt: 1 },
-        { stage: 'generate-illustrations', status: 'waiting-review', attempt: 1 },
-        { stage: 'render-visuals', status: 'succeeded', attempt: 1 },
-        { stage: 'compose-video', status: 'failed', attempt: 2 },
+        { stage: 'generate-visual-anchors', status, attempt: 7 },
+        { stage: 'clone-voice', status: 'pending', attempt: 1 },
+        { stage: 'plan-storyboard', status: 'pending', attempt: 1 },
+        { stage: 'generate-illustrations', status: 'pending', attempt: 1 },
+        { stage: 'render-visuals', status: 'pending', attempt: 1 },
+        { stage: 'compose-video', status: 'pending', attempt: 1 },
         { stage: 'skipped-stage', status: 'skipped', attempt: 0 },
         { stage: 'stale-stage', status: 'stale', attempt: 0 },
         { stage: 'cancelled-stage', status: 'cancelled', attempt: 0 },
       ],
     })
     renderPage()
-    await screen.findByText('waiting-review')
-    for (const status of ['待执行', '运行中', 'waiting-external', 'waiting-review', '已成功', '失败', '已跳过', '已过期', '已取消']) {
-      expect(screen.getAllByText(status, { exact: true }).length).toBeGreaterThanOrEqual(1)
+    await screen.findByText('手动阶段工作台测试')
+    const firstCard = screen.getAllByRole('article')[0]
+    expect(within(firstCard).getByText(label, { exact: true })).toBeInTheDocument()
+    expect(within(firstCard).getByText('attempt 7', { exact: true })).toBeInTheDocument()
+    expect(screen.getByText(`${completed}/6`, { exact: true })).toBeInTheDocument()
+  })
+
+  it('keeps the five resource requests safe after unmount for independent late resolve/reject', async () => {
+    vi.useFakeTimers()
+    const inputRequest = deferred<InputsReadback>()
+    const unitsRequest = deferred<{ items: Array<Record<string, unknown>> }>()
+    const eventsRequest = deferred<{ items: Record<string, unknown>[]; next_cursor: number }>()
+    const logsRequest = deferred<{ items: Record<string, unknown>[] }>()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unhandled = vi.fn()
+    window.addEventListener('unhandledrejection', unhandled)
+    try {
+      vi.mocked(fetchTask).mockResolvedValue({ ...task, active_run: { ...task.active_run!, status: 'running' as const } })
+      vi.mocked(fetchInputs).mockReturnValue(inputRequest.promise)
+      vi.mocked(fetchUnits).mockReturnValue(unitsRequest.promise)
+      vi.mocked(fetchEvents).mockReturnValue(eventsRequest.promise)
+      vi.mocked(fetchLogs).mockReturnValue(logsRequest.promise)
+      const view = renderPage()
+      await flushAsync()
+      expect(screen.getByText('手动阶段工作台测试')).toBeInTheDocument()
+      expect(fetchInputs).toHaveBeenCalledWith('task-1')
+      expect(fetchUnits).toHaveBeenCalledWith('task-1', 'run-1')
+      expect(fetchEvents).toHaveBeenCalledWith('task-1', 'run-1', 0)
+      expect(fetchLogs).toHaveBeenCalledWith('task-1', 'run-1', undefined)
+      const timersBeforeUnmount = vi.getTimerCount()
+      view.unmount()
+      inputRequest.resolve(inputs)
+      unitsRequest.reject(new Error('late units failure'))
+      eventsRequest.resolve({ items: [], next_cursor: 0 })
+      logsRequest.reject(new Error('late logs failure'))
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); vi.runOnlyPendingTimers() })
+      expect(consoleError).not.toHaveBeenCalled()
+      expect(unhandled).not.toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+      expect(timersBeforeUnmount).toBeGreaterThanOrEqual(0)
+      expect(screen.queryByText('手动阶段工作台测试')).toBeNull()
+    } finally {
+      window.removeEventListener('unhandledrejection', unhandled)
+      consoleError.mockRestore()
+      vi.useRealTimers()
     }
   })
 
-  it('does not update state when task resources resolve or reject after unmount', async () => {
-    const taskRequest = deferred<TaskDetail>()
-    const inputRequest = deferred<InputsReadback>()
-    vi.mocked(fetchTask).mockReturnValue(taskRequest.promise)
-    vi.mocked(fetchInputs).mockReturnValue(inputRequest.promise)
-    vi.mocked(fetchCapabilities).mockReturnValue(new Promise(() => {}))
-    vi.mocked(fetchUnits).mockReturnValue(new Promise(() => {}))
-    vi.mocked(fetchEvents).mockReturnValue(new Promise(() => {}))
-    vi.mocked(fetchLogs).mockReturnValue(new Promise(() => {}))
-    const view = renderPage()
-    view.unmount()
-    taskRequest.resolve(task)
-    inputRequest.reject(new Error('late input failure'))
-    await Promise.resolve()
-    expect(screen.queryByText('手动阶段工作台测试')).toBeNull()
+  it('stops task and resource polling after terminal response, including StrictMode repeat render', async () => {
+    vi.useFakeTimers()
+    try {
+      const running = { ...task, active_run: { ...task.active_run!, status: 'running' as const } }
+      const terminal = { ...task, active_run: { ...task.active_run!, status: 'succeeded' as const } }
+      vi.mocked(fetchTask).mockResolvedValueOnce(running).mockResolvedValueOnce(terminal)
+      const view = render(
+        <StrictMode><MemoryRouter initialEntries={['/tasks/task-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Routes future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Route path="/tasks/:taskId" element={<TaskWorkbenchPage />} /></Routes></MemoryRouter></StrictMode>,
+      )
+      await flushAsync()
+      expect(screen.getByText('手动阶段工作台测试')).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      await flushAsync()
+      expect(screen.getAllByText('已成功').length).toBeGreaterThanOrEqual(1)
+      const countsAtTerminal = [fetchTask, fetchUnits, fetchEvents, fetchLogs].map((fn) => vi.mocked(fn).mock.calls.length)
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+      expect([fetchTask, fetchUnits, fetchEvents, fetchLogs].map((fn) => vi.mocked(fn).mock.calls.length)).toEqual(countsAtTerminal)
+      view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not reschedule a resource request that completes after terminal polling stops', async () => {
+    vi.useFakeTimers()
+    const unitsRequest = deferred<{ items: Array<Record<string, unknown>> }>()
+    const eventsRequest = deferred<{ items: Record<string, unknown>[]; next_cursor: number }>()
+    const logsRequest = deferred<{ items: Record<string, unknown>[] }>()
+    try {
+      const running = { ...task, active_run: { ...task.active_run!, status: 'running' as const } }
+      const terminal = { ...task, active_run: { ...task.active_run!, status: 'succeeded' as const } }
+      vi.mocked(fetchTask).mockResolvedValueOnce(running).mockResolvedValueOnce(terminal)
+      vi.mocked(fetchUnits).mockReturnValue(unitsRequest.promise)
+      vi.mocked(fetchEvents).mockReturnValue(eventsRequest.promise)
+      vi.mocked(fetchLogs).mockReturnValue(logsRequest.promise)
+      renderPage()
+      await flushAsync()
+      expect(screen.getByText('手动阶段工作台测试')).toBeInTheDocument()
+      expect(fetchUnits).toHaveBeenCalledTimes(1)
+      expect(fetchEvents).toHaveBeenCalledTimes(1)
+      expect(fetchLogs).toHaveBeenCalledTimes(1)
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      await flushAsync()
+      expect(screen.getAllByText('已成功').length).toBeGreaterThanOrEqual(1)
+      unitsRequest.resolve({ items: [] })
+      eventsRequest.reject(new Error('late events after terminal'))
+      logsRequest.resolve({ items: [] })
+      await flushAsync()
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+      expect(fetchTask).toHaveBeenCalledTimes(2)
+      expect(fetchUnits).toHaveBeenCalledTimes(1)
+      expect(fetchEvents).toHaveBeenCalledTimes(1)
+      expect(fetchLogs).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
