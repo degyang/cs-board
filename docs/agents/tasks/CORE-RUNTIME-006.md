@@ -1,7 +1,7 @@
 # CORE-RUNTIME-006：后端全量门禁、冷启动边界与进程清理
 
 - Owner: CORE
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `CORE-CAP-005=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-core-cap-repair`
@@ -76,3 +76,12 @@ PM；若真实环境或缺陷阻止正常门禁，置为 `BLOCKED` 并提交可�
   类名的测试改为当前 `OpenAITextAdapter` 构造和 Protocol 断言，不得用 ImportError 吞掉产品回归。
 - 完成条件：重新运行全部原 Gates，只有全量正常 exit 0、0 failed、0 skipped 才能交付。
 - Dispatch state: `DISPATCHED`（返工 attempt 2）。
+
+## Attempt 2 review handoff
+
+- Implementation: `4ab3867`
+- Delivery: `eb1a248`
+- Report: `docs/agents/reports/CORE-RUNTIME-006.md`
+- State: `REVIEW_READY`
+
+Worker 已提交并推送有界 zero-skip 返工，分支干净且与远端一致；本节只记录独立评审交接，不代表 CEO 批准。
