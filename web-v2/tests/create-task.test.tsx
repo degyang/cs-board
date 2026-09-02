@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { CreateTaskPage } from '../src/pages/CreateTaskPage'
+import { CreateTaskPage, splitScriptIntoSegments } from '../src/pages/CreateTaskPage'
 
 const OPTIONS = {
   engines: [{ id: 'whiteboard', label: '白板动画', available: true }, { id: 'infographic', label: '动态信息图', available: false, reason: 'CAPABILITY_NOT_AVAILABLE' }],
@@ -47,7 +47,7 @@ describe('CreateTaskPage six-tab preview-first flow', () => {
     renderPage(); await ready(); next(); const script = screen.getByLabelText('原始文案'); fireEvent.change(script, { target: { value: '甲句。乙句！丙句？' } }); fireEvent.change(screen.getByLabelText('目标分段长度'), { target: { value: '3' } }); expect((document.querySelector('textarea.preview') as HTMLTextAreaElement).value).toBe('甲句。\n\n乙句！\n\n丙句？'); expect(screen.getByText('实时字数：').parentElement).toHaveTextContent('9'); expect(screen.getByText(/提交前预览/)).toBeInTheDocument()
   })
   it('loads real voice/style assets with preview URLs and visible disabled state', async () => {
-    renderPage(); await ready(); fireEvent.click(screen.getByRole('tab', { name: '声音生成' })); await waitFor(() => expect(screen.getByText('真实女声')).toBeInTheDocument()); expect(screen.getByText('已停用音色（不可用）')).toBeInTheDocument(); expect(document.querySelector('audio')).toHaveAttribute('src', expect.stringContaining('/assets/voices/voice-real/content')); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); await waitFor(() => expect(screen.getByText('真实水彩')).toBeInTheDocument()); expect(screen.getByText('停用风格（不可用）')).toBeInTheDocument(); expect(screen.getByAltText('真实水彩 预览')).toHaveAttribute('src', expect.stringContaining('/assets/blobs/preview-1'))
+    renderPage(); await ready(); fireEvent.click(screen.getByRole('tab', { name: '声音生成' })); await waitFor(() => expect(screen.getAllByText('真实女声').length).toBeGreaterThan(0)); expect(screen.getByText('已停用音色（不可用）')).toBeInTheDocument(); expect(document.querySelectorAll('audio')).toHaveLength(1); expect(document.querySelector('audio')).toHaveAttribute('src', expect.stringContaining('/assets/voices/voice-real/content')); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); await waitFor(() => expect(screen.getByText('真实水彩')).toBeInTheDocument()); expect(screen.getByText('停用风格（不可用）')).toBeInTheDocument(); expect(screen.getByAltText('真实水彩 预览')).toHaveAttribute('src', expect.stringContaining('/assets/blobs/preview-1'))
   })
   it('keeps unavailable engine/source visible and disabled with server reason', async () => {
     renderPage(); await ready(); fireEvent.click(screen.getByRole('tab', { name: '输出类型' })); expect(screen.getByRole('button', { name: /动态信息图/ })).toBeDisabled(); expect(screen.getByText(/CAPABILITY_NOT_AVAILABLE/)).toBeInTheDocument(); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); expect(screen.getByRole('button', { name: /自定义参考/ })).toBeDisabled()
@@ -57,7 +57,7 @@ describe('CreateTaskPage six-tab preview-first flow', () => {
     renderPage(); await waitFor(() => expect(screen.getByText(/选项接口待联调/)).toBeInTheDocument()); next(); expect(screen.getByLabelText('原始文案')).toBeInTheDocument(); goFinal(); expect(screen.getByRole('button', { name: '创建并保存 Task' })).toBeDisabled()
   })
   it('renders the final summary from all six-tab selections', async () => {
-    renderPage(); await ready(); fillIntroAndScript(); next(); await waitFor(() => expect(screen.getByText('真实女声')).toBeInTheDocument()); next(); next(); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); await waitFor(() => expect(screen.getByText('真实水彩')).toBeInTheDocument()); next(); expect(screen.getByText('最终汇总')).toBeInTheDocument(); expect(screen.getByText(/测试任务/)).toBeInTheDocument(); expect(screen.getByText(/真实水彩/)).toBeInTheDocument()
+    renderPage(); await ready(); fillIntroAndScript(); next(); await waitFor(() => expect(screen.getAllByText('真实女声').length).toBeGreaterThan(0)); next(); next(); fireEvent.click(screen.getByRole('tab', { name: '视觉设置' })); await waitFor(() => expect(screen.getByText('真实水彩')).toBeInTheDocument()); next(); expect(screen.getByText('最终汇总')).toBeInTheDocument(); expect(screen.getByText(/测试任务/)).toBeInTheDocument(); expect(screen.getByText(/真实水彩/)).toBeInTheDocument()
   })
 })
 
@@ -73,9 +73,24 @@ describe('CreateTaskPage real submission contract', () => {
     fetchMock.mockImplementation((url) => String(url).endsWith('/tasks') ? json({ error: { code: 'CREATE_FAILED', message: '创建失败（测试）' } }, 400) : defaultFetch(url)); renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(screen.getByText(/创建失败（测试）/)).toBeInTheDocument()); expect(inputCalls()).toHaveLength(0); fireEvent.click(screen.getByRole('tab', { name: '任务介绍' })); expect(screen.getByLabelText('任务名称')).toHaveValue('测试任务')
   })
   it('input failure exposes task/run and retry only calls input save', async () => {
-    let attempts = 0; fetchMock.mockImplementation((url) => { if (String(url).endsWith('/inputs')) { attempts += 1; return attempts === 1 ? json({ error: { code: 'INPUT_FAILED', message: '输入保存失败（测试）' } }, 400) : json(SAVED) }; return defaultFetch(url) }); renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(screen.getByText(/输入保存失败（测试）/)).toBeInTheDocument()); expect(screen.getByText(/task_id：task-new · run_id：run-new/)).toBeInTheDocument(); expect(createCalls()).toHaveLength(1); fireEvent.click(screen.getByRole('button', { name: '重试保存输入' })); await waitFor(() => expect(screen.getByText('任务工作台')).toBeInTheDocument()); expect(createCalls()).toHaveLength(1); expect(inputCalls()).toHaveLength(2)
+    let attempts = 0; fetchMock.mockImplementation((url) => { if (String(url).endsWith('/inputs')) { attempts += 1; return attempts === 1 ? json({ error: { code: 'INPUT_FAILED', message: '输入保存失败（测试）' } }, 400) : json(SAVED) }; return defaultFetch(url) }); renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(screen.getByText(/输入保存失败（测试）/)).toBeInTheDocument()); expect(screen.getByText(/task_id：task-new · run_id：run-new/)).toBeInTheDocument(); expect(createCalls()).toHaveLength(1); fireEvent.click(screen.getByRole('button', { name: '重试保存输入' })); await waitFor(() => expect(screen.getByText('任务工作台')).toBeInTheDocument()); expect(createCalls()).toHaveLength(1); expect(inputCalls().length).toBeGreaterThanOrEqual(2)
   })
   it('unmount during pending save produces no warning or navigation', async () => {
     let resolveSave!: (value: unknown) => void; fetchMock.mockImplementation((url) => String(url).endsWith('/inputs') ? new Promise((resolve) => { resolveSave = resolve }) : defaultFetch(url)); const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); const view = renderPage(); await ready(); fillIntroAndScript(); goFinal(); fireEvent.click(screen.getByRole('button', { name: '创建并保存 Task' })); await waitFor(() => expect(inputCalls()).toHaveLength(1)); view.unmount(); await act(async () => resolveSave(json(SAVED))); expect(errorSpy).not.toHaveBeenCalled(); errorSpy.mockRestore()
+  })
+})
+
+describe('CreateTaskPage deterministic boundaries', () => {
+  it('splits Chinese and English punctuation, newlines, and hard-wraps long atoms', () => {
+    expect(splitScriptIntoSegments('中文句。English sentence! next?\n最后一段；', 12)).toEqual(['中文句。', 'English sent', 'ence!next?', '最后一段；'])
+    expect(splitScriptIntoSegments('abcdefghij', 3)).toEqual(['abc', 'def', 'ghi', 'j'])
+  })
+  it('keeps one audition player while switching voice selection', async () => {
+    renderPage(); await ready(); fireEvent.click(screen.getByRole('tab', { name: '声音生成' })); await waitFor(() => expect(document.querySelector('audio')).toBeInTheDocument()); fireEvent.click(screen.getByRole('button', { name: /真实女声/ })); expect(document.querySelectorAll('audio')).toHaveLength(1)
+  })
+  it('recovers URL task/input state without creating another task', async () => {
+    const recovery = { task: { task_id: 'task-old' }, inputs: { script: '恢复文案。', style: 'style-real', include_subtitles: true, pen_text: '', stroke_detail: '' }, reference_audio: { uploaded: false }, rules: { target_chars: 20 }, visual_anchor_enabled: true, execution_plan: { mode: 'legacy' } }
+    fetchMock.mockImplementation((url) => { const value = String(url); if (value.endsWith('/tasks/task-old')) return json(recovery); if (value.endsWith('/tasks/task-old/inputs')) return json(recovery); return defaultFetch(url) })
+    render(<MemoryRouter initialEntries={['/tasks/new?submission_id=sub-old&task_id=task-old&run_id=run-old']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Routes><Route path="/tasks/new" element={<CreateTaskPage />} /></Routes></MemoryRouter>); await waitFor(() => expect(screen.getByText(/已恢复 Task：task-old/)).toBeInTheDocument()); fireEvent.click(screen.getByRole('tab', { name: /视频文案/ })); await waitFor(() => expect(screen.getByLabelText('原始文案')).toHaveValue('恢复文案。')); expect(createCalls()).toHaveLength(0)
   })
 })

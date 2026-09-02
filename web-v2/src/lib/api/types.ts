@@ -318,6 +318,14 @@ export interface InputsReadback {
   inputs: {
     script: string
     style: string
+    voice_source?: string
+    voice_asset_id?: string | null
+    visual_source?: string
+    style_asset_id?: string | null
+    target_chars?: number
+    shots_per_image?: number
+    line_density?: string
+    brand_text?: string
     include_subtitles: boolean
     pen_text: string
     stroke_detail: string
