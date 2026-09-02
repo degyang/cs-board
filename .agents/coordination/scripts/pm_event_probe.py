@@ -47,7 +47,7 @@ ACTION_ORDER = {
     "record-test-result": 2,
     "pm-review": 2,
     "promote-ready": 3,
-    "dispatch": 4,
+    "dispatch": 3,
     "retire-agent": 6,
 }
 COORDINATOR_OWNERS = {"PM"}

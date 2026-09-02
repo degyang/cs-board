@@ -84,6 +84,16 @@ if timeout --signal=TERM --kill-after=5s 90s \
   pm_result=0
   [[ ! -x "$test_dispatch" ]] || "$test_dispatch" "$project_root" || true
 else
-  printf '{"state":"failed","reason":"codex exec resume failed"}\n' >"$runtime/pm-scheduler.json"
+  signature="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["signature"])' <<<"$event_json")"
+  remaining="$(python3 "$probe" probe --project "$project_root" --max-actions 1)"
+  remaining_signature="$(python3 -c 'import json,sys; data=sys.stdin.read().strip(); print(json.loads(data)["signature"] if data else "")' <<<"$remaining")"
+  if [[ "$remaining_signature" != "$signature" ]]; then
+    git -C "$project_root" push origin integration/mountain-v2
+    python3 "$probe" ack --project "$project_root" --signature "$signature"
+    printf '{"state":"completed-after-timeout","signature":"%s"}\n' "$signature" >"$runtime/pm-scheduler.json"
+    pm_result=0
+    exit 0
+  fi
+  printf '{"state":"failed","reason":"PM process failed without a tracked transition"}\n' >"$runtime/pm-scheduler.json"
   exit 1
 fi
