@@ -272,6 +272,23 @@ class FilesystemServiceRegistry:
             return defaults[0]
         return candidates[0] if candidates else None
 
+    def has_required_secrets(self, service: ServiceDefinition) -> bool:
+        """Return whether every required secret for *service* is configured.
+
+        This is intentionally an availability check rather than a secret access
+        API: it never returns, logs, or otherwise exposes credential values.
+        A secret-store failure is treated as unavailable so capability reads
+        remain fail-closed.
+        """
+        try:
+            return all(
+                isinstance(value := self._secret_store.get(f"{service.service_id}_{key}"), str)
+                and bool(value.strip())
+                for key in service.required_secrets
+            )
+        except Exception:
+            return False
+
     def probe_service(self, service_id: str, force: bool = False) -> dict[str, Any]:
         """探测服务可用性。使用缓存（60秒TTL），force=True 强制重新探测。"""
         now = time.monotonic()
