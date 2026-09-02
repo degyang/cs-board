@@ -28,7 +28,9 @@
 才执行一次 `codex exec resume`；成功后才 ack，失败会保留事件供人工恢复。每次最多处理一个 PM 周期。
 
 当前 CEO 由 `codex exec --json` 启动，注册表保存其 `thread.started` 返回的真实 UUID；UUID 只用于
-`codex exec resume`，不是在线心跳。用户级 timer 安装命令为：
+`codex exec resume`，不是在线心跳。由于当前项目位于 WSL `/mnt/d`，CLI 的 `workspace-write` sandbox
+实际返回 `EROFS`；当前 CEO session 以 `danger-full-access` 创建，但权限仍受 Git 契约、单周期 prompt、
+非重叠锁和独立审核约束。用户级 timer 安装命令为：
 
 ```bash
 mkdir -p ~/.config/systemd/user

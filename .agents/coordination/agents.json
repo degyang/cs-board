@@ -3,7 +3,7 @@
   "agents": {
     "PM": {
       "transport": "codex_cli",
-      "thread": "01a06094-e56e-7b02-b5ee-373002323bf4",
+      "thread": "01a0609f-501f-7742-a40e-94beda42941f",
       "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
       "branch": "integration/mountain-v2",
       "model": "gpt-5.6-terra",
