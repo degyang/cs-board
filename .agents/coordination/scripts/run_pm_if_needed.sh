@@ -10,12 +10,15 @@ codex_bin="${CODEX_BIN:-/home/ubuntu/.local/share/mise/installs/node/24/bin/code
 teamctl="$dashboard_dir/teamctl.mjs"
 review_dispatch="$project_root/.agents/coordination/scripts/dispatch_review_agent.sh"
 pm_task=""
+pm_result=1
 mkdir -p "$runtime"
 
 mark_pm_idle() {
   [[ -n "$pm_task" ]] || return 0
+  local state=blocked
+  [[ "$pm_result" -eq 0 ]] && state=idle
   "$node_bin" "$teamctl" agent --project "$project_root" \
-    --role PM --state idle >/dev/null 2>&1 || true
+    --role PM --state "$state" --task "$pm_task" >/dev/null 2>&1 || true
 }
 
 trap mark_pm_idle EXIT
@@ -51,6 +54,7 @@ prompt="Use pos-magents as the independent CEO/PM. First read docs/agents/agreem
 prompt="$prompt Model governance: default every new task to a moderate model and reasoning effort. Only after three failed rework attempts may the CEO propose escalation. Never assign gpt-5.6-sol with high, xhigh, max, or ultra unless docs/agents/agreements.md records explicit user approval for that exact task and level."
 prompt="$prompt Reviewer execution is owned exclusively by dispatch_review_agent.sh and its supervised systemd service. Do not register, spawn, or pre-mark an orchestrator Reviewer; only consume a completed review verdict and update tracked state."
 prompt="$prompt Worker execution is owned exclusively by dispatch_cli_agent.sh and run_worker_agent.sh. Never create an orchestrator Worker or write working runtime yourself. After committing DISPATCHED, invoke the dispatcher asynchronously; only its supervised wrapper may publish working, review, or blocked."
+prompt="$prompt A retire-agent action is executable policy: recheck that the non-protected owner has only terminal tasks, no active service/lease, and exceeded the reported retention. Then remove only its current registry entry and transient runtime, preserve all history, commit and push. Under capacity pressure process the oldest timed-out candidate first."
 
 if timeout --signal=TERM --kill-after=5s 60s \
   "$codex_bin" exec resume --dangerously-bypass-approvals-and-sandbox "${registration[1]}" "$prompt" >>"$runtime/pm-scheduler.log" 2>&1; then
@@ -63,6 +67,10 @@ if timeout --signal=TERM --kill-after=5s 60s \
   fi
   python3 "$probe" ack --project "$project_root" --signature "$signature"
   printf '{"state":"completed","signature":"%s"}\n' "$signature" >"$runtime/pm-scheduler.json"
+  pm_result=0
+  # The PM may just have converted a Worker handoff to REVIEW_READY. Dispatch
+  # again in the same bounded cycle instead of waiting for the recovery timer.
+  [[ ! -x "$review_dispatch" ]] || "$review_dispatch" "$project_root" || true
 else
   printf '{"state":"failed","reason":"codex exec resume failed"}\n' >"$runtime/pm-scheduler.json"
   exit 1

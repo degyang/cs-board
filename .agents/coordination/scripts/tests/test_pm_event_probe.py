@@ -85,6 +85,52 @@ class PMEventProbeTest(unittest.TestCase):
         ], check=True, capture_output=True, text=True)
         self.assertEqual(len(json.loads(result.stdout)["actions"]), 1)
 
+    def test_completed_agent_is_retained_until_idle_timeout(self) -> None:
+        self.write_status(["| `DONE-1` | DONE | APPROVED | pending | abc | accepted |"])
+        (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": {
+            "PM": {"transport": "codex_cli", "thread": "pm"},
+            "REVIEWER": {"transport": "codex_exec"},
+            "DONE": {"transport": "codex_exec"},
+        }}))
+        (self.root / ".agents/coordination/policy.json").write_text(json.dumps({
+            "max_registered_agents": 5, "idle_retention_seconds": 600,
+            "protected_roles": ["PM", "REVIEWER"],
+        }))
+        self.write_runtime("DONE", state="idle", task_id="DONE-1", heartbeat_at="2026-09-02T03:55:01Z")
+        self.assertEqual(self.probe(), "")
+        self.write_runtime("DONE", state="idle", task_id="DONE-1", heartbeat_at="2026-09-02T03:49:59Z")
+        action = json.loads(self.probe())["actions"][0]
+        self.assertEqual(action["kind"], "retire-agent")
+        self.assertEqual(action["reason"], "retention-expired")
+
+    def test_capacity_pressure_prioritizes_oldest_timed_out_agent(self) -> None:
+        self.write_status([
+            "| `DONE-A` | A | APPROVED | pending | a | accepted |",
+            "| `DONE-B` | B | APPROVED | pending | b | accepted |",
+            "| `WEB-1` | WEB | READY | pending | pending | pending |",
+        ])
+        agents = {name: {"transport": "codex_exec"} for name in ("A", "B", "WEB", "X")}
+        agents.update({"PM": {"transport": "codex_cli"}, "REVIEWER": {"transport": "codex_exec"}})
+        (self.root / ".agents/coordination/agents.json").write_text(json.dumps({"agents": agents}))
+        (self.root / ".agents/coordination/policy.json").write_text(json.dumps({
+            "max_registered_agents": 5, "idle_retention_seconds": 600,
+            "protected_roles": ["PM", "REVIEWER"],
+        }))
+        self.write_runtime("A", state="idle", task_id="DONE-A", heartbeat_at="2026-09-02T03:40:00Z")
+        self.write_runtime("B", state="idle", task_id="DONE-B", heartbeat_at="2026-09-02T03:45:00Z")
+        actions = json.loads(self.probe())["actions"]
+        self.assertEqual(actions[0]["kind"], "retire-agent")
+        self.assertEqual(actions[0]["owner"], "A")
+        self.assertEqual(actions[0]["reason"], "capacity-pressure")
+
+    def test_protected_roles_are_never_retired(self) -> None:
+        self.write_status(["| `PM-DONE` | PM | APPROVED | pending | abc | accepted |"])
+        (self.root / ".agents/coordination/policy.json").write_text(json.dumps({
+            "idle_retention_seconds": 60, "protected_roles": ["PM", "REVIEWER"],
+        }))
+        self.write_runtime("PM", state="idle", task_id="PM-DONE", heartbeat_at="2026-09-02T01:00:00Z")
+        self.assertEqual(self.probe(), "")
+
     def test_no_actionable_event_has_no_output(self) -> None:
         self.write_status(["| `CORE-1` | CORE | IN_PROGRESS | pending | pending | pending |"])
         self.write_runtime("CORE")

@@ -46,6 +46,7 @@ ACTION_ORDER = {
     "review": 2,
     "promote-ready": 3,
     "dispatch": 4,
+    "retire-agent": 6,
 }
 COORDINATOR_OWNERS = {"PM"}
 
@@ -99,6 +100,49 @@ def review_digest(root: Path, task_id: str) -> str | None:
     except FileNotFoundError:
         return None
     return hashlib.sha256(content).hexdigest()
+
+
+def retirement_actions(root: Path, tasks: dict[str, dict[str, str]], now: datetime) -> list[dict[str, object]]:
+    try:
+        registry = json.loads((root / ".agents/coordination/agents.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+    try:
+        policy = json.loads((root / ".agents/coordination/policy.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        policy = {}
+    agents = registry.get("agents", {})
+    retention = max(60, int(policy.get("idle_retention_seconds", 600)))
+    capacity = max(1, int(policy.get("max_registered_agents", 5)))
+    protected = set(policy.get("protected_roles", ["PM", "REVIEWER"]))
+    pressure = len(agents) > capacity
+    terminal = {"APPROVED", "REJECTED"}
+    candidates: list[tuple[datetime, dict[str, object]]] = []
+    for role in agents:
+        if role in protected:
+            continue
+        owned = [task for task in tasks.values() if task["owner"] == role]
+        if not owned or any(task["status"] not in terminal for task in owned):
+            continue
+        try:
+            runtime = json.loads((root / f".agents/coordination/runtime/{role}.json").read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            continue
+        if runtime.get("state") == "working" or runtime.get("lease_expires_at"):
+            continue
+        idle_since = parse_instant(runtime.get("heartbeat_at"))
+        if idle_since is None:
+            continue
+        idle_seconds = int((now - idle_since).total_seconds())
+        if idle_seconds < retention:
+            continue
+        candidates.append((idle_since, {
+            "kind": "retire-agent", "owner": role, "idle_seconds": idle_seconds,
+            "retention_seconds": retention,
+            "reason": "capacity-pressure" if pressure else "retention-expired",
+        }))
+    candidates.sort(key=lambda item: item[0])
+    return [item[1] for item in candidates]
 
 
 def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600) -> list[dict[str, object]]:
@@ -158,7 +202,13 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
             dependencies = DEPENDENCY.findall(contract.read_text(encoding="utf-8"))
             if dependencies and all(tasks.get(item, {}).get("status") == "APPROVED" for item in dependencies):
                 actions.append({"kind": "promote-ready", "dependencies": dependencies, **task})
-    return sorted(actions, key=lambda item: (ACTION_ORDER[str(item["kind"])], str(item["task_id"])))
+    actions.extend(retirement_actions(root, tasks, current_time))
+    def action_key(item: dict[str, object]) -> tuple[int, str]:
+        rank = ACTION_ORDER[str(item["kind"])]
+        if item["kind"] == "retire-agent" and item.get("reason") == "capacity-pressure":
+            rank = 1
+        return rank, str(item.get("task_id", item.get("owner", "")))
+    return sorted(actions, key=action_key)
 
 
 def signature(actions: list[dict[str, object]]) -> str:

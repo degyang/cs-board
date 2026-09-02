@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "max_registered_agents": 5,
+  "idle_retention_seconds": 600,
+  "protected_roles": ["PM", "REVIEWER"]
+}

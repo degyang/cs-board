@@ -81,8 +81,15 @@ class WorkerDispatchTest(unittest.TestCase):
         codex = self.root / "codex"
         codex.write_text("#!/bin/sh\nexit 0\n")
         codex.chmod(0o755)
+        wakeups = self.root / "wakeups.log"
+        systemctl = self.root / "systemctl"
+        systemctl.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{wakeups}'\n")
+        systemctl.chmod(0o755)
         env = os.environ.copy()
-        env.update({"TEAM_DASHBOARD_DIR": str(dashboard), "NODE_BIN": str(node), "CODEX_BIN": str(codex)})
+        env.update({
+            "TEAM_DASHBOARD_DIR": str(dashboard), "NODE_BIN": str(node),
+            "CODEX_BIN": str(codex), "SYSTEMCTL_BIN": str(systemctl),
+        })
         result = subprocess.run([
             "bash", str(RUNNER), str(self.root), "WORK", "WORK-1", "contract.md", "abc",
             "codex_exec", "none", str(self.owner), "gpt-5.6-terra", "medium", "初次", "1",
@@ -91,6 +98,7 @@ class WorkerDispatchTest(unittest.TestCase):
         lines = transitions.read_text().splitlines()
         self.assertIn("--state working", lines[0])
         self.assertIn("--state review", lines[-1])
+        self.assertEqual(wakeups.read_text().strip(), "--user start --no-block cs-board-pm.service")
 
 
 if __name__ == "__main__":

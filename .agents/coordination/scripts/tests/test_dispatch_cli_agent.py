@@ -42,6 +42,7 @@ class DispatchCliAgentTest(unittest.TestCase):
         self.bin = self.root / "fake-bin"
         self.bin.mkdir()
         self.calls = self.root / "calls"
+        self.active = self.root / "worker-active"
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -53,8 +54,16 @@ class DispatchCliAgentTest(unittest.TestCase):
         return target
 
     def environment(self, *, active: bool = False) -> dict[str, str]:
-        systemctl = self.executable("systemctl", "exit 0" if active else "exit 3")
-        systemd_run = self.executable("systemd-run", f"printf '%s\\n' \"$*\" >> '{self.calls}'")
+        if active:
+            self.active.touch()
+            runtime = self.root / ".agents/coordination/runtime"
+            runtime.mkdir(parents=True, exist_ok=True)
+            (runtime / "WEB.json").write_text(json.dumps({"task_id": "WEB-1"}))
+        systemctl = self.executable("systemctl", f"[ -f '{self.active}' ]")
+        systemd_run = self.executable(
+            "systemd-run",
+            f"printf '%s\\n' \"$*\" >> '{self.calls}'\ntouch '{self.active}'",
+        )
         npm = self.executable("npm", f"printf 'npm %s\\n' \"$*\" >> '{self.calls}'")
         codex = self.executable("codex", "exit 0")
         environment = os.environ.copy()
@@ -88,7 +97,8 @@ class DispatchCliAgentTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls.read_text(encoding="utf-8")
         self.assertIn("--unit=cs-board-agent-web.service", calls)
-        self.assertIn("--dangerously-bypass-approvals-and-sandbox", calls)
+        self.assertIn("run_worker_agent.sh", calls)
+        self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", calls)
         state = json.loads((self.root / ".agents/coordination/runtime/dispatch-WEB.json").read_text())
         self.assertEqual(state["state"], "started")
 

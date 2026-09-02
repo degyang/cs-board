@@ -32,7 +32,7 @@ mkdir -p "$runtime"
 "$node_bin" "$teamctl" agent --project "$project_root" --role REVIEWER \
   --state working --task "$task_id" --cycle 审核 --attempt 1 --lease-seconds 600 >/dev/null
 
-prompt="Use pos-agent-reviewer. Independently review $task_id from $contract against delivery $delivery in owner worktree $owner_worktree. The coordination root is $project_root. Reproduce risk-proportionate gates, write and push docs/agents/reviews/$task_id.md, notify PM, then stop. Do not modify Worker implementation, approve a merge, or select another task. Do not upgrade model or reasoning effort."
+prompt="Use pos-agent-reviewer. Independently review $task_id from $contract against delivery $delivery in owner worktree $owner_worktree. The coordination root is $project_root. Reproduce risk-proportionate gates, write and push docs/agents/reviews/$task_id.md, notify PM, then stop. Do not run team dashboard or teamctl commands: this supervised wrapper exclusively owns REVIEWER runtime and its lease. Do not modify Worker implementation, approve a merge, or select another task. Do not upgrade model or reasoning effort."
 if "$codex_bin" exec --dangerously-bypass-approvals-and-sandbox --model gpt-5.6-terra \
   -c model_reasoning_effort=medium -C "$project_root" "$prompt"; then
   result=0

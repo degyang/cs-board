@@ -47,6 +47,8 @@ unit="cs-board-agent-${role_lower}.service"
 if "$systemctl_bin" --user is-active --quiet "$unit"; then
   current_task="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("task_id", ""))' "$runtime/${role}.json" 2>/dev/null || true)"
   [[ "$current_task" == "$task_id" ]] || { printf 'role already running another task\n' >&2; exit 1; }
+  printf '{"state":"already-running","role":"%s","task_id":"%s","unit":"%s"}\n' \
+    "$role" "$task_id" "$unit" >"$runtime/dispatch-${role}.json"
   exit 0
 fi
 
