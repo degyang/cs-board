@@ -19,9 +19,9 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 2 zero-skip delivery verified; independent review in progress |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | five golden + manifest delivered; independent review queued |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | five golden + manifest delivered; next review after CORE |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | independent review queued behind CORE correction review |
+| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | review queued behind CORE and critical-path PROTOTYPE |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -92,6 +92,9 @@
 - CORE 与 MEDIA 的 review 事件均无已提交 digest；按 Reviewer WIP=1 和返工优先顺序，本轮只启动
   `CORE-RUNTIME-006` 独立审核，使用 `gpt-5.6-terra + medium`。`MEDIA-PREFLIGHT-004` 保持
   `REVIEW_READY` 排队，不并发启动第二个 Reviewer。
+- 本轮 CORE、MEDIA、PROTOTYPE 的 review digest 均为空，CORE Reviewer 仍有有效 working lease。
+  `PROTOTYPE-GOLDEN-005@069ace1` 已核验提交推送且工作树干净，纠正契约头为 `REVIEW_READY`；由于它
+  直接解除 M1 主链的 WEB blocker，Reviewer 释放后先审 PROTOTYPE，再审 MEDIA，期间不伪造并行审核。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

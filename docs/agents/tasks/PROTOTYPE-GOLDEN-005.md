@@ -1,7 +1,7 @@
 # PROTOTYPE-GOLDEN-005：恢复并冻结 5182 WebUI 原型基准
 
 - Owner: PROTOTYPE
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: none
 - Worktree: `/mnt/d/workstation/projects/cs-board-prototype-golden`
