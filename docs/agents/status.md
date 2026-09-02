@@ -19,9 +19,9 @@
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
-| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | DISPATCHED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | attempt 2 deterministic immutable capture correction dispatched |
+| `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | attempt 2 immutable capture correction handed off |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | REVIEW_READY | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | review queued behind critical-path PROTOTYPE |
+| `MEDIA-PREFLIGHT-004` | MEDIA | CHANGES_REQUESTED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | attempt 2 controlled 4xx/full-suite correction; not dispatched |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -122,6 +122,10 @@
 - Worker 调度已统一整改：WEB、MEDIA、PROTOTYPE 及后续动态角色全部改用 `codex_exec` systemd wrapper；
   dispatcher 不写 runtime，只有真实 wrapper 启动后写 working，正常/异常退出分别写 review/blocked，同
   Owner WIP=1。CEO/PM 禁止再创建 orchestrator Worker 或预写 Agent 状态。
+- `PROTOTYPE-GOLDEN-005` attempt 2 实现 `7db041b` 与报告交付 `b4287d9` 已提交推送且分支干净；本轮
+  仅登记 `REVIEW_READY`，不解除 WEB blocker。`MEDIA-PREFLIGHT-004@8532302` 独立评审提交 `a8a4aca`
+  结论为 `CHANGES_REQUESTED`：缺少 controlled 4xx 证据，且全量 pytest 未能在评审中复现正常退出；
+  CEO 记录有界 attempt 2，但本轮不派发，`MEDIA-E2E-003` 保持阻塞。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

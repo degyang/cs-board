@@ -1,7 +1,7 @@
 # MEDIA-PREFLIGHT-004：真实媒体依赖 fail-closed 预检
 
 - Owner: MEDIA
-- Status: REVIEW_READY
+- Status: CHANGES_REQUESTED
 - Priority: P0
 - Depends on: `MEDIA-SKILLS-003=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-media`
@@ -85,3 +85,17 @@ selective 编排。
 
 stale recovery 已核验 MEDIA 分支与远端一致、工作树干净且报告已提交；本节只恢复已完成的 Worker
 handoff，不代表 CEO 批准。live readiness 仍为非零环境结果，`MEDIA-E2E-003` 不得派发。
+
+## Attempt 1 independent review
+
+- Review: `docs/agents/reviews/MEDIA-PREFLIGHT-004.md`
+- Review commit: `a8a4aca`
+- Review digest: `696e98e507bcffcbc15d32688532c8878822cf11daafa555bec572960b93afc7`
+- Verdict: `CHANGES_REQUESTED`
+
+attempt 2 只限 `scripts/check_media_preflight.py`、`tests/test_media_preflight.py` 与本任务报告：增加真实受控
+HTTP 4xx 的独立 fail-closed reason code/非零 CLI 证据；并用 180 秒 watchdog 仅作失败清理，证明全量
+pytest 自身正常 exit 0，或诊断 delivery 相关回归并准确修正报告。timeout/信号不得算成功；live preflight
+可继续如实 nonzero。`MEDIA-E2E-003` 继续阻塞。
+
+- Attempt 2 dispatch state: not dispatched

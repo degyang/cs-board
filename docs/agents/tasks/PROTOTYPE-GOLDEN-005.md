@@ -1,7 +1,7 @@
 # PROTOTYPE-GOLDEN-005：恢复并冻结 5182 WebUI 原型基准
 
 - Owner: PROTOTYPE
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: none
 - Worktree: `/mnt/d/workstation/projects/cs-board-prototype-golden`
@@ -90,3 +90,13 @@ manifest 与报告：在捕获环境中冻结动画而不改原型视觉源码�
 
 - Attempt 2 dispatch state: `DISPATCHED`
 - Attempt 2 worker: `/root/prototype_golden_attempt2_worker`
+
+## Attempt 2 review handoff
+
+- Implementation: `7db041b`
+- Delivery: `b4287d9`
+- Report: `docs/agents/reports/PROTOTYPE-GOLDEN-005.md`
+- State: `REVIEW_READY`
+
+Worker 已提交并推送 deterministic immutable capture 纠正，分支干净且与远端一致；本节仅记录交接，
+不代表 CEO、Reviewer 或用户批准，也不解除 `WEB-PARITY-004` blocker。
