@@ -48,7 +48,7 @@
     },
     "REVIEWER": {
       "transport": "orchestrator",
-      "thread": "/root/prototype_golden_reviewer_live",
+      "thread": "/root/core_runtime_attempt3_reviewer",
       "worktree": "/mnt/d/workstation/projects/cs-board-mountain-v2",
       "branch": "integration/mountain-v2",
       "model": "gpt-5.6-terra",

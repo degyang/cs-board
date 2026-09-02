@@ -1,7 +1,7 @@
 # PROTOTYPE-GOLDEN-005：恢复并冻结 5182 WebUI 原型基准
 
 - Owner: PROTOTYPE
-- Status: REVIEW_READY
+- Status: CHANGES_REQUESTED
 - Priority: P0
 - Depends on: none
 - Worktree: `/mnt/d/workstation/projects/cs-board-prototype-golden`
@@ -75,3 +75,17 @@ git diff --check 0f56e82...HEAD
 - State: `REVIEW_READY`
 
 本节只记录 Worker 交接，不代表 CEO、Reviewer 或用户批准。
+
+## Attempt 1 independent review
+
+- Review: `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md`
+- Review commit: `7f4aaab`
+- Verdict: `CHANGES_REQUESTED`
+
+同一 checkout/Chromium/机器连续 capture 会因动画相位改变部分 PNG SHA-256，且默认脚本会静默重写
+manifest，未满足不可变 golden 的核心约束。attempt 2 仅可修改 capture 脚本、重新生成的五张 golden、
+manifest 与报告：在捕获环境中冻结动画而不改原型视觉源码；默认复验必须对已冻结 hash fail closed，更新
+基准必须使用显式生成模式；连续两次 capture 的五项 hash 和 manifest 字节必须一致，并保留原 build、
+尺寸、浏览器问题计数与 5182 清理门禁。
+
+- Attempt 2 dispatch state: not dispatched
