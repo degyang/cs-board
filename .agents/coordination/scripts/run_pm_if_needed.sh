@@ -5,13 +5,15 @@ project_root="${1:?usage: run_pm_if_needed.sh PROJECT_ROOT}"
 runtime="$project_root/.agents/coordination/runtime"
 probe="$project_root/.agents/coordination/scripts/pm_event_probe.py"
 dashboard_dir="${TEAM_DASHBOARD_DIR:-/home/ubuntu/.codex/skills/pos-magents/scripts/team-dashboard}"
+node_bin="${NODE_BIN:-/home/ubuntu/.local/share/mise/installs/node/24/bin/node}"
+teamctl="$dashboard_dir/teamctl.mjs"
 pm_task=""
 mkdir -p "$runtime"
 
 mark_pm_idle() {
   [[ -n "$pm_task" ]] || return 0
-  npm --prefix "$dashboard_dir" run agent -- \
-    --project "$project_root" --role PM --state idle >/dev/null 2>&1 || true
+  "$node_bin" "$teamctl" agent --project "$project_root" \
+    --role PM --state idle >/dev/null 2>&1 || true
 }
 
 trap mark_pm_idle EXIT
@@ -23,8 +25,8 @@ event_json="$(python3 "$probe" probe --project "$project_root")"
 [[ -n "$event_json" ]] || exit 0
 pm_task="$(python3 -c 'import json,sys; event=json.load(sys.stdin); print(event["actions"][0].get("task_id", "COORDINATION"))' <<<"$event_json")"
 
-npm --prefix "$dashboard_dir" run agent -- \
-  --project "$project_root" --role PM --state working --task "$pm_task" \
+"$node_bin" "$teamctl" agent --project "$project_root" \
+  --role PM --state working --task "$pm_task" \
   --cycle 调度 --attempt 1 --lease-seconds 180 >/dev/null
 
 readarray -t registration < <(python3 - "$project_root/.agents/coordination/agents.json" <<'PY'
