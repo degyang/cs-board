@@ -79,6 +79,9 @@
 - 先前 CORE Reviewer 启动失败但留下短期 working runtime，造成待审核任务存在而面板随后显示 idle。CEO 已
   注册真实 `/root/core_runtime_reviewer_live` 并启动 CORE 独立审核；Reviewer WIP=1，MEDIA 与刚交付
   `PROTOTYPE-GOLDEN-005@069ace1` 明确排队，不再用运行态冒充并行审核。
+- Reviewer 调度全面审核已完成：Reviewer 改由唯一 systemd wrapper 确定性执行，真实进程启动后才写
+  working，异常退出写 blocked，正常完成写 review；PM 只消费 verdict，事实未变化不得 ack。旧的
+  orchestrator Reviewer 注册已切换为 `codex_exec`，后续审核队列由单一服务按 WIP=1 自动接力。
 - PROTOTYPE Reviewer 的首次恢复同样只写入 runtime、没有创建真实会话；该伪 working 已被替换为已确认
   存活的 `/root/prototype_golden_reviewer_live`。当前优先审核关键路径 golden，随后才处理 CORE attempt 3
   与 MEDIA；后续只有会话启动成功后才能写 Reviewer working。
