@@ -216,7 +216,7 @@ def mountain_task_router(
     def start_run(task_id: str, run_id: str, policy: str = "auto"):
         """启动标准流程 — 委托 Application 层。"""
         try:
-            return commands.start_run(task_id, run_id, policy, context=_context())
+            return domain_error_response(DomainError("STAGE_GATE_REQUIRED", "第一阶段请使用单 Stage run 入口"), status_code=409)
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
@@ -255,7 +255,10 @@ def mountain_task_router(
 
     @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/gate")
     def decide_gate(task_id: str, run_id: str, stage: str, payload: dict = Body(...)):
-        try: return commands.decide_gate(task_id, run_id, stage, str(payload.get("decision", "")), str(payload.get("actor", "")), payload.get("note"), payload.get("evidence"))
+        try:
+            allowed = {"decision", "actor", "note", "evidence"}
+            if not isinstance(payload, dict) or set(payload) - allowed or not isinstance(payload.get("actor"), str) or not payload["actor"].strip() or len(payload["actor"]) > 128: raise DomainError("VALIDATION_ERROR", "Gate 请求无效")
+            return commands.decide_gate(task_id, run_id, stage, payload.get("decision", ""), payload["actor"], payload.get("note"), payload.get("evidence"))
         except NotFoundError as error: return domain_error_response(error, status_code=404)
         except DomainError as error: return domain_error_response(error, status_code=409 if error.code in {"GATE_DECISION_CONFLICT", "INVALID_STATE"} else 400)
 

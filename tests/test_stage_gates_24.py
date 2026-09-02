@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from csboard.adapters.filesystem.repository import FilesystemTaskRepository
+from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.application.commands import MountainCommands
 from csboard.application.context import CommandContext, utc_now
 from csboard.domain.enums import Engine, Entrypoint, RunStatus, TaskStatus
@@ -31,10 +32,12 @@ def test_six_initial_gates_are_canonical_and_persist(tmp_path: Path) -> None:
 def test_gate_decision_is_idempotent_and_conflicts_do_not_overwrite(tmp_path: Path) -> None:
     commands, task_id, run_id = _commands(tmp_path)
     commands.mark_gate_waiting(task_id, run_id, CANONICAL_STAGES[0])
-    first = commands.decide_gate(task_id, run_id, CANONICAL_STAGES[0], "approve", "reviewer")
-    assert commands.decide_gate(task_id, run_id, CANONICAL_STAGES[0], "approve", "reviewer") == first
+    artifact = FilesystemArtifactStore(commands.repository).commit_bytes(task_id, run_id, "planning.av-plan", "planning/av-plan.json", b"verified", CANONICAL_STAGES[0])
+    evidence = [{"logical_key": artifact.artifact_key, "sha256": artifact.sha256}]
+    first = commands.decide_gate(task_id, run_id, CANONICAL_STAGES[0], "approve", "reviewer", evidence=evidence)
+    assert commands.decide_gate(task_id, run_id, CANONICAL_STAGES[0], "approve", "reviewer", evidence=evidence) == first
     with pytest.raises(DomainError, match="不能被静默覆盖"):
-        commands.decide_gate(task_id, run_id, CANONICAL_STAGES[0], "redo", "reviewer")
+        commands.decide_gate(task_id, run_id, CANONICAL_STAGES[0], "redo", "reviewer", evidence=evidence)
 
 
 def test_unapproved_upstream_blocks_before_execution_side_effects(tmp_path: Path) -> None:

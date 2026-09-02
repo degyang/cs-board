@@ -845,13 +845,27 @@ class MountainCommands:
         gates = self.repository.get_gates(task_id, run_id)
         blocked = [gate.stage_id for gate in gates[:CANONICAL_STAGES.index(stage)] if gate.status != GATE_APPROVED]
         if blocked: raise DomainError("STAGE_GATE_REQUIRED", "上游 Stage Gate 尚未批准", details={"unapproved_stages": blocked})
-        execution_plan = self._execution_plan(task_id)
-        result = self.pipeline_run(
-            task_id, run_id, "targeted", stage, context,
-            manual_trigger_stage=stage if stage in execution_plan.manual_stages else None,
-        )
-        if result.get("ok") and result.get("result") == "succeeded": self.mark_gate_waiting(task_id, run_id, stage)
+        # Formal phase-one path deliberately does not ask PipelineOrchestrator
+        # to repair dependencies: one explicit HTTP/Skill action owns one Stage.
+        from csboard.application.work_orders import STAGE_INPUTS
+        store = FilesystemArtifactStore(self.repository)
+        missing = [key for key in STAGE_INPUTS[stage] if not self._valid_artifact(task_id, run_id, key)]
+        if missing: raise DomainError("STAGE_GATE_REQUIRED", "上游 Artifact 尚未验证", details={"missing_artifacts": missing})
+        context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        result = self.pipeline._execute_stage(task_id, run_id, stage, context)
+        if result.get("ok") and result.get("result") in {"succeeded", "skipped"} and self._exit_artifacts_valid(task_id, run_id, stage): self.mark_gate_waiting(task_id, run_id, stage)
         return result
+
+    def _valid_artifact(self, task_id: str, run_id: str, key: str) -> bool:
+        import hashlib
+        item = FilesystemArtifactStore(self.repository).get(task_id, run_id, key)
+        if not item or item.get("status", "succeeded") != "succeeded": return False
+        path = self.repository.run_dir(task_id, run_id) / "artifacts" / str(item.get("relative_path", ""))
+        return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == item.get("sha256")
+
+    def _exit_artifacts_valid(self, task_id: str, run_id: str, stage: str) -> bool:
+        from csboard.application.work_orders import STAGE_OUTPUTS
+        return all(self._valid_artifact(task_id, run_id, key) for key in STAGE_OUTPUTS[stage])
 
     def list_gates(self, task_id: str, run_id: str) -> dict[str, Any]: return {"items": [gate.to_dict() for gate in self.repository.get_gates(task_id, run_id)]}
     def get_gate(self, task_id: str, run_id: str, stage: str) -> dict[str, Any]:
@@ -865,12 +879,19 @@ class MountainCommands:
         if stage not in CANONICAL_STAGES or decision not in {"approve", "reject", "redo"} or not actor.strip(): raise DomainError("VALIDATION_ERROR", "Gate 决定、Stage 和 actor 无效")
         gates = self.repository.get_gates(task_id, run_id); gate = next(item for item in gates if item.stage_id == stage)
         wanted = {"approve": GATE_APPROVED, "reject": GATE_REJECTED, "redo": GATE_REDO}[decision]
-        clean = [{"logical_key": str(item.get("logical_key", "")), "sha256": str(item.get("sha256", ""))} for item in (evidence or [])]
+        if not isinstance(evidence or [], list) or len(evidence or []) > 100: raise DomainError("VALIDATION_ERROR", "evidence 无效")
+        allowed = {"logical_key", "sha256", "visual_id", "candidate_id", "revision", "source"}
+        if any(not isinstance(item, dict) or set(item) - allowed or not isinstance(item.get("logical_key"), str) or not isinstance(item.get("sha256"), str) for item in (evidence or [])): raise DomainError("VALIDATION_ERROR", "evidence 无效")
+        clean = [{key: str(value) for key, value in item.items()} for item in (evidence or [])]
+        if decision == "approve" and (not clean or not self._exit_artifacts_valid(task_id, run_id, stage)):
+            raise DomainError("VALIDATION_ERROR", "出口 Artifact 或 evidence 未验证")
+        if decision == "approve" and any(not self._valid_artifact(task_id, run_id, item["logical_key"]) or FilesystemArtifactStore(self.repository).get(task_id, run_id, item["logical_key"]).get("sha256") != item["sha256"] for item in clean): raise DomainError("VALIDATION_ERROR", "evidence 与当前 Artifact 不一致")
         if gate.status == wanted and gate.actor == actor and list(gate.evidence) == clean: return gate.to_dict()
         if gate.status == GATE_APPROVED: raise DomainError("GATE_DECISION_CONFLICT", "已批准的 Gate 不能被静默覆盖")
         if gate.status != GATE_WAITING: raise DomainError("INVALID_STATE", "当前 Gate 尚不可决定")
         replacement = StageGate(**{**gate.to_dict(), "status": wanted, "decision": decision, "actor": actor.strip(), "decided_at": utc_now(), "revision": gate.revision + 1, "evidence": tuple(clean)})
-        self.repository.save_gates(task_id, run_id, [replacement if item.stage_id == stage else item for item in gates])
+        try: self.repository.replace_gate(task_id, run_id, stage, gate.revision, replacement)
+        except RuntimeError: raise DomainError("GATE_DECISION_CONFLICT", "Gate revision 已变化")
         payload = {"stage": stage, "decision": decision, "actor": actor.strip(), "attempt": replacement.attempt, "revision": replacement.revision, "evidence": clean}
         self.telemetry.append_event(task_id, run_id, {"event_type": "StageGateDecided", **payload}); self.telemetry.append_audit(task_id, run_id, {"action": "stage.gate", **payload})
         return replacement.to_dict()

@@ -87,6 +87,17 @@ class FilesystemTaskRepository:
             self.get_run(task_id, run_id)
             self._write_json(self.run_dir(task_id, run_id) / "gates.json", {"schema_version": 1, "items": [gate.to_dict() for gate in gates]})
 
+    def replace_gate(self, task_id: str, run_id: str, stage: str, expected_revision: int, replacement: StageGate) -> None:
+        """CAS replacement plus append-only decision history under one task lock."""
+        with self.task_lock(task_id):
+            gates = self.get_gates(task_id, run_id)
+            current = next(item for item in gates if item.stage_id == stage)
+            if current.revision != expected_revision:
+                raise RuntimeError("GATE_REVISION_CONFLICT")
+            history = self.run_dir(task_id, run_id) / "gate-history" / stage / f"{replacement.revision}.json"
+            self._write_json(history, replacement.to_dict())
+            self._write_json(self.run_dir(task_id, run_id) / "gates.json", {"schema_version": 1, "items": [(replacement if item.stage_id == stage else item).to_dict() for item in gates]})
+
     def save_request(self, task_id: str, data: dict) -> None:
         """原子写入 request.json"""
         with self.task_lock(task_id):
