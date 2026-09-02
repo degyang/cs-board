@@ -107,14 +107,21 @@ class PMEventProbeTest(unittest.TestCase):
                 self.assertEqual(action["reason"], f"runtime_{state}")
 
     def test_ready_is_suppressed_while_same_owner_has_active_task(self) -> None:
-        self.write_status(
-            [
-                "| `WEB-1` | WEB | IN_PROGRESS | pending | pending | pending |",
-                "| `WEB-2` | WEB | READY | pending | pending | pending |",
-            ]
-        )
-        self.write_runtime("WEB", task_id="WEB-1")
-        self.assertEqual(self.probe(), "")
+        for status in ("DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "BLOCKED"):
+            with self.subTest(status=status):
+                self.write_status(
+                    [
+                        f"| `WEB-1` | WEB | {status} | pending | pending | pending |",
+                        "| `WEB-2` | WEB | READY | pending | pending | pending |",
+                    ]
+                )
+                if status == "IN_PROGRESS":
+                    self.write_runtime("WEB", task_id="WEB-1")
+                output = self.probe()
+                actions = json.loads(output)["actions"] if output else []
+                self.assertFalse(
+                    any(action["kind"] == "dispatch" and action["task_id"] == "WEB-2" for action in actions)
+                )
 
     def test_review_event_is_emitted_once_after_ack(self) -> None:
         self.write_status(["| `CORE-1` | CORE | REVIEW_READY | pending | abc | pending |"])

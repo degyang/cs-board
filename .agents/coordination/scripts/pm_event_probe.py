@@ -31,7 +31,7 @@ def read_tasks(root: Path) -> dict[str, dict[str, str]]:
     return tasks
 
 
-ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY"}
+ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "REVIEW_READY", "BLOCKED"}
 ACTION_ORDER = {"recover-stale": 0, "review": 1, "promote-ready": 2, "dispatch": 3}
 
 
