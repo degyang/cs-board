@@ -277,7 +277,10 @@ class MountainCommands:
                 raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
 
         # 验证规则参数
-        execution_plan = ExecutionPlan.create(execution_mode, manual_stages or [])
+        execution_plan = ExecutionPlan.create(
+            execution_mode,
+            [] if manual_stages is None else manual_stages,
+        )
         try:
             preparation = prepare_script(
                 script.strip(),
@@ -398,6 +401,10 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """启动运行：检查输入和服务可用性。"""
+        task = self.repository.get_task(task_id)
+        run = self.repository.get_run(task_id, run_id)
+        if run.task_id != task.task_id:
+            raise NotFoundError("运行记录不存在")
         # 检查输入是否已保存
         request_data = self.repository.get_request(task_id)
         if not request_data:

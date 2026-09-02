@@ -14,17 +14,11 @@ from typing import Any, Callable
 from csboard.application.context import CommandContext, new_id, utc_now
 from csboard.domain.enums import Entrypoint, RunStatus, StageStatus
 from csboard.domain.errors import DomainError
+from csboard.domain.execution_plan import CANONICAL_STAGES
 
 
 # Stage dependency graph for mountain-av-v1 (linear pipeline).
-STAGE_ORDER: list[str] = [
-    "generate-visual-anchors",
-    "clone-voice",
-    "plan-storyboard",
-    "generate-illustrations",
-    "render-visuals",
-    "compose-video",
-]
+STAGE_ORDER: list[str] = list(CANONICAL_STAGES)
 
 # Type alias for stage executor functions.
 # Signature: (task_id, run_id, context) -> result dict

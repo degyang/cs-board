@@ -152,6 +152,9 @@ class FilesystemServiceRegistry:
     def get_service(self, service_id: str) -> ServiceDefinition:
         return self._load_service(service_id)
 
+    def has_required_secrets(self, service: ServiceDefinition) -> bool:
+        return all(self._secret_store.get(f"{service.service_id}_{key}") for key in service.required_secrets)
+
     def create_service(self, service: ServiceDefinition) -> ServiceDefinition:
         _validate_create(service)
         if self._service_path(service.service_id).exists():
