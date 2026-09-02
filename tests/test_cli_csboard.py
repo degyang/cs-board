@@ -148,13 +148,13 @@ class CliCsboardTest(unittest.TestCase):
                 [sys.executable, "-m", "cli.csboard", "--data-dir", str(self.root), "stage", "run",
                  "--task", task_id, "--run", run_id, "--stage", stage, "--json"],
                 cwd=Path(__file__).parents[1], text=True, capture_output=True, timeout=30)
-            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             result = json.loads(completed.stdout)
             if stage == "generate-visual-anchors":
+                self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
                 self.assertEqual(result["stages_executed"], [stage])
             else:
-                self.assertEqual(result["state"], "waiting-manual-trigger")
-                self.assertEqual(result["next_stage"], "generate-visual-anchors")
+                self.assertEqual(completed.returncode, EXIT_VALIDATION)
+                self.assertEqual(result["error"]["code"], "STAGE_GATE_REQUIRED")
 
     def test_stage_retry_uses_persisted_plan_in_subprocess(self) -> None:
         from starlette.testclient import TestClient

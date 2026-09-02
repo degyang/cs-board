@@ -206,11 +206,10 @@ def test_inputs_and_start_boundary(client: TestClient):
     assert "测试" in data["inputs"]["script"]
     assert data["reference_audio"]["uploaded"] is True
 
-    # 启动（缺服务应返回 CAPABILITY_NOT_AVAILABLE）
+    # 第一阶段 start 只确认可手工执行的下一步，不解析服务或运行 Stage。
     resp = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
-    assert resp.status_code == 400
-    error = resp.json()["error"]
-    assert error["code"] == "CAPABILITY_NOT_AVAILABLE"
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "waiting-manual-trigger"
 
 
 def test_start_without_inputs_returns_validation_error(client: TestClient):

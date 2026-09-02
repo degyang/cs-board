@@ -414,41 +414,15 @@ class MountainCommands:
         run = self.repository.get_run(task_id, run_id)
         if run.task_id != task.task_id:
             raise NotFoundError("运行记录不存在")
-        # 检查输入是否已保存
+        # The persisted input contract is the sole start precondition.
         request_data = self.repository.get_request(task_id)
-        if not request_data:
+        if not request_data or not isinstance(request_data.get("script"), str) or len(request_data["script"].strip()) < 10:
             raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
 
         return {"ok": True, "state": "waiting-manual-trigger", "task_id": task_id,
                 "run_id": run_id, "trace_id": run.trace_id,
                 "next_stage": self.pipeline.get_next_stage(run),
                 "gates": self.list_gates(task_id, run_id)["items"]}
-
-        execution_plan = self._execution_plan(task_id)
-        # An immediate manual gate is a decision, not an attempt to execute.
-        # Do not demand provider configuration merely to tell the caller which
-        # explicit stage trigger is required next.
-        if self.pipeline.get_next_stage(run) in execution_plan.manual_stages:
-            return self.pipeline_run(task_id, run_id, policy, context=context)
-
-        # 检查 capability 可用性
-        if self.service_resolver is not None:
-            from csboard.application.service_resolver import STAGE_CAPABILITY_MAP
-            unavailable = []
-            for stage_name, capability in STAGE_CAPABILITY_MAP.items():
-                try:
-                    self.service_resolver.resolve(capability)
-                except DomainError:
-                    unavailable.append({"stage": stage_name, "capability": capability})
-            if unavailable:
-                raise DomainError(
-                    "CAPABILITY_NOT_AVAILABLE",
-                    "缺少必要的服务配置",
-                    details={"unavailable": unavailable},
-                )
-
-        # 启动 pipeline
-        return self.pipeline_run(task_id, run_id, policy, context=context)
 
     def cancel_run(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
         """取消运行。"""
@@ -859,7 +833,13 @@ class MountainCommands:
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         result = self.pipeline._execute_stage(task_id, run_id, stage, context)
         if result.get("ok") and result.get("result") in {"succeeded", "skipped"} and self._exit_artifacts_valid(task_id, run_id, stage): self.mark_gate_waiting(task_id, run_id, stage)
-        return {"ok": bool(result.get("ok")), "task_id": task_id, "run_id": run_id, "trace_id": self.repository.get_run(task_id, run_id).trace_id, "stage": stage, "stages_executed": [stage] if result.get("ok") else [], "results": [result], "next_stage": CANONICAL_STAGES[CANONICAL_STAGES.index(stage) + 1] if stage != CANONICAL_STAGES[-1] else None, **result}
+        executed = [stage]
+        next_stage = (CANONICAL_STAGES[CANONICAL_STAGES.index(stage) + 1]
+                      if result.get("ok") and result.get("result") in {"succeeded", "skipped"} and stage != CANONICAL_STAGES[-1] else None)
+        return {"ok": bool(result.get("ok")), "task_id": task_id, "run_id": run_id,
+                "trace_id": self.repository.get_run(task_id, run_id).trace_id, "stage": stage,
+                "stages_executed": executed, "results": [result], "next_stage": next_stage,
+                "next_action": "review-gate" if next_stage else "fix-stage-result"}
 
     def _valid_artifact(self, task_id: str, run_id: str, key: str) -> bool:
         import hashlib

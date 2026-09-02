@@ -222,11 +222,10 @@ def test_auto_start_is_fast_and_does_not_enter_pipeline(tmp_path: Path) -> None:
     run_id = repository.get_task(task_id).active_run_id or ""
     before = _snapshot(repository.task_dir(task_id))
     started = time.monotonic()
-    with pytest.raises(DomainError) as raised:
-        commands.start_run(task_id, run_id)
+    result = commands.start_run(task_id, run_id)
     assert time.monotonic() - started < 30
-    assert raised.value.code == "CAPABILITY_NOT_AVAILABLE"
-    assert resolver.calls
+    assert result["state"] == "waiting-manual-trigger"
+    assert resolver.calls == []
     assert _snapshot(repository.task_dir(task_id)) == before
 
 
@@ -242,7 +241,7 @@ def test_selective_start_and_notfound_boundaries_are_side_effect_free(tmp_path: 
     assert response.status_code == 200
     assert response.json()["state"] == "waiting-manual-trigger"
     assert response.json()["next_stage"] == "generate-visual-anchors"
-    assert response.json()["manual_stages"] == plan["manual_stages"]
+    assert "gates" in response.json()
     assert _snapshot(task_dir) == before
     assert client.post(f"/api/v1/tasks/{task_id}/runs/missing-run/start").status_code == 404
     other = _task(client, "另一个任务")
