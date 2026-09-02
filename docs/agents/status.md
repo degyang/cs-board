@@ -192,6 +192,9 @@
 - 对 `CORE-RUNTIME-007` 的同一 `resolve-blocker` 签名作幂等 PM 决定：任务契约中的外部依赖记录仍完整且
   可执行，须恢复 `dispatch_cli_agent.sh` 与 `run_worker_agent.sh` 受监督 wrapper 后才可原样重派；结论为
   `BLOCKED`，阶段目标当前不需要新任务，未派发 `WORKER_CORE`。
+- `CORE-RUNTIME-007` 的 `resolve-blocker` 事件 `2ce3d5b0acb9c19960489ed4a6ca5a65b718604893376778608dc934cee127ba`
+  再次作幂等 PM 决定：外部 dispatcher/wrapper 依赖仍未恢复，维持 `BLOCKED`；M1 当前不需要下一任务，未派发
+  `WORKER_CORE`，`MEDIA-PREFLIGHT-004` 与 `MEDIA-E2E-003` 继续保持 `BLOCKED`。
 
 ## 队列规则
 
