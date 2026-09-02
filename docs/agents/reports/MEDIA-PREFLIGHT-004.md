@@ -52,3 +52,18 @@ Live media readiness is not green. In particular, the configured local IndexTTS 
 The correction is limited to the preflight focused test and this report. The
 full-suite timeout is outside this task's permitted change surfaces and needs
 PM direction before any broader diagnosis or fix.
+
+## Attempt 2 fresh worker reproduction
+
+The dispatched correction was re-run in the registered MEDIA worktree. The
+focused preflight suite exited 0 with `6 passed`, and skill-contract validation
+exited 0. Live preflight exited 1 as the expected environment-readiness result:
+FFmpeg and ffprobe reported `VERSION_FAILED`, IndexTTS reported `HTTP_TIMEOUT`,
+and the Whisper model reported `MODEL_PATH_NOT_FOUND`; Node, both entries, and
+temporary-artifact cleanup were ready.
+
+The required full suite was run under its cleanup-only 180-second watchdog and
+again exited 124 rather than normally. It therefore remains non-passing
+evidence and this task remains `BLOCKED`, not `REVIEW_READY`. `git diff --check
+6fc2924...HEAD` and the report secret/path scan both exited 0. No preflight
+HTTP, Node, or Python process remained after the run.
