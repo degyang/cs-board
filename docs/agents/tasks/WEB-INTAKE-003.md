@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: IN_PROGRESS
+- Status: BLOCKED
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -89,3 +89,10 @@ attempt 1 continuation；WEB 只需基于同一 commit 重跑真实 E2E、提交
 继续使用现有 `e573dea` 脚本，不新建重复任务。把 backend delivery `c567c3a` 引入当前 WEB 工作树后，
 只重跑契约中的真实 API/Vite/Playwright 门禁并提交三张截图与安全 manifest。若证据发现当前允许页面的
 真实前端缺陷，可按原契约最小修复；不得进入 Start、Pipeline 或 Work Order 范围。
+
+## Resume blocker discovered at `0b99b50`
+
+WEB 已引入 capability delivery 并重跑真实浏览器门禁，但 `GET /api/v1/capabilities` 返回 500：
+`CapabilityService` 调用的 `FilesystemServiceRegistry.has_required_secrets` 不存在于本任务固定消费基线。
+这不是 WEB 页面缺陷，不允许在前端吞掉。关联修复为 `CORE-CAP-005`；该任务经独立审核并由 CEO
+恢复本任务前，保持 `BLOCKED`，也不得并发领取 `WEB-WO-003`。
