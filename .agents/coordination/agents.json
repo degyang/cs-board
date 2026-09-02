@@ -30,7 +30,7 @@
     },
     "PROTOTYPE": {
       "transport": "orchestrator",
-      "thread": "/root/prototype_golden_attempt2_worker",
+      "thread": "/root/prototype_golden_attempt2_live",
       "worktree": "/mnt/d/workstation/projects/cs-board-prototype-golden",
       "branch": "feat/mountain-prototype-golden",
       "model": "gpt-5.6-terra",

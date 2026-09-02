@@ -82,6 +82,9 @@
 - Reviewer 调度全面审核已完成：Reviewer 改由唯一 systemd wrapper 确定性执行，真实进程启动后才写
   working，异常退出写 blocked，正常完成写 review；PM 只消费 verdict，事实未变化不得 ack。旧的
   orchestrator Reviewer 注册已切换为 `codex_exec`，后续审核队列由单一服务按 WIP=1 自动接力。
+- PROTOTYPE attempt 2 也复现了旧 Worker 调度缺陷：预写 working 后 orchestrator 会话停在 pending_init，
+  租约过期且工作树无进展。悬空会话已回收，真实 `/root/prototype_golden_attempt2_live` 已启动；Worker
+  调度将沿用 Reviewer 的“受监督进程启动后才写 working、失败回滚”方案统一修复。
 - PROTOTYPE Reviewer 的首次恢复同样只写入 runtime、没有创建真实会话；该伪 working 已被替换为已确认
   存活的 `/root/prototype_golden_reviewer_live`。当前优先审核关键路径 golden，随后才处理 CORE attempt 3
   与 MEDIA；后续只有会话启动成功后才能写 Reviewer working。
