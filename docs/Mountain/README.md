@@ -1,6 +1,8 @@
-# Mountain 架构演进计划
+# Mountain 当前文档入口
 
-状态：实施基线（Task 与文案整理语义待代码迁移落地）
+状态：M07 实施中；Task 与文案整理迁移已完成，新建任务与 Codex 六阶段执行闭环正在收口。
+
+最后同步：2026-09-02，集成基线 `integration/mountain-v2`。
 
 创建日期：2026-08-29
 适用仓库：`cs-board`
@@ -40,14 +42,21 @@ Mountain 的目标覆盖：
 
 ## 文档索引
 
+开始工作时按以下顺序阅读，禁止从历史报告反推当前需求：
+
+1. [23-current-delivery-status.md](23-current-delivery-status.md)：当前唯一进展、缺口和近期四轮计划；
+2. [22-delivery-roles-and-document-handoff.md](22-delivery-roles-and-document-handoff.md)：用户、PM、CCF、CCB和Codex执行者的角色与交接；
+3. [24-codex-six-stage-execution-contract.md](24-codex-six-stage-execution-contract.md)：新建Task到六阶段工作单和最终视频的当前交付契约；
+4. 本轮带编号的CCF/CCB执行文档与PM最新审核段落；
+5. 下列专题设计；
+6. `m*-report/audit`仅作历史证据，不是现行需求。
+
 | 文档 | 作用 |
 | --- | --- |
-| [01-current-architecture.md](01-current-architecture.md) | 当前组件、数据流、优点、问题和迁移约束 |
 | [02-target-architecture.md](02-target-architecture.md) | 目标分层、共享内核、入口适配器和运行时模型 |
 | [03-artifact-contracts.md](03-artifact-contracts.md) | Task、阶段和各类中间产物的权威契约 |
 | [04-webui-redesign.md](04-webui-redesign.md) | 页面信息架构、交互流程、组件和 API 需求 |
 | [05-skills-design.md](05-skills-design.md) | 七个 Skills 的职责、输入输出、调用规则和目录结构 |
-| [06-pr-roadmap.md](06-pr-roadmap.md) | 可逐步合并的 PR 实施路线与依赖关系 |
 | [07-validation-strategy.md](07-validation-strategy.md) | 测试层次、双入口一致性、恢复和质量验收 |
 | [08-decisions.md](08-decisions.md) | 已接受架构决策、暂缓项和待确认问题 |
 | [09-audio-visual-sync.md](09-audio-visual-sync.md) | 统一 Voice Unit、Whisper 优先、多图等分 fallback 与恢复设计 |
@@ -56,7 +65,11 @@ Mountain 的目标覆盖：
 | [12-observability-and-diagnostics.md](12-observability-and-diagnostics.md) | WebUI/Skills共享的结构化事件、trace、日志、审计、脱敏和诊断包 |
 | [14-task-and-script-preparation.md](14-task-and-script-preparation.md) | Task/Run 边界、文案整理、画面锚定重点与迁移准则 |
 | [15-production-control-and-style-assets.md](15-production-control-and-style-assets.md) | 执行门禁、任务队列、外部素材回存、精确失效与风格模板资产 |
-| [17-project-consolidation-preview-and-archive-plan.md](17-project-consolidation-preview-and-archive-plan.md) | 进入下一阶段前的目录收口、Legacy 强隔离、PR 合并与预览计划 |
+| [22-delivery-roles-and-document-handoff.md](22-delivery-roles-and-document-handoff.md) | 当前角色、文档交接、审核和完成定义 |
+| [23-current-delivery-status.md](23-current-delivery-status.md) | 当前代码/前后端/Skills/验收状态与下一轮次 |
+| [24-codex-six-stage-execution-contract.md](24-codex-six-stage-execution-contract.md) | 六阶段工作单、输入、指令、输出、回存和验收契约 |
+
+历史架构快照、原始PR路线、已完成执行计划和过程报告统一位于 [archive/README.md](archive/README.md)，不参与当前需求解释。
 
 ## 统一术语
 

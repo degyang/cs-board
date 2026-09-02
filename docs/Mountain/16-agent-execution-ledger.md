@@ -1,8 +1,10 @@
 # Mountain 工程执行指令与验收回写台账
 
+> **历史执行台账与当前分支指令集合。** 本文件很长，只有PM明确点名的最新编号/审核章节才是当前任务；不得从较早章节自行选择工作。共同角色和交接以 [22-delivery-roles-and-document-handoff.md](22-delivery-roles-and-document-handoff.md) 为准，项目进度以 [23-current-delivery-status.md](23-current-delivery-status.md) 为准。
+
 ## 1. 文档用途
 
-本文档是 Mountain 当前阶段 CCF（WebUI 前端）和 CCB（后端、CLI、服务入口）的唯一执行指令入口。执行结果写入各自代码分支的独立报告文件，避免多个 worktree 并发修改 `main`。
+本文档保存CCF/CCB历史指令及部分当前后端指令。当前唯一任务由PM在聊天中指向精确文件和章节；执行结果写入各自代码分支的独立报告文件。
 
 后续不再依赖聊天中的零散上下文。每位工程师开始工作前必须完整阅读：
 

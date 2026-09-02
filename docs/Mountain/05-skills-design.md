@@ -1,5 +1,7 @@
 # 七个 Skills 设计
 
+> **目标职责设计，尚未完成运行验收。** 当前 `skills/*/SKILL.md` 已存在，但仍有旧术语、旧参数和缺失的工作单/外部产物闭环；不能据此宣称 Skills 可执行。当前执行契约见 [24-codex-six-stage-execution-contract.md](24-codex-six-stage-execution-contract.md)，完成状态见 [23-current-delivery-status.md](23-current-delivery-status.md)。
+
 ## 1. 定位
 
 Skills 是共享内核的自然语言入口，负责收集参数、调用稳定 CLI、解释结构化结果、请求必要确认，以及选择完整执行、单阶段执行、恢复或返工。
@@ -14,7 +16,7 @@ M04 的 Skills 先驱动标准制作；`custom-reference` 和 `infographic-remot
 skills/
 ├── video-workflow/
 │   └── SKILL.md
-├── visual-anchor-generator/
+├── script-segmenter/             # 目录待在Skills收口切片重命名
 │   └── SKILL.md
 ├── voice-cloner/
 │   └── SKILL.md

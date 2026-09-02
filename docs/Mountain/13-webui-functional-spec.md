@@ -1,6 +1,6 @@
 # WebUI 功能落地规格
 
-状态：实施基线。
+状态：现行功能目标；已实现程度以 [23-current-delivery-status.md](23-current-delivery-status.md) 为准。
 
 > 执行策略、任务队列控制、人工外部素材、资产回存和风格模板以 [15-production-control-and-style-assets.md](15-production-control-and-style-assets.md) 为权威；本文件不得以旧式“逐步执行”或前端 fixture 覆盖这些规则。
 
@@ -12,8 +12,8 @@
 
 | 菜单 | 路由 | 功能 |
 | --- | --- | --- |
-| 新建任务 | `/create` | 内容、参考声音、输出与视觉设置、保存、启动 |
-| 任务队列 | `/tasks` | 任务筛选、队列、成片、取消、重试、诊断 |
+| 新建任务 | `/tasks/new` | 内容、参考声音、输出与视觉设置；先保存，不自动启动 |
+| 任务队列 | `/` | 任务筛选、队列、成片、取消、重试、诊断 |
 | 设置 | `/settings` | 模型、TTS、Whisper、工具链、存储、诊断；不显示 Secret |
 | 帮助 | `/help` | 流程、状态、错误与诊断说明 |
 | 任务工作台 | `/tasks/:taskId` | 当前 Run、六阶段、Unit/Visual、Artifact、活动 |

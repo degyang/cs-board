@@ -17,17 +17,19 @@ Task → Run → Stage → Unit/Visual    风格模板 / 参考素材 / 音色�
 
 ## 2. 新建任务：执行策略
 
-成片设置保存 `execution_policy`。Task 可保存默认值；创建 Run 时写入不可变快照，后续新 Run 可选择新策略。
+成片设置保存 `execution_plan`。Task 可保存默认值；创建 Run 时再写入不可变执行快照。当前产品只使用 `auto/selective`；内部CLI的 `gated/targeted` 是编排策略，不是产品保存值。
 
 ```json
-{"mode":"auto","manual_stages":[],"version":1}
+{"mode":"auto","manual_stages":[]}
 ```
 
 | UI 选择 | 保存值 | 行为 |
 | --- | --- | --- |
 | 自动完成 | `auto`, `[]` | 能力满足时连续执行到成片，或停在外部素材门禁。 |
-| 手动完成：每道工序 | `manual`，六个 Stage ID | 每个 Stage 开始前等待用户触发。 |
-| 手动完成：指定工序 | `manual`，用户多选 Stage ID | 未选 Stage 连续执行，直至下一人工门禁。 |
+| 手动完成：每道工序 | `selective`，六个 Stage ID | 每个 Stage 开始前等待用户触发。 |
+| 手动完成：指定工序 | `selective`，用户多选 Stage ID | 未选 Stage 连续执行，直至下一人工门禁。 |
+
+当前实施阶段只持久化并校验 `execution_plan`；在selective编排落地前，启动必须返回 `EXECUTION_PLAN_NOT_READY`，不得静默按auto或gated执行。
 
 稳定 Stage ID 为：`generate-visual-anchors`、`clone-voice`、`plan-storyboard`、`generate-illustrations`、`render-visuals`、`compose-video`。前端只显示中文名。
 

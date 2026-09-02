@@ -1,5 +1,7 @@
 # WebUI 整改设计
 
+> **现行产品设计，分阶段实现。** 页面表面以 `prototypes/webui/` 为设计源，生产实现为 `web-v2/`，真实进展和未实现项见 [23-current-delivery-status.md](23-current-delivery-status.md)。原型中的 mock、Project 术语和不存在的 API 不属于生产契约。
+
 ## 1. 产品目标
 
 WebUI 面向不关心技术细节的用户：提交文案、参考声音和视觉设置后，一次启动即可自动完成视频。同时为检查、返工和故障分析提供阶段、Voice Unit、Visual Item、Artifact 和 Trace 级视图。
@@ -31,8 +33,8 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 ## 3. 信息架构
 
 ```text
-/create                    新建任务
-/tasks                     任务队列
+/tasks/new                 新建任务
+/                         任务队列
 /tasks/:taskId             任务工作台
 /tasks/:taskId/runs/:runId/diagnostics  运行诊断
 /settings                  服务、模型、存储与诊断设置
@@ -40,7 +42,7 @@ WebUI 面向不关心技术细节的用户：提交文案、参考声音和视�
 
 顶层导航保持新建任务、任务队列、设置、帮助四项。当前 Run 可以作为全局小型状态条展示；不展示“项目”这一当前不存在的产品对象。
 
-## 4. 新建任务 `/create`
+## 4. 新建任务 `/tasks/new`
 
 采用原型已验证的分区/页签结构，而不是多页强制向导。任务创建与资产管理必须使用同一风格/音色 API View，不能以浏览器 fixture 或 localStorage 作为生产真相。
 

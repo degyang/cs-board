@@ -1,5 +1,7 @@
 # 当前架构评审
 
+> **历史快照（2026-08-29）。** 本文描述旧 `webapp/server.py`、内存 Job 和 Vinext 架构，只用于解释迁移原因，不代表当前生产结构。当前状态见 [23-current-delivery-status.md](../../23-current-delivery-status.md)，目标边界见 [02-target-architecture.md](../../02-target-architecture.md)。
+
 ## 1. 系统组成
 
 当前系统是一个本地模块化雏形，但应用编排仍集中在单文件中。
