@@ -1,7 +1,7 @@
 # CORE-CAP-005：修复 capabilities 的集成基线缺口
 
 - Owner: CORE
-- Status: REVIEW_READY
+- Status: APPROVED
 - Priority: P0
 - Depends on: `CORE-CAP-004=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-core-cap-repair`
@@ -67,3 +67,8 @@ git diff --check 0b99b50...HEAD
 
 提交并推送当前分支；报告记录 commit、逐门禁退出码和脱敏证明。将任务置为 `REVIEW_READY` 并唤醒
 CEO。不得自行批准，不得改 WEB 状态或领取下一任务。
+
+## Final verdict
+
+交付 `7ac3cb0`（实现 `6699d20`）已由独立 Reviewer 复核并由 CEO 批准；见
+`docs/agents/reviews/CORE-CAP-005.md`。本批准不构成合并授权。

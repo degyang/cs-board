@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: BLOCKED
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -96,3 +96,14 @@ WEB 已引入 capability delivery 并重跑真实浏览器门禁，但 `GET /api
 `CapabilityService` 调用的 `FilesystemServiceRegistry.has_required_secrets` 不存在于本任务固定消费基线。
 这不是 WEB 页面缺陷，不允许在前端吞掉。关联修复为 `CORE-CAP-005`；该任务经独立审核并由 CEO
 恢复本任务前，保持 `BLOCKED`，也不得并发领取 `WEB-WO-003`。
+
+## Resume after CORE-CAP-005 approval
+
+- Dependency: `CORE-CAP-005=APPROVED`
+- Backend implementation: `6699d20`
+- Reviewed delivery: `7ac3cb0`
+- Resume mode: attempt 1 continuation
+
+WEB 工作树当前固定在 `0b99b50`；只引入其直接子提交 `6699d20`，随后沿用现有 intake 自动化重跑
+真实 API、Vite 与 Playwright 门禁，补齐三张截图、安全 manifest 和报告。WEB 已恢复为注册表中的真实
+Codex CLI 会话。本任务关闭前不得领取或实现 `WEB-WO-003`。

@@ -11,8 +11,8 @@
       "capabilities": ["planning", "review", "integration"]
     },
     "WEB": {
-      "transport": "orchestrator",
-      "thread": "/root/web",
+      "transport": "codex_cli",
+      "thread": "01a060ad-70fe-7ed2-8e37-8c2cdf4c29ee",
       "worktree": "/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity",
       "branch": "feat/mountain-webui-surface-parity",
       "model": "gpt-5.6-luna",

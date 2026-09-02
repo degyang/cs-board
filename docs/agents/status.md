@@ -11,11 +11,11 @@
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | BLOCKED | `docs/agents/tasks/WEB-INTAKE-003.md` | `0b99b50` | real API 500; waits for CORE-CAP-005 |
+| `WEB-INTAKE-003` | WEB | DISPATCHED | `docs/agents/tasks/WEB-INTAKE-003.md` | `0b99b50` | real CLI WEB resumes with approved backend `6699d20` |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
-| `CORE-CAP-005` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` (`APPROVED` verdict; CEO decision pending) |
+| `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | dependency approved; waits for WEB-INTAKE-003 |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | blocked by CORE-WO-003 + WEB-WO-003 |
 
@@ -35,6 +35,8 @@
 - CEO 首次恢复周期核验 WEB 推送提交 `0b99b50` 后，确认并非遗失执行，而是新的 CORE 集成缺口：
   capabilities 调用了消费基线不存在的 public registry method。WEB 转为 `BLOCKED`，`CORE-CAP-005`
   使用固定 WEB base 做最小自包含修复；其独立审核通过前不得恢复 WEB。
+- `CORE-CAP-005` 的独立审核已通过，CEO 批准交付 `7ac3cb0`；WEB 已注册为真实 Codex CLI 会话并恢复
+  `WEB-INTAKE-003`，只引入自包含实现 `6699d20` 后重跑原 intake 门禁。`WEB-WO-003` 继续等待，不得并发。
 
 ## 队列规则
 
