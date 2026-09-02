@@ -278,7 +278,7 @@ export function TaskWorkbenchPage() {
   for (const key of STAGE_KEYS) if (!stageStatuses[key]) stageStatuses[key] = 'unreported'
 
   const completedCount = STAGE_KEYS.filter((k) => stageStatuses[k] === 'succeeded').length
-  const stageStatusLabel = (status: string) => status === 'unreported' ? '尚未报告' : status
+  const stageStatusLabel = (status: string): string | undefined => status === 'unreported' ? '尚未报告' : undefined
   const visibleEvents = eventIdentityMatches ? allEvents : []
   const hasFinal = artifacts.some((a) => a.producer_stage === 'compose-video' && a.status === 'succeeded')
   const runStatus = activeRun?.status ?? task.status
