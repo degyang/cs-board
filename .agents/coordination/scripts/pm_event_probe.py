@@ -42,6 +42,7 @@ def task_delivery(root: Path, task_id: str) -> str:
 ACTIVE_STATUSES = {"DISPATCHED", "IN_PROGRESS", "WORKING", "TEST_READY", "TESTING", "PM_DECISION", "REVIEW_READY", "CHANGES_REQUESTED", "BLOCKED"}
 ACTION_ORDER = {
     "recover-stale": 0,
+    "resolve-blocker": 0,
     "record-test-ready": 1,
     "record-test-result": 2,
     "pm-review": 3,
@@ -152,6 +153,9 @@ def actionable(root: Path, now: datetime | None = None, lease_seconds: int = 600
     busy_owners = {task["owner"] for task in tasks.values() if task["status"] in ACTIVE_STATUSES}
     actions: list[dict[str, object]] = []
     for task in tasks.values():
+        if task["status"] == "BLOCKED":
+            actions.append({"kind": "resolve-blocker", **task})
+            continue
         if (
             task["status"] in {"DISPATCHED", "IN_PROGRESS"}
             and task["owner"] not in COORDINATOR_OWNERS

@@ -187,6 +187,12 @@ class PMEventProbeTest(unittest.TestCase):
         self.assertEqual(action["kind"], "recover-stale")
         self.assertEqual(action["reason"], "runtime_missing")
 
+    def test_blocked_task_requires_a_resolution_action(self) -> None:
+        self.write_status(["| `MEDIA-1` | WORKER_MEDIA | BLOCKED | pending | abc | timeout |"])
+        action = json.loads(self.probe())["actions"][0]
+        self.assertEqual(action["kind"], "resolve-blocker")
+        self.assertEqual(action["task_id"], "MEDIA-1")
+
     def test_idle_and_blocked_in_progress_emit_recovery(self) -> None:
         for status in ("DISPATCHED", "IN_PROGRESS"):
             for state in ("idle", "blocked"):
