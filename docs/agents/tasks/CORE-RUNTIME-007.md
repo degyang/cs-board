@@ -1,7 +1,7 @@
 # CORE-RUNTIME-007: full-suite input/start boundary diagnosis
 
 - Owner: WORKER_CORE
-- Status: DISPATCHED
+- Status: BLOCKED
 - Priority: P0
 - Depends on: `CORE-RUNTIME-006=APPROVED`
 - Branch: `feat/mountain-core-runtime`
@@ -59,4 +59,3 @@ git diff --check de57fab...HEAD
 
 Commit and push the CORE branch, write the bounded diagnosis/recovery report,
 and hand off to Tester. Do not decide approval or modify MEDIA task status.
-
