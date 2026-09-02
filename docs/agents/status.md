@@ -15,7 +15,7 @@
 | `WEB-INTAKE-003` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-INTAKE-003.md` | `51656c9` | `docs/agents/reviews/WEB-INTAKE-003.md` |
 | `MEDIA-SKILLS-003` | WORKER_MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
-| `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
+| `CEO-RECOVERY-002` | PM | SUPERSEDED | `docs/agents/tasks/CEO-RECOVERY-002.md` | `38a98f8` | archived; replaced by independent CEO timer and separate PM |
 | `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
 | `WEB-PARITY-004` | WORKER_WEB | TEST_READY | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | attempt 3 delivered; awaits TESTER_WEB |

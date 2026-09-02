@@ -1,7 +1,7 @@
-# CEO-RECOVERY-002：恢复常驻调度与停滞队列
+# CEO-RECOVERY-002：旧 CEO/PM 合并恢复机制（历史归档）
 
 - Owner: PM（CEO 调度角色）
-- Status: IN_PROGRESS
+- Status: SUPERSEDED
 - Priority: P0
 - Depends on: `PM-AUTO-001=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-mountain-v2`
@@ -12,6 +12,12 @@
 把现有只存在于旧 orchestrator 路径的 PM 恢复为真实、可按 UUID 唤醒的 Codex CLI 会话。CEO 每次只做
 一次短协调周期：观察全队、识别失联或被阻塞的进行中任务、审核已交付工作、计算依赖并派发下一项，
 然后退出本轮。长门禁留给 Worker 或 Reviewer，Dashboard 继续只做观察器。
+
+## Superseded
+
+本契约把 CEO 与 PM 合并在同一恢复会话中，已被 `38a98f8` 引入的独立 CEO timer 和后续五泳道团队
+机制替代。保留本文仅用于追溯历史，不再作为活动任务、资源占用或 PM 待办；新机制以
+`docs/agents/agreements.md` 最新 `TEAM-FLOW-20260902` 约定为准。
 
 ## Current incident
 
