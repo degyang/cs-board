@@ -1,7 +1,7 @@
 # CORE-WO-003：Stage Work Order v1 后端骨架
 
 - Owner: CORE
-- Status: CHANGES_REQUESTED
+- Status: APPROVED
 - Attempt: 3（返工）
 - Priority: P0
 - Depends on: `CORE-EXEC-002=APPROVED`, `MEDIA-WO-002=APPROVED`
@@ -115,3 +115,8 @@ Attempt 2 delivery `d6a73c0` 已修正缺失依赖、run command、插画 ID/pat
 
 不得修改其他语义，不进入 `CORE-CAP-004`。定向与全量门禁沿用 attempt 2；完成后追加报告、提交
 推送并直接唤醒 `/root/pm`。
+
+## Final verdict
+
+Attempt 3 delivery `1c5e9ce` 已由 PM 独立复核并批准；见
+`docs/agents/reviews/CORE-WO-003.md`。本批准不构成合并授权。

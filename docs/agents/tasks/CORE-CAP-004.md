@@ -1,12 +1,12 @@
 # CORE-CAP-004：Native Mountain capabilities API
 
 - Owner: CORE
-- Status: READY
+- Status: IN_PROGRESS
 - Priority: P0
 - Depends on: none（仅等待 CORE 当前单任务容量）
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
 - Branch: `feat/mountain-assets-settings-backend`
-- Base commit: dispatch 时固定为已批准 CORE-WO-003 delivery
+- Base commit: `1c5e9ce`
 
 ## Goal
 

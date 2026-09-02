@@ -1,10 +1,10 @@
 # CORE-WO-003 Review
 
 - Reviewer: PM (`/root/pm`)
-- Delivery: `a38ae67`（code `3836002`）
+- Final delivery: `1c5e9ce`（attempt 1 code `3836002`）
 - Base: `e1bc3d5`
-- Verdict: **CHANGES_REQUESTED**
-- Next attempt: 2
+- Verdict: **APPROVED**
+- Review history: attempt 1、2 的 `CHANGES_REQUESTED` 证据保留在下文
 
 ## 已通过部分
 
@@ -73,3 +73,16 @@ Delivery `d6a73c0` 已通过上一轮四项复现和定向 `23 passed`，但仍�
 
 Attempt 3 只补输出集合、stale 恢复 revision/identity 与行为测试；不重开已通过项，不混入
 capabilities API。
+
+## Final verdict after attempt 3
+
+Delivery `1c5e9ce`：**APPROVED**。
+
+- 六阶段 `expected_outputs` 已按规范集合输出，clone voice 同时含 voice/timeline，compose 同时含
+  final-video/final-manifest；
+- same-hash 依赖恢复不再返回旧 stale；会生成新 revision、work_order ID 和 idempotency identity；
+- 新行为测试独立通过，最终定向门禁 `24 passed, 2 warnings`；
+- `git diff --check e1bc3d5...1c5e9ce` 通过，工作树干净。
+
+前三轮 findings 与修复证据保留用于审计。本批准只覆盖 Work Order backend skeleton，不包含
+candidate Gate、WebUI 或分支合并。

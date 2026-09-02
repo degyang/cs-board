@@ -1,7 +1,7 @@
 # WEB-WO-003：任务工作台执行决策与 Work Order 只读面
 
 - Owner: WEB
-- Status: BACKLOG
+- Status: READY
 - Priority: P1
 - Depends on: `CORE-WO-003=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -20,4 +20,5 @@
 - 有 API contract、组件交互和浏览器证据；原型表面对齐另按权威基准核验；
 - 不添加 mock 业务数据，不修改后端，不自行设计外部 import/accept 语义。
 
-依赖未批准前不得派发。派发时 PM 必须固定 API commit/DTO、页面范围、截图场景与门禁。
+`CORE-WO-003` 已批准，代码依赖满足。WEB 当前仍被 `WEB-INTAKE-003 → CORE-CAP-004` 占用，
+不得重叠派发；待 intake 关闭后由 PM 固定 API commit/DTO、页面范围、截图场景与门禁。
