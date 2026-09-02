@@ -201,6 +201,12 @@
   保留问题，不在本任务授权面内修复。这不构成最终用户验收。现阶段不创建下一任务；`MEDIA-PREFLIGHT-004` 仍须处理其自身门禁，
   `MEDIA-E2E-003` 继续保持 `BLOCKED`。
 
+- `MEDIA-PREFLIGHT-004@4610cbb` 的 `resolve-blocker` 事件
+  `7a158397de80e89d8617ab22fc124c2a5f6cc3ab45f1c129373c631a093731d1`：`CORE-RUNTIME-007@09009f1` 已有条件批准，
+  原 `test_inputs_and_start_boundary` 共享 runtime timeout 依赖已改变。PM 将同一 MEDIA 任务以有界 attempt 3 置为
+  `DISPATCHED`：只在既有 MEDIA worktree 重跑本契约的全量 pytest 门禁、更新精确退出/清理证据，并仅在复现 Media 自身回归时作最小修正；
+  不触及 runtime 诊断或 Media E2E。阶段目标不需要新任务；`MEDIA-E2E-003` 继续 `BLOCKED`，直至本任务获得 Tester 证据和 PM 批准。
+
 ## 队列规则
 
 标准状态机：`READY → WORKING → TEST_READY → TESTING → PM_DECISION → APPROVED`；失败验证由 PM

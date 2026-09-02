@@ -110,3 +110,17 @@ pytest 自身正常 exit 0，或诊断 delivery 相关回归并准确修正报�
 全量 pytest 时在 180 秒 cleanup-only watchdog 下 exit 124，未获得 pytest 自身正常退出证据。该超时发生
 在 `test_inputs_and_start_boundary`，超出本任务允许修改面；不得登记 `REVIEW_READY`，也不得派发
 `MEDIA-E2E-003`。需要 CEO 后续建立独立有界 runtime 诊断契约后再决定恢复路径。
+
+## Attempt 3 bounded recovery
+
+- Trigger: `resolve-blocker@7a158397de80e89d8617ab22fc124c2a5f6cc3ab45f1c129373c631a093731d1`
+- Cause changed: the shared `test_inputs_and_start_boundary` runtime lifecycle diagnosis is conditionally
+  approved by `CORE-RUNTIME-007@09009f1`; the prior full-suite timeout is no longer an unresolved external
+  dependency.
+- Scope: on the existing MEDIA worktree and branch, rerun this contract's full pytest gate after the approved
+  runtime recovery, preserve the existing controlled-4xx/focused/Skills evidence, and update the Media report
+  with the exact exit result and cleanup evidence. Make an implementation change only if a Media-owned regression
+  is concretely reproduced; do not alter runtime diagnosis scope, preflight semantics, or `MEDIA-E2E-003`.
+- Required outcome: pytest must itself exit 0 with no skip, timeout, or watchdog-as-success. Otherwise record the
+  new concrete failure fact as `BLOCKED`; do not mark `TEST_READY`.
+- State: `DISPATCHED`
