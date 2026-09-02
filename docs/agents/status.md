@@ -18,6 +18,7 @@
 | `CEO-RECOVERY-002` | PM | SUPERSEDED | `docs/agents/tasks/CEO-RECOVERY-002.md` | `38a98f8` | archived; replaced by independent CEO timer and separate PM |
 | `CORE-CAP-005` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
 | `CORE-RUNTIME-006` | WORKER_CORE | APPROVED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `de57fab` | `docs/agents/reviews/CORE-RUNTIME-006.md` |
+| `CORE-RUNTIME-007` | WORKER_CORE | DISPATCHED | `docs/agents/tasks/CORE-RUNTIME-007.md` | pending | bounded diagnosis for `MEDIA-PREFLIGHT-004` full-suite timeout |
 | `WEB-PARITY-004` | WORKER_WEB | APPROVED | `docs/agents/tasks/WEB-PARITY-004.md` | `9db741f` | TESTER_WEB PASS; PM approved |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | APPROVED | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | `docs/agents/reviews/PROTOTYPE-GOLDEN-005.md` |
 | `WEB-WO-003` | WORKER_WEB | DISPATCHED | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; dispatcher parser repaired; supervised recovery dispatched |
@@ -159,6 +160,11 @@
   或报告。PM 已确认当前 checkout 与命令路径均无法取得 `dispatch_cli_agent.sh`，因此不能合规唤醒
   受监督 Worker；任务改为 `BLOCKED`，等待恢复该 dispatcher。未创建 orchestrator Worker、未手写
   runtime，也未派发后续任务。
+- `MEDIA-PREFLIGHT-004@4610cbb` 的 `resolve-blocker` 事件已建立并派发独立 P0
+  `CORE-RUNTIME-007`：仅诊断/修复全量 pytest 在 `test_inputs_and_start_boundary` 的共享 runtime
+  生命周期边界，禁止改动 media preflight 语义或将 watchdog 当成功。该任务使用
+  `gpt-5.6-terra + medium`；在 Tester 证据和 PM 决策前，`MEDIA-PREFLIGHT-004` 与
+  `MEDIA-E2E-003` 均保持 `BLOCKED`，不生成其他后续工作。
 
 ## 队列规则
 
