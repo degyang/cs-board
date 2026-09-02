@@ -13,6 +13,45 @@ export type StageKey =
   | 'render-visuals'
   | 'compose-video'
 
+export type ExecutionMode = 'auto' | 'selective'
+
+export interface ExecutionPlan {
+  mode: ExecutionMode
+  manual_stages: StageKey[]
+}
+
+export interface WorkOrderArtifact {
+  artifact_key: string
+  revision: number
+  sha256: string
+  status: string
+  relative_path: string
+}
+
+export interface WorkOrderCommand {
+  command_id: string
+  argv: string[]
+  idempotency_key: string
+  preconditions: string[]
+}
+
+export interface StageWorkOrder {
+  schema_version: string
+  work_order_id: string
+  identity: { task_id: string; run_id: string; stage: string; skill: string; pipeline_id: string; engine: string }
+  revision: number
+  input_fingerprint: string
+  status: string
+  scope: { kind: string; unit_id?: string; visual_id?: string }
+  input_artifacts: WorkOrderArtifact[]
+  parameters_path: string
+  instructions_path: string
+  output_directory: string
+  expected_outputs: Array<{ artifact_key: string; status: string }>
+  commands: Record<string, WorkOrderCommand[]>
+  next_action: { code: string; message: string }
+}
+
 export const STAGE_KEYS: StageKey[] = [
   'generate-visual-anchors',
   'clone-voice',
@@ -254,6 +293,7 @@ export interface SaveInputsResponse {
   ok: boolean
   task_id: string
   input_saved: boolean
+  execution_plan?: ExecutionPlan
 }
 
 export interface VoiceUnitDTO {
@@ -294,6 +334,7 @@ export interface InputsReadback {
   rules: InputsRules | null
   script_preparation: ScriptPreparation | null
   visual_anchor_enabled: boolean
+  execution_plan?: ExecutionPlan
 }
 
 export interface ApiError {

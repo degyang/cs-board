@@ -5,12 +5,14 @@ import {
   fetchTask, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
   startRun, cancelRun, retryRun, runStage, retryStage,
   uploadInputs, fetchInputs, getFinalUrl,
+  fetchWorkOrder,
 } from '../lib/api/client'
 import { formatTime, shortId, formatBytes, formatMs } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
 import { BackButton } from '../components/ui/BackButton'
 import { STAGE_KEYS, STAGE_NAMES } from '../lib/api/types'
+import type { ExecutionMode, StageKey, StageWorkOrder } from '../lib/api/types'
 
 // ── Polling helper ──────────────────────────────────────────────────────
 
@@ -114,6 +116,12 @@ export function TaskWorkbenchPage() {
   const [includeSubtitles, setIncludeSubtitles] = useState(false)
   const [penText, setPenText] = useState('')
   const [strokeDetail, setStrokeDetail] = useState('')
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('auto')
+  const [manualStages, setManualStages] = useState<StageKey[]>([])
+  const [workOrder, setWorkOrder] = useState<StageWorkOrder | null>(null)
+  const [workOrderStage, setWorkOrderStage] = useState<string | null>(null)
+  const [workOrderLoading, setWorkOrderLoading] = useState(false)
+  const [workOrderError, setWorkOrderError] = useState<string | null>(null)
 
   // Restore saved inputs when readback data arrives.
   // Only initializes on first load (inputsSaved is false) to avoid overwriting edits.
@@ -124,6 +132,9 @@ export function TaskWorkbenchPage() {
     setIncludeSubtitles(inputsData.inputs.include_subtitles)
     setPenText(inputsData.inputs.pen_text)
     setStrokeDetail(inputsData.inputs.stroke_detail)
+    const plan = inputsData.execution_plan ?? { mode: 'auto' as const, manual_stages: [] }
+    setExecutionMode(plan.mode)
+    setManualStages(STAGE_KEYS.filter((stage) => plan.manual_stages.includes(stage)))
     if (inputsData.reference_audio.uploaded) {
       setSavedAudioFilename(inputsData.reference_audio.filename)
       setSavedAudioSize(inputsData.reference_audio.size_bytes)
@@ -163,9 +174,15 @@ export function TaskWorkbenchPage() {
       form.set('include_subtitles', String(includeSubtitles))
       if (penText) form.set('pen_text', penText)
       if (strokeDetail) form.set('stroke_detail', strokeDetail)
+      form.set('execution_mode', executionMode)
+      form.set('manual_stages', JSON.stringify(executionMode === 'selective'
+        ? STAGE_KEYS.filter((stage) => manualStages.includes(stage)) : []))
 
       const res = await uploadInputs(taskId, form)
       if (res.ok) {
+        const plan = res.execution_plan ?? { mode: executionMode, manual_stages: executionMode === 'selective' ? manualStages : [] }
+        setExecutionMode(plan.mode)
+        setManualStages(STAGE_KEYS.filter((stage) => plan.manual_stages.includes(stage)))
         setInputsSaved(true)
         setActionSuccess('制作输入已保存')
       }
@@ -173,6 +190,21 @@ export function TaskWorkbenchPage() {
       setActionError(err instanceof Error ? err.message : '保存失败')
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  async function handleWorkOrder(stage: string) {
+    if (!taskId || !runId) return
+    setWorkOrderStage(stage)
+    setWorkOrderLoading(true)
+    setWorkOrderError(null)
+    try {
+      setWorkOrder(await fetchWorkOrder(taskId, runId, stage))
+    } catch (err) {
+      setWorkOrder(null)
+      setWorkOrderError(err instanceof Error ? err.message : '工作单加载失败')
+    } finally {
+      setWorkOrderLoading(false)
     }
   }
 
@@ -420,6 +452,17 @@ export function TaskWorkbenchPage() {
             </div>
           </div>
 
+          <fieldset className="field" disabled={actionLoading === 'inputs'}>
+            <legend>执行计划</legend>
+            <label style={{ display: 'block', marginBottom: 6 }}><input type="radio" name="execution-mode" checked={executionMode === 'auto'} onChange={() => { setExecutionMode('auto'); setInputsSaved(false) }} /> 自动执行全部阶段</label>
+            <label style={{ display: 'block', marginBottom: 6 }}><input type="radio" name="execution-mode" checked={executionMode === 'selective'} onChange={() => { setExecutionMode('selective'); setInputsSaved(false) }} /> 选择手动阶段</label>
+            {executionMode === 'selective' && <div className="hint" aria-label="手动阶段">
+              {STAGE_KEYS.map((stage) => <label key={stage} style={{ display: 'block', marginTop: 4 }}><input type="checkbox" checked={manualStages.includes(stage)} onChange={(event) => { setManualStages(STAGE_KEYS.filter((item) => event.target.checked ? item === stage || manualStages.includes(item) : item !== stage)); setInputsSaved(false) }} /> {STAGE_NAMES[stage]}</label>)}
+              <span style={{ display: 'block', marginTop: 4 }}>所选阶段将按流程顺序保存。</span>
+            </div>}
+            {inputsSaved && <p className="hint" style={{ marginTop: 6 }}>已保存执行计划：{executionMode === 'auto' ? '自动执行全部阶段' : `手动阶段：${manualStages.map((stage) => STAGE_NAMES[stage]).join('、')}`}</p>}
+          </fieldset>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
               <label htmlFor="input-stroke">笔触细节</label>
@@ -533,7 +576,10 @@ export function TaskWorkbenchPage() {
                           {actionLoading === `stage-retry-${key}` ? '…' : '重试'}
                         </button>
                       )}
+                      {runId && <button className="btn btn-ghost btn-sm" style={{ marginLeft: st === 'pending' || st === 'failed' ? 6 : 'auto', fontSize: 11 }} onClick={() => void handleWorkOrder(key)} disabled={workOrderLoading}>查看工作单</button>}
                     </div>
+                    {workOrderStage === key && workOrder && <WorkOrderSummary order={workOrder} />}
+                    {workOrderStage === key && workOrderError && <p className="hint" role="alert">{workOrderError}</p>}
                   </div>
                 )
               })}
@@ -661,4 +707,18 @@ export function TaskWorkbenchPage() {
       </div>
     </div>
   )
+}
+
+function WorkOrderSummary({ order }: { order: StageWorkOrder }) {
+  const safePath = (value: string) => value.startsWith('/') || value.includes('..') ? '不可显示' : value
+  return <div className="card" style={{ marginTop: 8, padding: 10 }}>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
+      <strong>Work Order</strong><span>修订 {order.revision}</span><StatusBadge status={order.status} />
+    </div>
+    <p className="hint">下一动作：{order.next_action.message}（{order.next_action.code}）</p>
+    <p className="hint">指纹：{order.input_fingerprint.slice(0, 20)}…</p>
+    <p className="hint">参数：{safePath(order.parameters_path)}　指令：{safePath(order.instructions_path)}　输出目录：{safePath(order.output_directory)}</p>
+    <p className="hint">输入：{order.input_artifacts.map((item) => `${item.artifact_key} · 修订 ${item.revision} · ${item.status}`).join('、') || '无'}</p>
+    <p className="hint">预期输出：{order.expected_outputs.map((item) => item.artifact_key).join('、') || '无'}</p>
+  </div>
 }
