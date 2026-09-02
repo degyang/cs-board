@@ -165,6 +165,9 @@
   生命周期边界，禁止改动 media preflight 语义或将 watchdog 当成功。该任务使用
   `gpt-5.6-terra + medium`；在 Tester 证据和 PM 决策前，`MEDIA-PREFLIGHT-004` 与
   `MEDIA-E2E-003` 均保持 `BLOCKED`，不生成其他后续工作。
+- `CORE-RUNTIME-007` 收到 `recover-stale(runtime_idle)` 时仍为 `DISPATCHED`，没有 Worker
+  handoff 或 Tester 报告；PM 保持该任务状态并在本提交后仅通过受监督 dispatcher 异步重派。未写入
+  Worker runtime、未运行门禁、未作 PM 决策，且不生成后续任务。
 
 ## 队列规则
 
