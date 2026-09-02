@@ -15,10 +15,10 @@ export type StageKey =
 
 export type ExecutionMode = 'auto' | 'selective'
 
-/** Persisted execution decision. `manual_stages` is always canonical stage order. */
+/** Legacy persisted execution decision, retained only for read compatibility. */
 export interface ExecutionPlan {
   mode: ExecutionMode
-  manual_stages: StageKey[]
+  [key: string]: unknown
 }
 
 export const STAGE_KEYS: StageKey[] = [

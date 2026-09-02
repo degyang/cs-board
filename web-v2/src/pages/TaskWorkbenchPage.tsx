@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAsync } from '../lib/api/queries'
 import {
   fetchTask, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
-  startRun, cancelRun, retryRun, runStage, retryStage,
+  cancelRun,
   uploadInputs, fetchInputs, getFinalUrl,
 } from '../lib/api/client'
 import { formatTime, shortId, formatBytes, formatMs } from '../lib/formatting'
@@ -11,8 +11,7 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
 import { BackButton } from '../components/ui/BackButton'
 import { STAGE_KEYS, STAGE_NAMES } from '../lib/api/types'
-import type { ExecutionMode, StageKey } from '../lib/api/types'
-import { MountainApiError } from '../lib/api/client'
+import type { StageKey } from '../lib/api/types'
 
 // ── Polling helper ──────────────────────────────────────────────────────
 
@@ -20,20 +19,51 @@ function isTerminal(status: string): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
 }
 
-function canonicalManualStages(stages: readonly StageKey[]): StageKey[] {
-  return STAGE_KEYS.filter((stage) => stages.includes(stage))
+export type StageContractMetadata = {
+  id: StageKey
+  title: string
+  entry: string
+  persistedInputs: string
+  outputs: string
+  exit: string
+  operations: string
 }
 
-/** Only the documented plan error and its string suggestion may reach the UI. */
-function executionPlanNotice(error: unknown): string | null {
-  if (!(error instanceof MountainApiError)) return null
-  const domain = error.apiError
-  if (error.status !== 409 || domain?.code !== 'EXECUTION_PLAN_NOT_READY' || domain.retryable !== false) return null
-  const suggestion = domain.details?.suggestion
-  return typeof suggestion === 'string' && suggestion.trim()
-    ? `当前执行计划暂不能启动。${suggestion.trim()}`
-    : '当前执行计划暂不能启动，请调整执行计划后重试。'
-}
+/** One typed source of truth for the six first-phase stage contract cards. */
+export const STAGE_CONTRACTS: readonly StageContractMetadata[] = [
+  {
+    id: 'generate-visual-anchors', title: STAGE_NAMES['generate-visual-anchors'],
+    entry: '已保存视频文案', persistedInputs: '文案、风格', outputs: '画面锚点数据',
+    exit: '画面锚定可供分镜使用', operations: '人工检查锚点后等待 Gate',
+  },
+  {
+    id: 'clone-voice', title: STAGE_NAMES['clone-voice'],
+    entry: '文案已分段且参考音频已保存', persistedInputs: '文案、参考音频', outputs: '配音单元与音频',
+    exit: '配音单元与时长可供后续阶段使用', operations: '人工确认声音结果后等待 Gate',
+  },
+  {
+    id: 'plan-storyboard', title: STAGE_NAMES['plan-storyboard'],
+    entry: '画面锚点与配音单元可用', persistedInputs: '画面锚点、配音单元', outputs: '分镜计划',
+    exit: '每个单元都有分镜计划', operations: '人工检查分镜后等待 Gate',
+  },
+  {
+    id: 'generate-illustrations', title: STAGE_NAMES['generate-illustrations'],
+    entry: '分镜计划已完成', persistedInputs: '分镜计划、风格', outputs: 'Codex 生成的插画候选',
+    exit: '人工选择候选插画并确认', operations: '生成候选 → 人工选择 → 等待 Gate',
+  },
+  {
+    id: 'render-visuals', title: STAGE_NAMES['render-visuals'],
+    entry: '已选择插画且分镜通过 Gate', persistedInputs: '分镜计划、已选插画', outputs: '视觉序列',
+    exit: '视觉序列渲染完成', operations: '人工检查渲染后等待 Gate',
+  },
+  {
+    id: 'compose-video', title: STAGE_NAMES['compose-video'],
+    entry: '视觉序列与配音均通过 Gate', persistedInputs: '视觉序列、音频', outputs: '最终视频',
+    exit: '成片可下载并通过最终检查', operations: '人工验收成片后等待 Gate',
+  },
+]
+
+const GATE_UNAVAILABLE = '后端 Gate 契约尚未提供'
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -131,8 +161,6 @@ export function TaskWorkbenchPage() {
   const [includeSubtitles, setIncludeSubtitles] = useState(false)
   const [penText, setPenText] = useState('')
   const [strokeDetail, setStrokeDetail] = useState('')
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>('auto')
-  const [manualStages, setManualStages] = useState<StageKey[]>([])
 
   // Restore saved inputs when readback data arrives.
   // Only initializes on first load (inputsSaved is false) to avoid overwriting edits.
@@ -143,9 +171,6 @@ export function TaskWorkbenchPage() {
     setIncludeSubtitles(inputsData.inputs.include_subtitles)
     setPenText(inputsData.inputs.pen_text)
     setStrokeDetail(inputsData.inputs.stroke_detail)
-    const plan = inputsData.execution_plan ?? { mode: 'auto' as const, manual_stages: [] }
-    setExecutionMode(plan.mode)
-    setManualStages(canonicalManualStages(plan.manual_stages))
     if (inputsData.reference_audio.uploaded) {
       setSavedAudioFilename(inputsData.reference_audio.filename)
       setSavedAudioSize(inputsData.reference_audio.size_bytes)
@@ -185,42 +210,13 @@ export function TaskWorkbenchPage() {
       form.set('include_subtitles', String(includeSubtitles))
       if (penText) form.set('pen_text', penText)
       if (strokeDetail) form.set('stroke_detail', strokeDetail)
-      form.set('execution_mode', executionMode)
-      form.set('manual_stages', JSON.stringify(
-        executionMode === 'selective' ? canonicalManualStages(manualStages) : [],
-      ))
-
       const res = await uploadInputs(taskId, form)
       if (res.ok) {
-        // Older saved-input deployments omit the echoed plan; the submitted
-        // canonical values remain the truthful local readback in that case.
-        const plan = res.execution_plan ?? {
-          mode: executionMode,
-          manual_stages: executionMode === 'selective' ? canonicalManualStages(manualStages) : [],
-        }
-        setExecutionMode(plan.mode)
-        setManualStages(canonicalManualStages(plan.manual_stages))
         setInputsSaved(true)
         setActionSuccess('制作输入已保存')
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '保存失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  // ── Start run ────────────────────────────────────────────────────────
-  async function handleStart() {
-    if (!taskId || !runId) return
-    setActionLoading('start')
-    clearFeedback()
-    try {
-      await startRun(taskId, runId)
-      setActionSuccess('运行已启动')
-      setPollMs(10_000) // resume polling
-    } catch (err) {
-      setActionError(executionPlanNotice(err) ?? (err instanceof Error ? err.message : '启动失败'))
     } finally {
       setActionLoading(null)
     }
@@ -241,51 +237,6 @@ export function TaskWorkbenchPage() {
     }
   }
 
-  async function handleRetry() {
-    if (!taskId || !runId) return
-    setActionLoading('retry')
-    clearFeedback()
-    try {
-      await retryRun(taskId, runId)
-      setActionSuccess('重试已提交')
-      setPollMs(10_000)
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '重试失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  // ── Stage run/retry ──────────────────────────────────────────────────
-  async function handleStageRun(stage: string) {
-    if (!taskId || !runId) return
-    setActionLoading(`stage-run-${stage}`)
-    clearFeedback()
-    try {
-      await runStage(taskId, runId, stage)
-      setActionSuccess(`${STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage} 已启动`)
-      setPollMs(10_000)
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '阶段启动失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  async function handleStageRetry(stage: string) {
-    if (!taskId || !runId) return
-    setActionLoading(`stage-retry-${stage}`)
-    clearFeedback()
-    try {
-      await retryStage(taskId, runId, stage)
-      setActionSuccess(`${STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage} 重试已提交`)
-      setPollMs(10_000)
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '阶段重试失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
 
   // ── Loading / Error states ───────────────────────────────────────────
   if (taskLoading && !taskData) {
@@ -317,7 +268,6 @@ export function TaskWorkbenchPage() {
   const hasFinal = artifacts.some((a) => a.producer_stage === 'compose-video' && a.status === 'succeeded')
   const runStatus = activeRun?.status ?? task.status
   const isRunning = activeRun?.status === 'running'
-  const isTerminalState = activeRun ? isTerminal(activeRun.status) : false
 
   return (
     <div className="page">
@@ -363,24 +313,12 @@ export function TaskWorkbenchPage() {
 
         {/* Run control buttons */}
         <div className="run-actions" style={{ marginTop: 12 }}>
-          {activeRun && activeRun.status === 'pending' && (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={handleStart}
-              disabled={!inputsSaved || !hasCapability || actionLoading === 'start'}
-              title={!inputsSaved ? '请先保存制作输入' : !hasCapability ? 'Provider 不可用' : undefined}
-            >
-              {actionLoading === 'start' ? <><span className="spinner" />启动中…</> : '开始制作'}
-            </button>
+          {activeRun?.status === 'pending' && (
+            <span className="hint">运行等待人工逐阶段操作；Gate 契约就绪后才能执行阶段。</span>
           )}
           {isRunning && (
             <button className="btn btn-danger btn-sm" onClick={handleCancel} disabled={actionLoading !== null}>
               {actionLoading === 'cancel' ? <><span className="spinner" />取消中…</> : '取消'}
-            </button>
-          )}
-          {isTerminalState && activeRun?.status === 'failed' && (
-            <button className="btn btn-primary btn-sm" onClick={handleRetry} disabled={actionLoading !== null}>
-              {actionLoading === 'retry' ? <><span className="spinner" />重试中…</> : '重试'}
             </button>
           )}
           {hasFinal && activeRun && (
@@ -453,53 +391,6 @@ export function TaskWorkbenchPage() {
               <input id="input-pen" className="input" value={penText} onChange={(e) => { setPenText(e.target.value); setInputsSaved(false) }} placeholder="白板动画中的手写文字" disabled={actionLoading === 'inputs'} />
             </div>
           </div>
-
-          <fieldset className="field" disabled={actionLoading === 'inputs'}>
-            <legend>执行计划</legend>
-            <label style={{ display: 'block', marginBottom: 6 }}>
-              <input
-                type="radio"
-                name="execution-mode"
-                checked={executionMode === 'auto'}
-                onChange={() => { setExecutionMode('auto'); setInputsSaved(false) }}
-              /> 自动执行全部阶段
-            </label>
-            <label style={{ display: 'block', marginBottom: 6 }}>
-              <input
-                type="radio"
-                name="execution-mode"
-                checked={executionMode === 'selective'}
-                onChange={() => { setExecutionMode('selective'); setInputsSaved(false) }}
-              /> 选择手动阶段
-            </label>
-            {executionMode === 'selective' && (
-              <div className="hint" aria-label="手动阶段">
-                {STAGE_KEYS.map((stage) => (
-                  <label key={stage} style={{ display: 'block', marginTop: 4 }}>
-                    <input
-                      type="checkbox"
-                      checked={manualStages.includes(stage)}
-                      onChange={(event) => {
-                        const next = event.target.checked
-                          ? [...manualStages, stage]
-                          : manualStages.filter((item) => item !== stage)
-                        setManualStages(canonicalManualStages(next))
-                        setInputsSaved(false)
-                      }}
-                    /> {STAGE_NAMES[stage]}
-                  </label>
-                ))}
-                <span style={{ display: 'block', marginTop: 4 }}>所选阶段将按流程顺序保存。</span>
-              </div>
-            )}
-            {inputsSaved && (
-              <p className="hint" style={{ marginTop: 6 }}>
-                已保存执行计划：{executionMode === 'auto'
-                  ? '自动执行全部阶段'
-                  : `手动阶段：${canonicalManualStages(manualStages).map((stage) => STAGE_NAMES[stage]).join('、')}`}
-              </p>
-            )}
-          </fieldset>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
@@ -580,50 +471,42 @@ export function TaskWorkbenchPage() {
             阶段工作区
             <span className="badge">{completedCount}/{STAGE_KEYS.length}</span>
           </div>
-          {activeRun ? (
-            <div>
-              {STAGE_KEYS.map((key) => {
-                const st = stageStatuses[key]
-                const stageData = stages.find((s) => s.stage === key)
-                return (
-                  <div key={key} style={{ padding: '10px 0', borderBottom: '1px solid var(--nt-border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <StatusBadge status={st} />
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{STAGE_NAMES[key]}</span>
-                      {stageData && stageData.attempt > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>#{stageData.attempt}</span>
-                      )}
-                      {/* Stage actions */}
-                      {st === 'pending' && activeRun.status !== 'pending' && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ marginLeft: 'auto', fontSize: 11 }}
-                          onClick={() => handleStageRun(key)}
-                          disabled={actionLoading !== null}
-                        >
-                          {actionLoading === `stage-run-${key}` ? '…' : '执行'}
-                        </button>
-                      )}
-                      {st === 'failed' && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ marginLeft: 'auto', fontSize: 11 }}
-                          onClick={() => handleStageRetry(key)}
-                          disabled={actionLoading !== null}
-                        >
-                          {actionLoading === `stage-retry-${key}` ? '…' : '重试'}
-                        </button>
-                      )}
-                    </div>
+          <div>
+            {!activeRun && <p className="hint" style={{ marginBottom: 12 }}><span>任务尚未启动运行</span>（没有 active Run）；以下契约卡仅展示真实阶段基线。</p>}
+            {STAGE_CONTRACTS.map((contract) => {
+              const st = stageStatuses[contract.id]
+              const stageData = stages.find((s) => s.stage === contract.id)
+              return (
+                <article key={contract.id} className="stage-contract-card" style={{ padding: '14px 0', borderBottom: '1px solid var(--nt-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <StatusBadge status={st} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{contract.title}</span>
+                    <code style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>{contract.id}</code>
+                    <span style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>attempt {stageData?.attempt ?? 0}</span>
                   </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="empty-state" style={{ padding: '24px 0' }}>
-              <div className="empty-sub">任务尚未启动运行</div>
-            </div>
-          )}
+                  <dl className="stage-contract-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 16px', margin: '10px 0 8px', fontSize: 12 }}>
+                    <div><dt className="hint">入口条件</dt><dd>{contract.entry}</dd></div>
+                    <div><dt className="hint">持久化输入</dt><dd>{contract.persistedInputs}</dd></div>
+                    <div><dt className="hint">预期输出</dt><dd>{contract.outputs}</dd></div>
+                    <div><dt className="hint">出口条件</dt><dd>{contract.exit}</dd></div>
+                  </dl>
+                  <div className="notice notice-warn" style={{ marginTop: 8 }}>
+                    <strong><span>人工 Gate</span>：</strong> {GATE_UNAVAILABLE}。{contract.operations}
+                  </div>
+                </article>
+              )
+            })}
+            {stages.filter((stage) => !STAGE_KEYS.includes(stage.stage as StageKey)).map((stage) => (
+              <article key={`unknown-${stage.stage}`} className="stage-contract-card" style={{ padding: '14px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <StatusBadge status={stage.status || 'unknown'} />
+                  <strong>未知阶段</strong>
+                  <code>{stage.stage}</code>
+                </div>
+                <p className="hint">后端返回了未登记的阶段，未执行任何前端操作。</p>
+              </article>
+            ))}
+          </div>
         </div>
 
         {/* Right: Artifacts */}
