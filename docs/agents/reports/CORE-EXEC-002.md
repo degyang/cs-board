@@ -63,3 +63,40 @@ and concurrent pipeline calls not duplicating the automatic prefix.
 - No `web-v2` or old `/api/mountain` change was made.
 - Task lifecycle synchronization and legacy CLI provider configuration remain
   outside this slice.
+
+## Attempt 2 — CLI bounded correction
+
+Code delivery: `e6349e9 fix(mountain): unify CLI stage dispatch`.
+
+`cli/csboard.py stage run` now has one dispatch path for every registered
+canonical stage.  It receives only `--task`, optional `--run`, `--stage`, and
+the existing output option; all production inputs are loaded by Application
+services from persisted Task/Run/request data.  The obsolete `--script`,
+`--reference`, `--tts-url`, and `--tts-mode` arguments were removed.  In
+particular, `clone-voice` no longer rejects a CLI invocation solely because a
+second reference path was not provided.  The former CLI-only IndexTTS,
+Whisper, renderer, and FFmpeg adapter construction was removed from stage
+dispatch; adapter selection remains inside the existing Application provider
+factory path.
+
+Added subprocess tests establish that all six canonical stage names enter the
+same persisted-plan dispatch, that no legacy inputs appear in `stage run
+--help`, that `clone-voice` has no `--reference` parser boundary, and that
+`stage retry` observes the persisted manual gate.
+
+### Attempt 2 verification
+
+- `/mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q tests/test_task_execution_plan_23.py tests/test_pipeline_orchestrator.py tests/test_cli_csboard.py tests/test_mountain_contracts.py tests/test_mountain_server.py`
+  - `106 passed`, exit 0.
+- Full backend suite was executed in bounded groups because an unsplit command
+  exceeds the terminal's 30-second yield ceiling:
+  - `25 passed`; `72 passed, 3 subtests passed`; `29 passed`; `34 passed`;
+    `96 passed, 4 skipped`; `237 passed, 1 skipped`.
+  - All groups exited 0.
+- `git diff --check a5d5938...HEAD`: exit 0.
+- `rg -n -- '--script|--reference|--tts-url|--tts-mode|IndexTTSAdapter|WhisperAlignmentAdapter|FFmpegMediaAdapter' cli/csboard.py` returns only the
+  `FFmpegMediaAdapter` used by the separate `asset voice import` command
+  (lines 360–362), not by `stage run` or `stage retry`.
+
+The working tree was clean after the code commit; this report amendment is the
+only remaining tracked delivery change before its report commit.
