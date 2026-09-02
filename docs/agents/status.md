@@ -189,6 +189,9 @@
 - `WEB-WO-003` 已按该有界返工决定置为 `DISPATCHED` 并交由 `WORKER_WEB` 的受监督 dispatcher 异步执行；
   attempt 2 仅修复真实浏览器 Task 创建流程并提交通过证据，沿用默认适中配置。当前 Owner 仍有此非终态任务，
   不生成或派发后续 WEB 工作；`MEDIA-E2E-003` 继续等待既有依赖。
+- 对 `CORE-RUNTIME-007` 的同一 `resolve-blocker` 签名作幂等 PM 决定：任务契约中的外部依赖记录仍完整且
+  可执行，须恢复 `dispatch_cli_agent.sh` 与 `run_worker_agent.sh` 受监督 wrapper 后才可原样重派；结论为
+  `BLOCKED`，阶段目标当前不需要新任务，未派发 `WORKER_CORE`。
 
 ## 队列规则
 
