@@ -21,7 +21,7 @@
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `b4287d9` | attempt 2 immutable capture correction handed off |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
-| `MEDIA-PREFLIGHT-004` | MEDIA | CHANGES_REQUESTED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | attempt 2 controlled 4xx/full-suite correction; not dispatched |
+| `MEDIA-PREFLIGHT-004` | MEDIA | DISPATCHED | `docs/agents/tasks/MEDIA-PREFLIGHT-004.md` | `8532302` | attempt 2 controlled 4xx/full-suite correction dispatched |
 | `MEDIA-E2E-003` | MEDIA | BACKLOG | `docs/agents/tasks/MEDIA-E2E-003.md` | pending | final M1 closure; waits for WEB-WO-003 + MEDIA-PREFLIGHT-004 |
 | `DASH-STATS-003` | DASH | APPROVED | `docs/agents/tasks/DASH-STATS-003.md` | `45a3fba` | `docs/agents/reviews/DASH-STATS-003.md` |
 
@@ -126,6 +126,9 @@
   仅登记 `REVIEW_READY`，不解除 WEB blocker。`MEDIA-PREFLIGHT-004@8532302` 独立评审提交 `a8a4aca`
   结论为 `CHANGES_REQUESTED`：缺少 controlled 4xx 证据，且全量 pytest 未能在评审中复现正常退出；
   CEO 记录有界 attempt 2，但本轮不派发，`MEDIA-E2E-003` 保持阻塞。
+- `MEDIA-PREFLIGHT-004` attempt 2 已按纠正优先级异步派发，沿用 `gpt-5.6-terra + medium`；提交
+  tracked `DISPATCHED` 后仅调用 supervised dispatcher，由 wrapper 独占发布 Worker runtime。PM 不等待
+  长门禁，`MEDIA-E2E-003` 继续阻塞。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。

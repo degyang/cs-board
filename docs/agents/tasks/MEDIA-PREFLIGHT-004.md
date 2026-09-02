@@ -1,7 +1,7 @@
 # MEDIA-PREFLIGHT-004：真实媒体依赖 fail-closed 预检
 
 - Owner: MEDIA
-- Status: CHANGES_REQUESTED
+- Status: DISPATCHED
 - Priority: P0
 - Depends on: `MEDIA-SKILLS-003=APPROVED`
 - Worktree: `/mnt/d/workstation/projects/cs-board-media`
@@ -98,4 +98,4 @@ HTTP 4xx 的独立 fail-closed reason code/非零 CLI 证据；并用 180 秒 wa
 pytest 自身正常 exit 0，或诊断 delivery 相关回归并准确修正报告。timeout/信号不得算成功；live preflight
 可继续如实 nonzero。`MEDIA-E2E-003` 继续阻塞。
 
-- Attempt 2 dispatch state: not dispatched
+- Attempt 2 dispatch state: `DISPATCHED`
