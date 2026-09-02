@@ -11,7 +11,7 @@
 | `MEDIA-WO-002` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-WO-002.md` | `7bc8af9` | `docs/agents/reviews/MEDIA-WO-002.md` |
 | `PM-AUTO-001` | PM | APPROVED | `docs/agents/tasks/PM-AUTO-001.md` | `fa840d7` | `docs/agents/reviews/PM-AUTO-001.md` |
 | `CORE-WO-003` | CORE | APPROVED | `docs/agents/tasks/CORE-WO-003.md` | `1c5e9ce` | `docs/agents/reviews/CORE-WO-003.md` |
-| `WEB-INTAKE-003` | WEB | DISPATCHED | `docs/agents/tasks/WEB-INTAKE-003.md` | `672f820` | review CHANGES_REQUESTED; bounded attempt 2 dispatched |
+| `WEB-INTAKE-003` | WEB | REVIEW_READY | `docs/agents/tasks/WEB-INTAKE-003.md` | `0dbbf4e` | bounded attempt 2 committed; independent re-review pending |
 | `MEDIA-SKILLS-003` | MEDIA | APPROVED | `docs/agents/tasks/MEDIA-SKILLS-003.md` | `6fc2924` | `docs/agents/reviews/MEDIA-SKILLS-003.md` |
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
@@ -48,6 +48,8 @@
   对照，但生产实现只保留 Task 术语与真实 `/api/v1`，不得迁移 mock、localStorage、`/projects` 或明文 Secret。
 - `WEB-INTAKE-003@672f820` 的独立评审结论为 `CHANGES_REQUESTED`；attempt 2 只修正报告脱敏/启动说明与
   API checker 有界失败行为。纠正再次获独立审核前，不批准且不派发 `WEB-PARITY-004` 或 `WEB-WO-003`。
+- `WEB-INTAKE-003` attempt 2 已交付 `0dbbf4e` 并进入 `REVIEW_READY`；只记录 Worker handoff，新的
+  独立复核完成前仍不批准或释放任何后续 WEB 任务。
 
 ## 队列规则
 

@@ -1,7 +1,7 @@
 # WEB-INTAKE-003：新建任务到工作台的真实浏览器闭环
 
 - Owner: WEB
-- Status: DISPATCHED
+- Status: REVIEW_READY
 - Priority: P0
 - Depends on: `BASELINE-WEB-001=APPROVED`
 - Worktree: `/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-webui-surface-parity`
@@ -137,3 +137,11 @@ Allowed correction surfaces 仅限 `web-v2/scripts/check-api-contract.mjs`、必
 
 完成后运行 review 中列出的全部 attempt 2 命令，提交并推送，将本任务置为 `REVIEW_READY` 并通知 PM；
 不得自行批准或领取下一项 WEB 工作。
+
+## Attempt 2 review handoff
+
+- Delivery: `0dbbf4e`
+- Report: `docs/agents/reports/WEB-INTAKE-003.md`
+- State: `REVIEW_READY`
+
+Worker 已提交并推送有界 checker/report 纠正；等待新的独立复核，不代表 CEO 批准。
