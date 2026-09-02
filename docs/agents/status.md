@@ -17,7 +17,7 @@
 | `CORE-CAP-004` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-004.md` | `c567c3a` | `docs/agents/reviews/CORE-CAP-004.md` |
 | `CEO-RECOVERY-002` | PM | IN_PROGRESS | `docs/agents/tasks/CEO-RECOVERY-002.md` | pending | real CLI CEO registered; implementation active |
 | `CORE-CAP-005` | CORE | APPROVED | `docs/agents/tasks/CORE-CAP-005.md` | `7ac3cb0` | `docs/agents/reviews/CORE-CAP-005.md` |
-| `CORE-RUNTIME-006` | CORE | REVIEW_READY | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 2 zero-skip delivery verified; independent review in progress |
+| `CORE-RUNTIME-006` | CORE | CHANGES_REQUESTED | `docs/agents/tasks/CORE-RUNTIME-006.md` | `eb1a248` | attempt 3 same-port immediate-reuse correction; not dispatched |
 | `WEB-PARITY-004` | WEB | BLOCKED | `docs/agents/tasks/WEB-PARITY-004.md` | `d7819d2` | CHANGES_REQUESTED; waits for reproducible immutable five-page golden input |
 | `PROTOTYPE-GOLDEN-005` | PROTOTYPE | REVIEW_READY | `docs/agents/tasks/PROTOTYPE-GOLDEN-005.md` | `069ace1` | five golden + manifest delivered; next review after CORE |
 | `WEB-WO-003` | WEB | READY | `docs/agents/tasks/WEB-WO-003.md` | pending | P1; waits behind same-owner P0 WEB-PARITY-004 |
@@ -95,6 +95,9 @@
 - 本轮 CORE、MEDIA、PROTOTYPE 的 review digest 均为空，CORE Reviewer 仍有有效 working lease。
   `PROTOTYPE-GOLDEN-005@069ace1` 已核验提交推送且工作树干净，纠正契约头为 `REVIEW_READY`；由于它
   直接解除 M1 主链的 WEB blocker，Reviewer 释放后先审 PROTOTYPE，再审 MEDIA，期间不伪造并行审核。
+- `CORE-RUNTIME-006@eb1a248` 独立评审提交 `33544e1` 结论为 `CHANGES_REQUESTED`：全量 456 passed、
+  0 skipped 和 smoke 通过，但正常停止后同一端口不能立即复用。CEO 已记录有界 attempt 3 lifecycle/
+  same-port test 范围但本轮不派发；Reviewer WIP 随后转给关键路径 `PROTOTYPE-GOLDEN-005`，MEDIA 继续排队。
 - 当前队列只服务 M1 人工 Skills 闭环：正式 WebUI Task 输入 → 人工可读 Work Order → Codex 按
   task_id/run_id 和持久化输入逐阶段执行 → Codex imagegen 图片 gate → 可播放 MP4。M1 不实现
   auto/selective 编排；完成后进入 `USER_ACCEPTANCE` 并停止自动新增/派发开发任务。
