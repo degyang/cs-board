@@ -6,7 +6,7 @@
     "dpr": 1
   },
   "zoom": "100%",
-  "generation_commit": "d7819d234b292e1014d61b25fe976b8dc5f6628d",
+  "generation_commit": "9a6ec6c480ab0b14b836416723d8f3c8b66ae60e",
   "golden_source": {
     "kind": "git-tracked prototype",
     "commit": "0f56e824c0d49ab5c090e7ea07086dc9d47f47a9",
@@ -22,7 +22,7 @@
       "golden": "golden/01-brand-shell.png",
       "actual": "actual/brand-shell.png",
       "golden_sha256": "a33f02db0b429b3617a717279d926588cadd1c65debbe19c5c02a7c10836117a",
-      "actual_sha256": "0934f7d0acf7c1c92efcf896a9f6181b4a2f21d006ad4e1b0e8725831f09288a",
+      "actual_sha256": "d34f8184060d0f13dc097fb448e07036656974d9da17bf2a5249ebb00c285642",
       "width": 1366,
       "height": 900,
       "dpr": 1
@@ -34,7 +34,7 @@
       "golden": "golden/02-task-queue.png",
       "actual": "actual/task-queue.png",
       "golden_sha256": "2d6f574ec828a2742747a4c767572d0a089797b9c464f9e529905c7b344b47f5",
-      "actual_sha256": "a707e6e14871e2842a43d746a2bbd76b5ba04a95e285b55f20a255330d35d17e",
+      "actual_sha256": "a44acd23fff3f435971f38847f2bf9e0acabb65a767672c1f53ae956cb531f80",
       "width": 1366,
       "height": 900,
       "dpr": 1
@@ -46,7 +46,7 @@
       "golden": "golden/03-create-six-tabs.png",
       "actual": "actual/task-create-six-tabs.png",
       "golden_sha256": "993d4f8ee3d4490586c8f26e39d119366d67245a459e495d44a150a7c0bed545",
-      "actual_sha256": "0ba4dbb4b57e9ad708771145240c570b613777fda9e3f0c7fbd14fa928c3ff7e",
+      "actual_sha256": "4597c45225298258c2c5b02273914389493a34bea7f5398bb4f9d04ff6145dde",
       "width": 1366,
       "height": 900,
       "dpr": 1
@@ -58,7 +58,7 @@
       "golden": "golden/04-settings.png",
       "actual": "actual/settings.png",
       "golden_sha256": "c4049516bb0e945e02b2ff6c1f3cd128186a02bd83e6001e2ce94de23c36ac3f",
-      "actual_sha256": "cf9138bfd44e46422bcddfa3d98fa4c43c9d290d0846b5e4f4a55ce75fa4ffd5",
+      "actual_sha256": "db57a333a620de9b422f49e508aa974ce32300b1c654fd6a87054b656c3f65f8",
       "width": 1366,
       "height": 900,
       "dpr": 1
@@ -70,7 +70,7 @@
       "golden": "golden/05-assets.png",
       "actual": "actual/assets.png",
       "golden_sha256": "0b42a9ab01306819137ae08343b04632b7b7b757db6e7dec592429488969b0c1",
-      "actual_sha256": "892829df54cae848de84043c4a0429d5a2a7a1e15d12eacb4f930de311f3726f",
+      "actual_sha256": "59832c8fefd39b4f18868a80707eef6fa4ea01b4b07a271802f40c058b3e27d8",
       "width": 1366,
       "height": 900,
       "dpr": 1

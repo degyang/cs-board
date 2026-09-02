@@ -49,3 +49,20 @@ The prior independent review requested immutable five-page golden inputs, per-fi
 The live backend used an isolated `/tmp/cs-board-web-parity-data` directory and the WebUI used `VITE_API_BASE_URL=/api/v1` with the Vite proxy. Both temporary servers were stopped after evidence capture; no backend or prototype files were changed. Implementation/evidence delivery commit: `cdda8725e7c23ad8dfa9b3d6548d8d7e4323bd1c`. Branch: `feat/mountain-webui-surface-parity`.
 
 Worktree state at handoff: all tracked task files are committed and pushed; the only untracked path is the dashboard’s ephemeral `.agents/coordination/runtime/` lease files created for this worker session.
+
+## Attempt 3 correction handoff
+
+The verifier’s source no longer contains the forbidden legacy route literal; the approved prototype-to-Task
+mapping remains recorded only in the evidence manifest and generated report data. No prototype, backend, Work Order,
+or additional task files were changed.
+
+| Gate | Exit | Result |
+| --- | ---: | --- |
+| `npm --prefix web-v2 run build` | 0 | PASS |
+| `npm --prefix web-v2 test -- --run` | 0 | PASS, 16 files / 349 tests |
+| `MOUNTAIN_API_BASE=http://127.0.0.1:8000 node web-v2/scripts/check-api-contract.mjs` | 0 | PASS against isolated live backend |
+| `WEBUI_BASE=http://127.0.0.1:5275 MOUNTAIN_API_BASE=http://127.0.0.1:8000 GOLDEN_VIEWPORT=1366x900 node web-v2/scripts/verify-prototype-parity-e2e.mjs` | 0 | PASS, five paired groups, DPR1; browser counters all zero |
+| `git diff --check 51656c91bb378d3a62ce5668d9d1c8b861de4847...HEAD` | 0 | PASS |
+| forbidden-pattern audit from the contract | 0 | PASS, no matches |
+
+Temporary API and WebUI servers were stopped after verification. Correction implementation commit: `9a6ec6c480ab0b14b836416723d8f3c8b66ae60e`; pushed branch: `feat/mountain-webui-surface-parity`.
