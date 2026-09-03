@@ -69,17 +69,17 @@ Chromium 证据（详见 §5）：
 
 - Chromium 版本：`151.0.7922.34`（由 Playwright Chromium 实际运行）
 - 证据文件（sidebar 截图尺寸：宽×高）与 SHA-256：
-  - `sidebar-desktop-pinned.png`（264×900）  
+  - `sidebar-desktop-pinned.png`（264×900）
     `2c0f213a80b01a27f72211f6c982ddb6f47a1ed56ca69fa3da92189bc65f1e42`
-  - `sidebar-desktop-rail-collapsed.png`（64×900）  
+  - `sidebar-desktop-rail-collapsed.png`（64×900）
     `c0d6f3942ea1c24c049cc843287056d909e101abcedc94aabac2922c4989a802`
-  - `sidebar-desktop-rail-expanded-by-brand.png`（264×900）  
+  - `sidebar-desktop-rail-expanded-by-brand.png`（264×900）
     `c5b0d0237d0b75b8c89b0500f86faa7d89cf18c1f897941f6dd1ebc138a4fa29`
-  - `sidebar-desktop-rail-hover-nav-no-expand.png`（64×900）  
+  - `sidebar-desktop-rail-hover-nav-no-expand.png`（64×900）
     `c0d6f3942ea1c24c049cc843287056d909e101abcedc94aabac2922c4989a802`
-  - `sidebar-desktop-rail-hover-footer-no-expand.png`（64×900）  
+  - `sidebar-desktop-rail-hover-footer-no-expand.png`（64×900）
     `c4357559a81870a428158086bfd8e2c6c28a05edfd4621ae70d48952be3fa854`
-  - `sidebar-mobile-64.png`（64×844）  
+  - `sidebar-mobile-64.png`（64×844）
     `9cbd2af3b378f2bec0768edf5b7615b11e32ffbcc7b7de71498c3692d3dee740`
   - `sidebar-mobile-localstorage-empty-pinned.png`（64×844）
     `e5c5f36063dd440b69a63356bbb0564cd19f9cf8ca041dd54bc2bafec6cb0f37`

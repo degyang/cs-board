@@ -1,8 +1,8 @@
 # CCB Execution Plan 接管恢复指令
 
-状态：`REJECTED — RESTART WITH STRONGER MODEL`  
-拒绝提交：`9badecc`、`56bd317`  
-PM指令基线：`af502e4`  
+状态：`REJECTED — RESTART WITH STRONGER MODEL`
+拒绝提交：`9badecc`、`56bd317`
+PM指令基线：`af502e4`
 唯一需求来源：本文件和`25-ccb-execution-plan-final-correction.md`
 
 ## 1. 必须更换执行会话

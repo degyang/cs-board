@@ -1,8 +1,8 @@
 # M07 Web Execution Plan 23 Task Contract
 
-Task ID: `M07-WEB-EXECUTION-PLAN-23`  
-Owner: Web worker  
-State: `READY`  
+Task ID: `M07-WEB-EXECUTION-PLAN-23`
+Owner: Web worker
+State: `READY`
 Base: `60762c54c57de46790d7c8ab826b7314b8099fa5`
 
 ## Goal

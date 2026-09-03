@@ -1,10 +1,10 @@
 # CCB Execution Plan 最终纠偏指令
 
-指令：`CCB-TASK-EXECUTION-PLAN-23-FINAL`  
-状态：`CORRECTION REQUIRED`  
-工作树：`/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`  
-分支：`feat/mountain-assets-settings-backend`  
-审核实现：`bbc6fa2`  
+指令：`CCB-TASK-EXECUTION-PLAN-23-FINAL`
+状态：`CORRECTION REQUIRED`
+工作树：`/mnt/d/Workstation/Projects/cs-board/.claude/worktrees/mountain-foundation-backend`
+分支：`feat/mountain-assets-settings-backend`
+审核实现：`bbc6fa2`
 审核报告：`7c34586`
 
 ## 1. 审核事实

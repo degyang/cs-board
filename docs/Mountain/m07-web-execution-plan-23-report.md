@@ -1,7 +1,7 @@
 # M07 Web Execution Plan 23 Report
 
-Task: `M07-WEB-EXECUTION-PLAN-23`  
-Branch: `feat/mountain-assets-settings-web`  
+Task: `M07-WEB-EXECUTION-PLAN-23`
+Branch: `feat/mountain-assets-settings-web`
 Base documented by contract: `60762c54c57de46790d7c8ab826b7314b8099fa5`
 
 ## Delivery
