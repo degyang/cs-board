@@ -70,6 +70,7 @@ def test_style_config_rejects_non_object(client: TestClient, method: str, payloa
     else:
         response = client.post("/api/v1/assets/styles", json=payload)
     assert response.status_code == 400
+    assert response.json() == {"error": {"code": "VALIDATION_ERROR", "message": "config 必须是对象", "retryable": False, "unavailable": [], "details": None}}
 
 
 def test_create_style(client: TestClient):
@@ -180,7 +181,7 @@ def test_copy_preset(client: TestClient):
     styles = repo._load_styles()
     styles.append({
         "style_id": "seed-001", "revision": 1, "name": "极简粗线简笔白板风", "kind": "preset",
-        "prompt_text": "...", "engine": "whiteboard", "tags": [], "status": "active",
+        "prompt_text": "...", "engine": "whiteboard", "tags": [], "config": {"routing": {"palette": "warm"}}, "status": "active",
         "created_at": "2026-08-31T00:00:00Z", "updated_at": "2026-08-31T00:00:00Z",
     })
     repo._save_styles(styles)
@@ -191,7 +192,9 @@ def test_copy_preset(client: TestClient):
     assert data["kind"] == "custom"
     assert data["name"] == "极简粗线简笔白板风"
     assert data["style_id"] != "seed-001"
-    assert data["config"] == {}
+    assert data["config"] == {"routing": {"palette": "warm"}}
+    assert client.patch(f"/api/v1/assets/styles/{data['style_id']}", json={"config": {"routing": {"palette": "cool"}}}).status_code == 200
+    assert client.get("/api/v1/assets/styles/seed-001").json()["config"] == {"routing": {"palette": "warm"}}
 
 
 def test_upload_and_metadata(client: TestClient):
