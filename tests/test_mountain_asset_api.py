@@ -50,6 +50,26 @@ def test_list_styles(client: TestClient):
     assert "items" in data
     assert "total" in data
     assert "next_cursor" in data
+    assert all(isinstance(item["config"], dict) for item in data["items"])
+
+
+def test_style_config_round_trips_list_detail_create_and_patch(client: TestClient):
+    created = client.post("/api/v1/assets/styles", json={"name": "config", "prompt_text": "x", "config": {"palette": "warm"}})
+    assert created.status_code == 200 and created.json()["config"] == {"palette": "warm"}
+    style_id = created.json()["style_id"]
+    assert client.get(f"/api/v1/assets/styles/{style_id}").json()["config"] == {"palette": "warm"}
+    assert client.patch(f"/api/v1/assets/styles/{style_id}", json={"config": {"density": "rich"}}).json()["config"] == {"density": "rich"}
+    assert next(x for x in client.get("/api/v1/assets/styles").json()["items"] if x["style_id"] == style_id)["config"] == {"density": "rich"}
+
+
+@pytest.mark.parametrize("method,payload", [("post", {"name": "bad", "prompt_text": "x", "config": []}), ("patch", {"config": []})])
+def test_style_config_rejects_non_object(client: TestClient, method: str, payload: dict):
+    if method == "patch":
+        style_id = client.post("/api/v1/assets/styles", json={"name": "base", "prompt_text": "x"}).json()["style_id"]
+        response = client.patch(f"/api/v1/assets/styles/{style_id}", json=payload)
+    else:
+        response = client.post("/api/v1/assets/styles", json=payload)
+    assert response.status_code == 400
 
 
 def test_create_style(client: TestClient):
@@ -171,6 +191,7 @@ def test_copy_preset(client: TestClient):
     assert data["kind"] == "custom"
     assert data["name"] == "极简粗线简笔白板风"
     assert data["style_id"] != "seed-001"
+    assert data["config"] == {}
 
 
 def test_upload_and_metadata(client: TestClient):
