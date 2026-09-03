@@ -27,6 +27,7 @@ class StyleTemplate:
     status: str = "active"  # "active" | "inactive"
     created_at: str = ""
     updated_at: str = ""
+    config: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -47,6 +48,7 @@ class StyleTemplate:
             status=str(value.get("status", "active")),
             created_at=str(value.get("created_at", "")),
             updated_at=str(value.get("updated_at", "")),
+            config=dict(value.get("config") or {}),
         )
 
     def copy_to_custom(self, new_id: str, now: str) -> StyleTemplate:
@@ -65,4 +67,5 @@ class StyleTemplate:
             status="active",
             created_at=now,
             updated_at=now,
+            config=dict(self.config),
         )

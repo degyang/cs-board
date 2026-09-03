@@ -149,6 +149,9 @@ def mountain_asset_router(
         description = payload.get("description", "")
         negative_prompt = payload.get("negative_prompt", "")
         preview_asset_id = payload.get("preview_asset_id", "")
+        config = payload.get("config", {})
+        if not isinstance(config, dict):
+            return domain_error_response(DomainError("VALIDATION_ERROR", "config 必须是对象"), status_code=400)
 
         raw_tags = payload.get("tags", [])
         if not isinstance(raw_tags, list):
@@ -169,6 +172,7 @@ def mountain_asset_router(
             status="active",
             created_at=now,
             updated_at=now,
+            config=config,
         )
         repository.save_style_template(template)
         return template.to_dict()
@@ -211,6 +215,10 @@ def mountain_asset_router(
             if not isinstance(raw_tags, list):
                 return domain_error_response(DomainError("VALIDATION_ERROR", "tags 必须是数组"), status_code=400)
             template.tags = raw_tags
+        if "config" in payload:
+            if not isinstance(payload["config"], dict):
+                return domain_error_response(DomainError("VALIDATION_ERROR", "config 必须是对象"), status_code=400)
+            template.config = payload["config"]
         if "expected_revision" in payload:
             template.expected_revision = payload["expected_revision"]
 
