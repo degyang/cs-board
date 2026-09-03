@@ -21,14 +21,19 @@
 - 恢复 loading、Task/inputs 404 或服务错误均展示区分明确且不含敏感详情的安全状态，恢复未完成时最终提交保持禁用。
 - Tabs 补齐 roving focus：Arrow/Home/End 选择并聚焦新 Tab；活动面板具备匹配的 `id`、`role=tabpanel`、`aria-labelledby`，无悬空 `aria-controls`。
 - 网络异常统一为稳定用户提示；未挂载组件的迟到请求不导航、不更新状态、不产生 warning/unhandled rejection；未使用 localStorage/sessionStorage 或旧 Project/fixture 路径冒充正式联调。
+- 本轮新增 13 项强制行为测试：共享默认值/异步顺序、StrictMode 单次创建与 loading、pending create 卸载、恢复后仅保存 inputs、reference true/false、伪造身份/404/loading fail-closed、安全错误、标题/摘要/资产边界以及真实取消路由；同时修正 StrictMode effect 重挂载时的 mounted guard 初始化。
 
 ## §3 自动化测试类别、数量和结果
 
 | 类别 | 数量 | 结果 |
 |---|---:|---|
 | 全量前端 Vitest 文件 | 16 | PASS |
-| 全量前端测试用例 | 375 | PASS |
-| Task 创建专项行为测试 | 18 | PASS |
+| 全量前端测试用例 | 388 | PASS |
+| Task 创建专项行为测试 | 31 | PASS |
+| 本轮新增强制行为测试 | 13 | PASS |
+| 默认值与 options/recovery 异步顺序 | 2 | PASS |
+| recovery 身份、404、loading、inputs-only、reference true/false | 4 | PASS |
+| StrictMode、pending create 卸载、错误脱敏、字段/资产/取消边界 | 7 | PASS |
 | contract checker 测试 | 48 | PASS |
 | 重挂载恢复实际断言 | 1 | PASS |
 | 实际工作台 active route 导航断言 | 1 | PASS |
@@ -37,20 +42,21 @@
 
 ## §4 全部门禁与耗时
 
-- `npm --prefix web-v2 run build`：PASS；TypeScript 检查通过，Vite build 用时约 `0.999s`。
-- `npm --prefix web-v2 test -- --run 2>&1 | tee /tmp/ccf-task-create-integration-20-test.log`：PASS，16 files / 375 tests，用时 `15.17s`。
+- `npm --prefix web-v2 run build`：PASS；TypeScript 检查通过，Vite build 用时约 `2.04s`。
+- `npm --prefix web-v2 test -- --run 2>&1 | tee /tmp/ccf-task-create-integration-20-test.log`：PASS，16 files / 388 tests，用时 `17.24s`（命令 wall time 约 `18.08s`）。
 - 测试日志扫描 act、Router Future Flag、Unhandled/unhandled rejection、unmounted state update：PASS，0 命中。
-- `npm --prefix web-v2 run test:contract-checker`：PASS，48 tests，用时 `4.35s`。
+- `npm --prefix web-v2 run test:contract-checker`：PASS，48 tests，用时 `10.11s`（命令 wall time 约 `10.94s`）。
 - 正式路径禁止 Project/project_id/策略词扫描：PASS，0 命中。
 - `localStorage/sessionStorage/Math.random/submission-.*Date.now` 扫描：PASS，0 命中。
-- `git diff --check 3edabb1...HEAD`：PASS。
+- `git diff --check 04a5087...HEAD`：PASS。
 - 本轮未重做已有效的 Chromium 截图；新恢复/导航行为由实际组件自动化断言证明，未以 fixture 或旧后端冒充检查点 B。
+- 本轮未重做视觉截图；Chromium 既有证据继续沿用，未新增浏览器证据文件。
 
 ## §5 clean status 和提交 hash
 
-- 实现提交：`7769c0f0f312ea6820b1748c6b8b98ba77fae30a`，提交信息为 `fix(mountain-web): secure Task creation recovery`。
-- 实现提交后工作区 clean；无 push。
-- 回执提交信息：`docs(mountain): report Task creation integration`；报告提交后最终工作区 clean。
+- 实现提交：`1afb033de0b51843945dafe767fa0640b8f9d054`，提交信息为 `test(mountain-web): close Task creation checkpoint A`。
+- 实现提交前后均执行 `git status --short`；实现提交后工作区 clean；无 push。
+- 报告提交信息：`docs(mountain): report Task creation integration`；报告提交后再次核验最终工作区 clean。
 
 ## §6 检查点 B 依赖状态
 
@@ -59,4 +65,4 @@
 ## §7 未完成项
 
 1. 检查点 B 的 CCB 后端真实联调尚未执行，必须等待 CCB 审核通过后再验证正式 Task 创建、inputs 回写及服务端幂等返回。
-2. 本轮未宣布检查点 B、整体审核或 `USER_ACCEPTANCE` 通过。
+2. 本轮未执行检查点 B，也未宣布整体审核或 `USER_ACCEPTANCE` 通过；该项仍由审核者决定。
