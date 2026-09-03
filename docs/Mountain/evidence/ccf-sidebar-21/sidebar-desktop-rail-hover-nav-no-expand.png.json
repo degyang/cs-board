@@ -1,6 +1,6 @@
 {
-  "file": "sidebar-desktop-rail-collapsed.png",
-  "interaction": "rail persisted; pointer outside sidebar",
+  "file": "sidebar-desktop-rail-hover-nav-no-expand.png",
+  "interaction": "rail hover on navigation region must not peek",
   "shellClass": "app-shell is-rail",
   "sidebarClass": "sidebar",
   "sidebarWidth": 64,

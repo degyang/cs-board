@@ -1,0 +1,13 @@
+{
+  "file": "sidebar-mobile-64.png",
+  "interaction": "mobile with persisted rail; left rail remains visible",
+  "shellClass": "app-shell is-rail",
+  "sidebarClass": "sidebar",
+  "sidebarWidth": 64,
+  "sidebarLeft": 0,
+  "sidebarRight": 64,
+  "mainLeft": 64,
+  "mainWidth": 326,
+  "sha256": "9cbd2af3b378f2bec0768edf5b7615b11e32ffbcc7b7de71498c3692d3dee740",
+  "bytes": 4847
+}

@@ -1,0 +1,13 @@
+{
+  "file": "sidebar-desktop-rail-expanded-by-brand.png",
+  "interaction": "rail hover on brand mark; 264px floating peek; main remains at 64px",
+  "shellClass": "app-shell is-rail",
+  "sidebarClass": "sidebar rail-peeking",
+  "sidebarWidth": 264,
+  "sidebarLeft": 0,
+  "sidebarRight": 264,
+  "mainLeft": 64,
+  "mainWidth": 1376,
+  "sha256": "c5b0d0237d0b75b8c89b0500f86faa7d89cf18c1f897941f6dd1ebc138a4fa29",
+  "bytes": 19794
+}

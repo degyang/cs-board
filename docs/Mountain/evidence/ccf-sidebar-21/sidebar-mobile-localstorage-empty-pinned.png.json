@@ -1,0 +1,15 @@
+{
+  "file": "sidebar-mobile-localstorage-empty-pinned.png",
+  "interaction": "fresh mobile context; key observed null before app; default pinned then responsive 64px rail",
+  "localStorageBeforeApp": null,
+  "localStorageAfterApp": "1",
+  "shellClass": "app-shell is-pinned",
+  "sidebarClass": "sidebar",
+  "sidebarWidth": 64,
+  "sidebarLeft": 0,
+  "sidebarRight": 64,
+  "mainLeft": 64,
+  "mainWidth": 326,
+  "sha256": "e5c5f36063dd440b69a63356bbb0564cd19f9cf8ca041dd54bc2bafec6cb0f37",
+  "bytes": 10463
+}

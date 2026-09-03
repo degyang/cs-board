@@ -1,0 +1,16 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "pinKey": "mountain.ui.sidebarPinned",
+  "beforeApp": null,
+  "afterApp": "1",
+  "shellClass": "app-shell is-pinned",
+  "sidebarClass": "sidebar",
+  "sidebarWidth": 64,
+  "sidebarLeft": 0,
+  "sidebarRight": 64,
+  "mainLeft": 64,
+  "mainWidth": 326
+}

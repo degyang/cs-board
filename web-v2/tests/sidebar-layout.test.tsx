@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, waitFor, cleanup } from '@testing-library/react'
+import { render, waitFor, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from '../src/components/layout/AppShell'
@@ -72,7 +72,7 @@ describe('Sidebar prototype interaction', () => {
     expect(shell).not.toHaveClass('is-rail')
   })
 
-  it('expands only when hovering the brand area in rail mode', async () => {
+  it('exposes accessible pin and rail controls and expands only from the two rail triggers', async () => {
     localStorage.setItem(PIN_KEY, '0')
     vi.mocked(fetchTasks).mockResolvedValue(RUNNING_TASK)
 
@@ -84,10 +84,38 @@ describe('Sidebar prototype interaction', () => {
     await waitFor(() => expect(vi.mocked(fetchTasks)).toHaveBeenCalled())
     expect(sidebar).not.toHaveClass('rail-peeking')
 
+    const pin = within(sidebar).getByRole('button', { name: '钉住侧边栏' })
+    expect(pin).toHaveAttribute('aria-pressed', 'false')
+    expect(within(sidebar).getByRole('navigation', { name: '主导航' })).toBeInTheDocument()
+    expect(within(sidebar).getByRole('link', { name: '任务队列' })).toHaveAttribute('title', '任务队列')
+
     await user.hover(brand)
+    expect(sidebar).not.toHaveClass('rail-peeking')
+
+    const triggers = within(sidebar).getAllByRole('button', { name: '展开侧边栏' })
+    expect(triggers).toHaveLength(2)
+
+    await user.hover(triggers[0])
     await waitFor(() => expect(sidebar).toHaveClass('rail-peeking'))
 
-    await user.unhover(brand)
+    await user.unhover(triggers[0])
+    await waitFor(() => expect(sidebar).not.toHaveClass('rail-peeking'))
+
+    await user.hover(triggers[1])
+    await waitFor(() => expect(sidebar).toHaveClass('rail-peeking'))
+
+    const pinWhilePeeking = within(sidebar).getByRole('button', { name: '钉住侧边栏' })
+    await user.click(pinWhilePeeking)
+    await waitFor(() => expect(container.querySelector('.app-shell')).toHaveClass('is-pinned'))
+    expect(sidebar).not.toHaveClass('rail-peeking')
+
+    await user.click(within(sidebar).getByRole('button', { name: '取消钉住侧边栏' }))
+    await waitFor(() => expect(container.querySelector('.app-shell')).toHaveClass('is-rail'))
+    expect(sidebar).not.toHaveClass('rail-peeking')
+
+    await user.hover(triggers[0])
+    await waitFor(() => expect(sidebar).toHaveClass('rail-peeking'))
+    await user.unhover(sidebar)
     await waitFor(() => expect(sidebar).not.toHaveClass('rail-peeking'))
   })
 
