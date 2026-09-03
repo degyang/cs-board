@@ -58,6 +58,11 @@ def test_to_dict_roundtrip():
     assert restored.created_at == original.created_at
 
 
+def test_config_is_stable_object_and_old_data_defaults_to_empty_object():
+    assert StyleTemplate.from_dict({"style_id": "old", "revision": 1, "name": "old", "kind": "custom", "prompt_text": "x"}).config == {}
+    assert StyleTemplate.from_dict({"style_id": "new", "revision": 1, "name": "new", "kind": "custom", "prompt_text": "x", "config": {"palette": "warm"}}).to_dict()["config"] == {"palette": "warm"}
+
+
 def test_copy_to_custom():
     preset = StyleTemplate(
         style_id="seed-001",

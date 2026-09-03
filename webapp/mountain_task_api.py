@@ -60,16 +60,31 @@ def mountain_task_router(
 
     # ── Task ──────────────────────────────────────────────────────
 
+    @router.get("/tasks/create-options")
+    def create_options():
+        """Server-owned constraints for the six-tab create form."""
+        return commands.create_options()
+
     @router.post("/tasks")
     def create_task(payload: dict = Body(...)):
         """创建新任务。"""
         try:
-            title = str(payload.get("title", ""))
+            required = {"title", "summary", "engine", "pipeline_id", "submission_id"}
+            if not isinstance(payload, dict) or required - set(payload) or not all(isinstance(payload.get(key), str) for key in required):
+                raise ValueError("title、summary、engine、pipeline_id 和 submission_id 为必填字段")
+            title = payload["title"]
+            summary = payload["summary"]
+            submission_id = payload["submission_id"]
+            if not summary.strip() or not submission_id.strip():
+                raise ValueError("summary 和 submission_id 不能为空")
             engine = Engine(payload.get("engine", "whiteboard"))
             pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
             return commands.create_task(
-                title, pipeline_id, engine, context=_context()
+                title, pipeline_id, engine, context=_context(),
+                summary=summary, submission_id=submission_id,
             )
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code == "SUBMISSION_CONFLICT" else 400)
         except ValueError as error:
             return domain_error_response(DomainError("VALIDATION_ERROR", str(error)), status_code=400)
 
@@ -104,13 +119,14 @@ def mountain_task_router(
         task_id: str,
         script: str = Form(...),
         reference: UploadFile | None = File(None),
-        style: str = Form("极简粗线简笔白板风"),
+        voice_source: str | None = Form(None),
+        visual_source: str | None = Form(None),
+        style_asset_id: str | None = Form(None),
+        shots_per_image: int | None = Form(None),
+        line_density: str | None = Form(None),
+        brand_text: str | None = Form(None),
         include_subtitles: bool = Form(True),
-        pen_text: str = Form(""),
-        stroke_detail: str = Form("detailed"),
-        target_chars: int = Form(80),
-        min_chars: int = Form(35),
-        max_chars: int = Form(140),
+        target_chars: int = Form(45),
         visual_anchor_enabled: bool = Form(True),
     ):
         """上传任务输入（文案和参考音频）— 委托 Application 层。
@@ -163,15 +179,16 @@ def mountain_task_router(
                 script=script,
                 txn_dir=txn_dir,
                 reference_audio_filename=reference_audio_filename,
-                style=style,
                 include_subtitles=include_subtitles,
-                pen_text=pen_text,
-                stroke_detail=stroke_detail,
                 target_chars=target_chars,
-                min_chars=min_chars,
-                max_chars=max_chars,
                 visual_anchor_enabled=visual_anchor_enabled,
                 context=_context(),
+                voice_source=voice_source,
+                visual_source=visual_source,
+                style_asset_id=style_asset_id,
+                shots_per_image=shots_per_image,
+                line_density=line_density,
+                brand_text=brand_text,
             )
 
             return result
@@ -209,7 +226,7 @@ def mountain_task_router(
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            return domain_error_response(error, status_code=409 if error.code == "EXECUTION_PLAN_NOT_READY" else 400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/cancel")
     def cancel_run(task_id: str, run_id: str):
@@ -229,7 +246,29 @@ def mountain_task_router(
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            return domain_error_response(error, status_code=409 if error.code == "STAGE_GATE_REQUIRED" else 400)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/gates")
+    def get_gates(task_id: str, run_id: str):
+        try: return commands.list_gates(task_id, run_id)
+        except NotFoundError as error: return domain_error_response(error, status_code=404)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/stages/{stage}/gate")
+    def get_gate(task_id: str, run_id: str, stage: str):
+        try: return commands.get_gate(task_id, run_id, stage)
+        except NotFoundError as error: return domain_error_response(error, status_code=404)
+        except DomainError as error: return domain_error_response(error, status_code=400)
+
+    @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/gate")
+    def decide_gate(task_id: str, run_id: str, stage: str, payload: dict = Body(...)):
+        try:
+            allowed = {"decision", "actor", "expected_revision", "note", "evidence"}
+            if not isinstance(payload, dict) or set(payload) - allowed or not isinstance(payload.get("actor"), str) or not payload["actor"].strip() or len(payload["actor"]) > 128: raise DomainError("VALIDATION_ERROR", "Gate 请求无效")
+            revision = payload.get("expected_revision")
+            if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0: raise DomainError("VALIDATION_ERROR", "expected_revision 无效")
+            return commands.decide_gate(task_id, run_id, stage, payload.get("decision", ""), payload["actor"], revision, payload.get("note"), payload.get("evidence"))
+        except NotFoundError as error: return domain_error_response(error, status_code=404)
+        except DomainError as error: return domain_error_response(error, status_code=409 if error.code in {"GATE_DECISION_CONFLICT", "INVALID_STATE"} else 400)
 
     # ── Stage Operations ──────────────────────────────────────────────────
 
@@ -237,13 +276,11 @@ def mountain_task_router(
     def run_stage(task_id: str, run_id: str, stage: str):
         """运行指定阶段。"""
         try:
-            return commands.pipeline_run(
-                task_id, run_id, "targeted", stage, _context()
-            )
+            return commands.stage_run(task_id, run_id, stage, _context())
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
         except DomainError as error:
-            return domain_error_response(error, status_code=400)
+            return domain_error_response(error, status_code=409 if error.code == "STAGE_GATE_REQUIRED" else 400)
 
     @router.post("/tasks/{task_id}/runs/{run_id}/stages/{stage}/retry")
     def retry_stage(
@@ -318,6 +355,16 @@ def mountain_task_router(
             }
         except NotFoundError as error:
             return domain_error_response(error, status_code=404)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/work-orders/{stage}")
+    def show_work_order(task_id: str, run_id: str, stage: str):
+        """Read or deterministically materialize the Stage Work Order."""
+        try:
+            return commands.work_order_show(task_id, run_id, stage)
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
 
     # ── Voice Units ──────────────────────────────────────────────────────
 

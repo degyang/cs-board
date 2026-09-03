@@ -15,6 +15,10 @@ class Task:
     status: TaskStatus
     created_at: str
     updated_at: str
+    # Kept optional in the constructor so historical callers and task.json
+    # documents remain readable; new Task creation always supplies it.
+    summary: str | None = None
+    submission_id: str | None = None
     active_run_id: str | None = None
     revision: int = 1
     schema_version: int = 1
@@ -32,6 +36,8 @@ class Task:
             status=TaskStatus(value["status"]),
             created_at=str(value["created_at"]),
             updated_at=str(value["updated_at"]),
+            summary=str(value.get("summary", value["title"])),
+            submission_id=value.get("submission_id"),
             active_run_id=value.get("active_run_id"),
             revision=int(value.get("revision", 1)),
             schema_version=int(value.get("schema_version", 1)),

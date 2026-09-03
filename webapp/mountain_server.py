@@ -94,6 +94,7 @@ def create_app(
     from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
     from webapp.mountain_task_api import mountain_task_router
     from webapp.mountain_asset_api import mountain_asset_router
+    from webapp.mountain_capability_api import mountain_capability_router
     from webapp.mountain_service_api import mountain_service_router
     from webapp.mountain_settings_api import mountain_settings_router
 
@@ -109,6 +110,7 @@ def create_app(
         service_resolver=service_resolver,
         repository=task_repository,
         telemetry=telemetry,
+        asset_repository=asset_repository,
     )
 
     app.include_router(mountain_task_router(
@@ -125,6 +127,7 @@ def create_app(
         effective_data_dir,
         repository=asset_repository,
     ))
+    app.include_router(mountain_capability_router(service_registry))
     app.include_router(mountain_service_router(
         effective_data_dir, registry=service_registry, secret_store=secret_store,
     ))

@@ -1,0 +1,23 @@
+#### CCB-STAGE-GATE-CONTRACT-25 回执 — 2026-09-02
+
+- 状态: 执行中。强制门禁未全部通过；不得据此宣布完成、USER_ACCEPTANCE 或联合验收通过。
+- 起点: `e659653 docs(mountain): report manual stage gate contract`
+- implementation_commit: `af47b2dac0e1ce84853a0e192b12ef66240600ee`
+- §4V.2.1: `stage_run` 不再以错误的 pipeline 顶层 `result` 判断成功；仅在目标执行结果为 `succeeded|skipped` 且统一出口 Artifact 校验通过时进入 `waiting-review`。当前专项尚未覆盖真实 executor 的四个完整分支。
+- §4V.2.2: 正式 `stage_run` 改为只调用目标 `_execute_stage`，先检查上游 Gate 和输入 Artifact；不再走 targeted dependency 补跑。
+- §4V.2.3: HTTP `start` 入口改为 `409 STAGE_GATE_REQUIRED`，提示使用单 Stage 入口。retry/pipeline 旧入口尚未完全收口，属于未关闭事项。
+- §4V.2.4: 新增当前 Artifact index 的成功状态、磁盘存在和 SHA-256 校验；approve 时 evidence 必须匹配当前 Artifact。测试：`test_approval_requires_current_artifact_hash`。
+- §4V.2.5: HTTP Gate 请求拒绝未知顶层字段、null/空/超长 actor；Application evidence 限制为允许字段集合。note 限长/脱敏持久化尚未实现。
+- §4V.2.6: 新增 Repository `replace_gate`：task lock 内 expected revision CAS、原子 Gate 保存和 append-only history。多线程 HTTP 同 revision 行为测试尚未补齐。
+- §4V.2.7: history 记录已加入 `gate-history/{stage}/{revision}.json`；reject/redo 下游 Stage、Work Order、Artifact/Gate stale 失效尚未实现。
+- §4V.2.8: skipped anchor 的实际可哈希 Artifact 流程依赖原执行器，尚未新增专项行为测试。
+- §4V.2.9: 插画逐 Visual、Codex 来源、candidate/revision/文件读取/哈希验证未实现；因此不能把插画 Gate 视作可批准交付，也未运行付费图片生成。
+- §4V.2.10: decision Event/Audit 继续使用既有 redactor；canary、全文案、Prompt、音频和绝对路径专项脱敏测试尚未补齐。
+- §4V.2.11: 历史 CLI 测试仍假定 Gate 可自动跨过：`test_every_canonical_stage_uses_persisted_plan_dispatch_in_subprocess` 和 `test_generate_visual_anchors_persists_av_plan_and_other_stage_is_rejected` 当前因稳定 Gate 拦截而失败，未删除或放宽。
+- §4V.2.12 静态扫描: 仍命中 `csboard/adapters/provider_factory.py:create_image_model` 与 `csboard/ports/asset_repository.py:project_id`；二者不在正式 Task/Gate 调用路径，本轮未修改 Provider/资产域，门禁仍失败。
+- 专项原始摘要: `pytest -q -rs tests/test_stage_gates_24.py tests/test_stage_gates_25.py tests/test_illustration_gate.py tests/test_task_execution_plan_23.py tests/test_cli_csboard.py` → `3 failed, 56 passed in 11.13s`。失败为 selective start 旧 200 预期、两项 CLI 自动 Stage 预期。
+- compileall: `python -m compileall csboard webapp cli scripts` → exit 0。
+- diff check: `git diff --check` → exit 0（实现提交前）。
+- 全量 pytest: 未运行；专项已有强制失败，按门禁要求不伪造通过。
+- CCF 对接: Gate GET/POST 路径保持不变；POST 仅接受 `decision/actor/note/evidence`，evidence 元素允许 `logical_key/sha256/visual_id/candidate_id/revision/source`。当前不应显示插画批准 UI。
+- 距离真实 MP4 E2E: 仍缺完整六阶段出口验证、插画真实 Codex 候选与逐项选择、拒绝/重做失效范围、正式 retry/pipeline 收口、完整脱敏证据、正式 WebUI 播放下载。

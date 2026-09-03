@@ -98,4 +98,7 @@ class JsonlTelemetry:
     def _redacted_file(self, source: Path) -> str:
         if source.suffix == ".jsonl":
             return "".join(json.dumps(self.redactor.redact(item), ensure_ascii=False, sort_keys=True) + "\n" for item in self._read_jsonl(source))
-        return json.dumps(self.redactor.redact(self.repository.read_json(source)), ensure_ascii=False, indent=2, sort_keys=True)
+        payload = self.repository.read_json(source)
+        if source.name == "task.json":
+            payload.pop("script_preparation", None)
+        return json.dumps(self.redactor.redact(payload), ensure_ascii=False, indent=2, sort_keys=True)

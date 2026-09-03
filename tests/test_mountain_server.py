@@ -71,7 +71,7 @@ def test_services_available(client: TestClient):
 
 def test_create_and_get_task(client: TestClient):
     """创建 Task 后能读取 Task。"""
-    resp = client.post("/api/v1/tasks", json={"title": "测试任务"})
+    resp = client.post("/api/v1/tasks", json={"title": "测试任务", "summary": "测试任务", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-create-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
     assert task_id
@@ -84,7 +84,7 @@ def test_create_and_get_task(client: TestClient):
 def test_save_and_read_inputs(client: TestClient):
     """保存 inputs 后能读取。"""
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "输入测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "输入测试", "summary": "输入测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-inputs-0123456789abcdef"})
     task_id = resp.json()["task_id"]
 
     # 保存输入（带参考音频）
@@ -111,7 +111,7 @@ def test_save_and_read_inputs(client: TestClient):
 
 def test_create_run_and_control(client: TestClient):
     """创建 Run 后能在同一 task_id 下控制。"""
-    resp = client.post("/api/v1/tasks", json={"title": "Run 测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "Run 测试", "summary": "Run 测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-run-0123456789abcdef"})
     assert resp.status_code == 200
     data = resp.json()
     task_id = data["task_id"]
@@ -183,7 +183,7 @@ def test_inputs_and_start_boundary(client: TestClient):
     import io
 
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "边界测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "边界测试", "summary": "边界测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-boundary-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
     run_id = resp.json()["run_id"]
@@ -206,17 +206,16 @@ def test_inputs_and_start_boundary(client: TestClient):
     assert "测试" in data["inputs"]["script"]
     assert data["reference_audio"]["uploaded"] is True
 
-    # 启动（缺服务应返回 CAPABILITY_NOT_AVAILABLE）
+    # 第一阶段 start 只确认可手工执行的下一步，不解析服务或运行 Stage。
     resp = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
-    assert resp.status_code == 400
-    error = resp.json()["error"]
-    assert error["code"] == "CAPABILITY_NOT_AVAILABLE"
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "waiting-manual-trigger"
 
 
 def test_start_without_inputs_returns_validation_error(client: TestClient):
     """未上传输入时 start 返回 VALIDATION_ERROR。"""
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "无输入测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "无输入测试", "summary": "无输入测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-empty-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
     run_id = resp.json()["run_id"]
@@ -226,7 +225,8 @@ def test_start_without_inputs_returns_validation_error(client: TestClient):
     assert resp.status_code == 400
     error = resp.json()["error"]
     assert error["code"] == "VALIDATION_ERROR"
-    assert "文案" in error["message"]
+    assert error["message"] == "必要输入无效"
+    assert "script" in error["details"]["invalid_fields"]
 
 
 def test_update_inputs_preserves_old_reference(client: TestClient):
@@ -234,7 +234,7 @@ def test_update_inputs_preserves_old_reference(client: TestClient):
     import io
 
     # 创建任务并上传初始输入
-    resp = client.post("/api/v1/tasks", json={"title": "保留测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "保留测试", "summary": "保留测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-preserve-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
@@ -264,7 +264,7 @@ def test_chunked_upload_with_size_limit(client: TestClient):
     import io
 
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "大小测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "大小测试", "summary": "大小测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-size-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
@@ -284,7 +284,7 @@ def test_reference_metadata_from_manifest(client: TestClient):
     import io
 
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "元数据测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "元数据测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "summary": "元数据测试", "submission_id": "submit-server-metadata-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
@@ -336,7 +336,7 @@ def test_staging_on_same_filesystem(tmp_path: Path):
     client = TestClient(app)
 
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "文件系统测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "文件系统测试", "summary": "文件系统测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-filesystem-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
@@ -364,7 +364,7 @@ def test_chunked_read_verification(tmp_path: Path):
     client = TestClient(app)
 
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "分块测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "分块测试", "summary": "分块测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-chunks-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
@@ -395,7 +395,7 @@ def test_internal_error_no_path_leak(tmp_path: Path):
     client = TestClient(app)
 
     # 创建任务
-    resp = client.post("/api/v1/tasks", json={"title": "错误测试"})
+    resp = client.post("/api/v1/tasks", json={"title": "错误测试", "summary": "错误测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-server-errors-0123456789abcdef"})
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 

@@ -313,6 +313,43 @@ def test_success_cleanup_proven():
             shutil.rmtree(data_dir)
 
 
+def test_two_fresh_data_dirs_reuse_same_port_after_normal_shutdown():
+    """Two real launcher children release one port immediately after SIGTERM."""
+    port = _find_free_port()
+    data_dirs = [
+        Path(tempfile.mkdtemp(prefix="csboard-sequential-one-")),
+        Path(tempfile.mkdtemp(prefix="csboard-sequential-two-")),
+    ]
+    try:
+        for data_dir in data_dirs:
+            proc = None
+            log_fd = None
+            try:
+                proc, health, started_port, log_fd, _ = _start_backend(data_dir, port=port)
+                assert started_port == port
+                assert health["status"] in ("ok", "degraded")
+                child_pid = _stop_backend(proc, log_fd, data_dir)
+                log_fd = None
+
+                assert proc.returncode == 0, f"launcher exited {proc.returncode}"
+                assert not _pid_alive(child_pid)
+                assert not data_dir.exists()
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reusable:
+                    reusable.bind(("127.0.0.1", port))
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=10)
+                if log_fd is not None and not log_fd.closed:
+                    log_fd.close()
+                if data_dir.exists():
+                    shutil.rmtree(data_dir)
+    finally:
+        for data_dir in data_dirs:
+            if data_dir.exists():
+                shutil.rmtree(data_dir)
+
+
 # ── Smoke 真实 checker 成功路径 + PID marker ────────────────────────────
 
 

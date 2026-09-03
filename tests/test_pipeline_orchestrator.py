@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from csboard.application.pipeline import PipelineOrchestrator, STAGE_ORDER
 from csboard.domain.enums import RunStatus, StageStatus
 from csboard.domain.models import StageState
+from csboard.domain.execution_plan import ExecutionPlan
 
 
 def _make_run(stages: dict[str, StageStatus] | None = None, status: str = "pending") -> MagicMock:
@@ -139,6 +140,50 @@ class TestRunPipeline(unittest.TestCase):
         from csboard.domain.errors import DomainError
         with self.assertRaises(DomainError):
             orch.run_pipeline("project-test", "run-test", policy="targeted")
+
+    def test_selective_first_manual_stage_waits_without_execution_side_effects(self) -> None:
+        orch, _, save_run = self._make_orchestrator()
+        append_event = orch.append_event
+        result = orch.run_pipeline(
+            "project-test", "run-test", execution_plan=ExecutionPlan.create(
+                "selective", ["generate-visual-anchors"]),
+        )
+        self.assertEqual(result["state"], "waiting-manual-trigger")
+        self.assertEqual(result["next_stage"], "generate-visual-anchors")
+        self.assertEqual(result["manual_stages"], ["generate-visual-anchors"])
+        self.assertEqual(result["stages_executed"], [])
+        save_run.assert_not_called()
+        append_event.assert_not_called()
+
+    def test_selective_runs_automatic_prefix_then_waits_at_next_gate(self) -> None:
+        orch, _, _ = self._make_orchestrator()
+        result = orch.run_pipeline(
+            "project-test", "run-test", execution_plan=ExecutionPlan.create(
+                "selective", ["clone-voice", "compose-video"]),
+        )
+        self.assertEqual(result["state"], "waiting-manual-trigger")
+        self.assertEqual(result["next_stage"], "clone-voice")
+        self.assertEqual(result["stages_executed"], ["generate-visual-anchors"])
+
+    def test_explicit_manual_target_runs_its_dependencies_but_not_later_stages(self) -> None:
+        orch, _, _ = self._make_orchestrator()
+        result = orch.run_pipeline(
+            "project-test", "run-test", policy="targeted", target_stage="clone-voice",
+            execution_plan=ExecutionPlan.create("selective", ["clone-voice"]),
+            manual_trigger_stage="clone-voice",
+        )
+        self.assertEqual(result["stages_executed"], ["generate-visual-anchors", "clone-voice"])
+        self.assertNotIn("state", result)
+
+    def test_targeted_later_stage_cannot_bypass_an_earlier_manual_gate(self) -> None:
+        orch, _, _ = self._make_orchestrator()
+        result = orch.run_pipeline(
+            "project-test", "run-test", policy="targeted", target_stage="compose-video",
+            execution_plan=ExecutionPlan.create("selective", ["clone-voice"]),
+        )
+        self.assertEqual(result["state"], "waiting-manual-trigger")
+        self.assertEqual(result["next_stage"], "clone-voice")
+        self.assertEqual(result["stages_executed"], ["generate-visual-anchors"])
 
     def test_invalid_policy_raises(self) -> None:
         orch, _, _ = self._make_orchestrator()

@@ -42,7 +42,7 @@ def _make_service(service_id: str, capability: str = "text_generation", **kwargs
         "priority": 100,
         "is_default": False,
         "config": {},
-        "required_secrets": ["api_key"],
+        "required_secrets": [],
         "optional_secrets": [],
     }
     defaults.update(kwargs)

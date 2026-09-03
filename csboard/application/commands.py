@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import os
 import time
 from dataclasses import dataclass, field
@@ -14,15 +16,56 @@ from csboard.application.av_artifacts import av_plan_document, json_bytes
 from csboard.application.composition import CompositionService
 from csboard.application.context import CommandContext, new_id, utc_now
 from csboard.application.illustrations import IllustrationService
+from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 from csboard.application.pipeline import PipelineOrchestrator
 from csboard.application.storyboard import StoryboardService
 from csboard.application.voice_units import VoiceUnitService
+from csboard.application.work_orders import WorkOrderService
 from csboard.domain.av_timing import VoiceUnit, segment_script
 from csboard.domain.script_preparation import prepare_script
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus, StageStatus
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.models import Task, Run, StageState
+from csboard.domain.execution_plan import ExecutionPlan, CANONICAL_STAGES
+from csboard.domain.stage_gate import StageGate, GATE_APPROVED, GATE_WAITING, GATE_REJECTED, GATE_REDO
 from csboard.ports.providers import AlignmentPort, ImageModelPort, MediaPort, RendererPort, TextModelPort, TextToSpeechPort
+
+
+UPLOAD_REFERENCE_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac"}
+ALLOWED_LINE_DENSITY = ("minimal", "standard", "rich", "complete")
+LINE_DENSITY_TO_STROKE = {
+    "minimal": "light",
+    "standard": "standard",
+    "rich": "detailed",
+    "complete": "full",
+}
+STYLE_DEFAULTS = {
+    "target_chars": 45,
+    "shots_per_image": 2,
+    "line_density": "rich",
+    "visual_anchor_enabled": True,
+    "include_subtitles": True,
+}
+
+
+def _is_high_entropy_token(value: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    if len(value) < 16:
+        return False
+    if not re.search(r"[A-Za-z]", value) or not re.search(r"[0-9]", value):
+        return False
+    # 约束重复字符比例，避免弱 token
+    ratio = len(set(value)) / len(value)
+    return ratio >= 0.45
+
+
+def _derive_script_rules(target_chars: int) -> tuple[int, int]:
+    target = max(5, min(500, target_chars))
+    min_chars = max(5, int(target * 0.6))
+    max_chars = min(500, max(target * 2, target + 40))
+    return min_chars, max_chars
+
 
 
 @dataclass(slots=True)
@@ -40,11 +83,14 @@ class MountainCommands:
     service_resolver: Any | None = None  # ServiceResolver for dynamic resolution
     repository: FilesystemTaskRepository | None = None  # 注入的 repository
     telemetry: JsonlTelemetry | None = None  # 注入的 telemetry
+    asset_repository: FilesystemAssetRepository | None = None
     pipeline: PipelineOrchestrator = field(init=False)
 
     def __post_init__(self) -> None:
         if self.repository is None:
             self.repository = FilesystemTaskRepository(self.root)
+        if self.asset_repository is None:
+            self.asset_repository = FilesystemAssetRepository(self.root)
         if self.telemetry is None:
             self.telemetry = JsonlTelemetry(self.repository)
         self.pipeline = PipelineOrchestrator(
@@ -67,11 +113,21 @@ class MountainCommands:
         engine: Engine = Engine.WHITEBOARD,
         request: dict[str, Any] | None = None,
         context: CommandContext | None = None,
+        *,
+        summary: str | None = None,
+        submission_id: str | None = None,
     ) -> dict[str, Any]:
         if not title.strip():
             raise ValueError("任务名称不能为空")
+        # Older CLI callers did not have a summary field.  The HTTP boundary
+        # requires it, while this fallback preserves existing local commands.
+        resolved_summary = title.strip() if summary is None else summary.strip()
+        if not resolved_summary:
+            raise ValueError("任务摘要不能为空")
         if pipeline_id != "mountain-av-v1" or engine is not Engine.WHITEBOARD:
             raise ValueError("M04 仅支持标准 whiteboard 的 mountain-av-v1；自定义参考和动态信息图将在 M09 开放")
+        if submission_id is not None and not _is_high_entropy_token(submission_id):
+            raise ValueError("submission_id 必须是高熵客户端标识")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         task_id = new_id("task")
         run_id = new_id("run")
@@ -79,12 +135,14 @@ class MountainCommands:
         task = Task(
             task_id=task_id,
             title=title.strip()[:80],
+            summary=resolved_summary[:240],
             pipeline_id=pipeline_id,
             engine=engine,
             status=TaskStatus.READY,
             created_at=utc_now(),
             updated_at=utc_now(),
             active_run_id=run_id,
+            submission_id=submission_id,
         )
         run = Run(
             run_id=run_id,
@@ -96,8 +154,23 @@ class MountainCommands:
             target_stage="compose-video",
             started_at=utc_now(),
         )
-        self.repository.create_task(task)
-        self.repository.create_run(run)
+        if submission_id:
+            signature = hashlib.sha256(json.dumps({
+                "title": task.title,
+                "summary": task.summary,
+                "pipeline_id": pipeline_id,
+                "engine": engine.value,
+            }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            created = self.repository.create_task_submission(
+                submission_id, task, run, signature, created_at=task.created_at,
+            )
+            if created["task_id"] != task_id:
+                task = self.repository.get_task(created["task_id"])
+                run = self.repository.get_run(task.task_id, created["run_id"])
+                return self._ok("task.create", task, run, context)
+        else:
+            self.repository.create_task(task)
+            self.repository.create_run(run)
         # Store task request for pipeline orchestration
         if request:
             request_path = self.repository.task_dir(task_id) / "request.json"
@@ -129,10 +202,28 @@ class MountainCommands:
         })
         return self._ok("task.create", task, run, context, event_sequence=event["sequence"])
 
+    def create_options(self) -> dict[str, Any]:
+        """Authoritative six-tab capability query used by every delivery edge."""
+        return {
+            "engines": [{"id": "whiteboard", "label": "白板动画", "available": True}],
+            "visual_sources": [
+                {"id": "preset", "label": "预设风格", "available": True},
+                {"id": "custom-reference", "label": "自定义参考", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"},
+            ],
+            "voice_sources": [
+                {"id": "voice-asset", "label": "音色资产", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"},
+                {"id": "uploaded-reference", "label": "上传参考音频", "available": True},
+            ],
+            "limits": {"script_min_chars": 10, "target_chars_min": 5, "target_chars_max": 500, "brand_text_max_chars": 12},
+            "defaults": {"engine": "whiteboard", "visual_source": "preset", **STYLE_DEFAULTS},
+        }
+
     def show_task(self, task_id: str) -> dict[str, Any]:
         task = self.repository.get_task(task_id)
         run = self.repository.get_run(task_id, task.active_run_id) if task.active_run_id else None
-        return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None}
+        request = self.repository.get_request(task_id) or {}
+        plan = ExecutionPlan.from_dict(request.get("execution_plan", {}))
+        return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None, "execution_plan": plan.to_dict()}
 
     def list_tasks(
         self,
@@ -247,7 +338,16 @@ class MountainCommands:
         min_chars: int = 35,
         max_chars: int = 140,
         visual_anchor_enabled: bool = True,
+        execution_mode: str = "auto",
+        manual_stages: list[str] | None = None,
         context: CommandContext | None = None,
+        *,
+        voice_source: str | None = None,
+        visual_source: str | None = None,
+        style_asset_id: str | None = None,
+        shots_per_image: int | None = None,
+        line_density: str | None = None,
+        brand_text: str | None = None,
     ) -> dict[str, Any]:
         """保存任务输入：通过 Application command 和 Repository 接口。
 
@@ -260,6 +360,33 @@ class MountainCommands:
         if len(script.strip()) < 10:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
+        formal_request = any(value is not None for value in (
+            voice_source, visual_source, style_asset_id, shots_per_image, line_density, brand_text,
+        ))
+        if formal_request:
+            if voice_source != "uploaded-reference" or visual_source != "preset":
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", "当前组合暂不可用")
+            if not style_asset_id:
+                raise DomainError("VALIDATION_ERROR", "style_asset_id 不能为空")
+            if shots_per_image not in {1, 2, 3, 4}:
+                raise DomainError("VALIDATION_ERROR", "shots_per_image 必须为 1–4")
+            if line_density not in ALLOWED_LINE_DENSITY:
+                raise DomainError("VALIDATION_ERROR", "line_density 不受支持")
+            if brand_text is None or len(brand_text) > 12:
+                raise DomainError("VALIDATION_ERROR", "brand_text 最长 12 个字符")
+            if not 5 <= target_chars <= 500:
+                raise DomainError("VALIDATION_ERROR", "target_chars 必须为 5–500")
+            try:
+                style_template = self.asset_repository.get_style_template(style_asset_id)
+            except (DomainError, NotFoundError):
+                raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
+            if style_template.kind != "preset" or style_template.status != "active" or style_template.engine != "whiteboard":
+                raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
+            if reference_audio_filename is None:
+                current = self.repository.get_request(task_id) or {}
+                if not current.get("reference_audio"):
+                    raise DomainError("VALIDATION_ERROR", "首次保存必须上传参考音频")
+
         # 验证音频文件（如果有）
         if reference_audio_filename:
             suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
@@ -271,7 +398,15 @@ class MountainCommands:
             if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
                 raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
 
-        # 验证规则参数
+        # New six-tab requests derive compatibility rules deterministically.
+        if formal_request:
+            min_chars, max_chars = _derive_script_rules(target_chars)
+            style = style_template.name
+            pen_text = brand_text or ""
+            stroke_detail = LINE_DENSITY_TO_STROKE[line_density or "rich"]
+        execution_plan = None if formal_request else ExecutionPlan.create(
+            execution_mode, [] if manual_stages is None else manual_stages,
+        )
         try:
             preparation = prepare_script(
                 script.strip(),
@@ -300,6 +435,24 @@ class MountainCommands:
             "max_chars": max_chars,
             "visual_anchor_enabled": visual_anchor_enabled,
         }
+        if execution_plan is not None:
+            request_data["execution_plan"] = execution_plan.to_dict()
+        if formal_request:
+            request_data.update({
+                "voice_source": "uploaded-reference",
+                "visual_source": "preset",
+                "style_asset_id": style_asset_id,
+                "style_snapshot": {
+                    "style_id": style_template.style_id,
+                    "revision": style_template.revision,
+                    "name": style_template.name,
+                    "prompt_text": style_template.prompt_text,
+                    "negative_prompt": style_template.negative_prompt,
+                },
+                "shots_per_image": shots_per_image,
+                "line_density": line_density,
+                "brand_text": brand_text,
+            })
 
         # 原子提交：request + task preparation + reference
         # preserve_reference=True 时在 Repository 锁内从当前已提交状态保留 reference
@@ -312,6 +465,7 @@ class MountainCommands:
                 visual_anchor_enabled=visual_anchor_enabled,
                 reference_filename=reference_audio_filename,
                 preserve_reference=(reference_audio_filename is None),
+                execution_plan=execution_plan.to_dict() if execution_plan else None,
             )
         except Exception as exc:
             # 不暴露绝对路径或异常原文
@@ -326,7 +480,14 @@ class MountainCommands:
                 "command": "task.save_inputs",
             })
 
-        return {"ok": True, "task_id": task_id, "input_saved": True}
+        result = {
+            "ok": True,
+            "task_id": task_id,
+            "input_saved": True,
+        }
+        if execution_plan is not None:
+            result["execution_plan"] = execution_plan.to_dict()
+        return result
 
     def get_inputs(self, task_id: str) -> dict[str, Any]:
         """读取已保存的任务输入。"""
@@ -339,6 +500,7 @@ class MountainCommands:
                 "saved": False,
                 "inputs": None,
                 "reference_audio": {"uploaded": False, "filename": None, "content_type": None, "size_bytes": None},
+                "execution_plan": ExecutionPlan().to_dict(),
             }
 
         # 从 request.json 读取 reference 元数据（不扫描目录）
@@ -355,16 +517,25 @@ class MountainCommands:
                     "size_bytes": ref_path.stat().st_size,
                 }
 
-        task = self.repository.get_task(task_id)
-        task_data = task.to_dict()
+        # Task is a stable domain DTO and intentionally ignores unknown JSON
+        # fields.  Input preparation is persisted alongside it, so read the
+        # stored document here rather than serializing the DTO back again.
+        task_data = self.repository.read_json(self.repository.task_dir(task_id) / "task.json")
         preparation = task_data.get("script_preparation")
         visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
 
-        return {
+        result = {
             "task_id": task_id,
             "saved": True,
             "inputs": {
                 "script": request_data.get("script", ""),
+                "voice_source": request_data.get("voice_source", "uploaded-reference"),
+                "visual_source": request_data.get("visual_source", "preset"),
+                "style_asset_id": request_data.get("style_asset_id"),
+                "style_snapshot": request_data.get("style_snapshot"),
+                "shots_per_image": request_data.get("shots_per_image", 1),
+                "line_density": request_data.get("line_density", "rich"),
+                "brand_text": request_data.get("brand_text", request_data.get("pen_text", "")),
                 "style": request_data.get("style", "极简粗线简笔白板风"),
                 "include_subtitles": request_data.get("include_subtitles", True),
                 "pen_text": request_data.get("pen_text", ""),
@@ -379,6 +550,13 @@ class MountainCommands:
             "script_preparation": preparation,
             "visual_anchor_enabled": visual_anchor_enabled,
         }
+        if "execution_plan" in request_data:
+            result["execution_plan"] = ExecutionPlan.from_dict(request_data["execution_plan"]).to_dict()
+        elif "style_asset_id" not in request_data:
+            # Old saved requests predate persisted plans.  Surface their
+            # historic default without writing a migration during a read.
+            result["execution_plan"] = ExecutionPlan().to_dict()
+        return result
 
     def start_run(
         self,
@@ -388,29 +566,34 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """启动运行：检查输入和服务可用性。"""
-        # 检查输入是否已保存
+        task = self.repository.get_task(task_id)
+        run = self.repository.get_run(task_id, run_id)
+        if run.task_id != task.task_id:
+            raise NotFoundError("运行记录不存在")
         request_data = self.repository.get_request(task_id)
-        if not request_data:
-            raise DomainError("VALIDATION_ERROR", "请先上传文案与参考音频")
+        self._validate_start_inputs(task_id, request_data)
 
-        # 检查 capability 可用性
-        if self.service_resolver is not None:
-            from csboard.application.service_resolver import STAGE_CAPABILITY_MAP
-            unavailable = []
-            for stage_name, capability in STAGE_CAPABILITY_MAP.items():
-                try:
-                    self.service_resolver.resolve(capability)
-                except DomainError:
-                    unavailable.append({"stage": stage_name, "capability": capability})
-            if unavailable:
-                raise DomainError(
-                    "CAPABILITY_NOT_AVAILABLE",
-                    "缺少必要的服务配置",
-                    details={"unavailable": unavailable},
-                )
+        return {"ok": True, "state": "waiting-manual-trigger", "task_id": task_id,
+                "run_id": run_id, "trace_id": run.trace_id,
+                "next_stage": self.pipeline.get_next_stage(run),
+                "gates": self.list_gates(task_id, run_id)["items"]}
 
-        # 启动 pipeline
-        return self.pipeline_run(task_id, run_id, policy, context=context)
+    def _validate_start_inputs(self, task_id: str, request: dict[str, Any] | None) -> None:
+        """Validate the persisted, non-negotiable manual-path inputs safely."""
+        invalid: list[str] = []
+        if not request or not isinstance(request.get("script"), str) or len(request["script"].strip()) < 10:
+            invalid.append("script")
+        reference = request.get("reference_audio") if request else None
+        if not isinstance(reference, str) or not reference:
+            invalid.append("reference_audio")
+        else:
+            path = Path(reference)
+            allowed_root = self.repository.task_dir(task_id) / "inputs"
+            candidate = (self.repository.task_dir(task_id) / path).resolve()
+            if path.is_absolute() or ".." in path.parts or candidate.parent != allowed_root.resolve() or not candidate.is_file() or candidate.stat().st_size <= 0:
+                invalid.append("reference_audio")
+        if invalid:
+            raise DomainError("VALIDATION_ERROR", "必要输入无效", details={"invalid_fields": sorted(set(invalid))})
 
     def cancel_run(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
         """取消运行。"""
@@ -749,54 +932,141 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Retry a stage, optionally scoped to a specific unit or visual."""
-        run = self.repository.get_run(task_id, run_id)
+        with self.repository.task_lock(task_id):
+            run = self.repository.get_run(task_id, run_id)
+            context = context or CommandContext(entrypoint=Entrypoint.CLI)
+
+            # Reset the stage status
+            stage_state = run.stages.get(stage)
+            if stage_state is None:
+                raise NotFoundError(f"阶段 {stage} 未在运行中注册")
+            if stage_state.status not in (StageStatus.FAILED, StageStatus.SUCCEEDED, StageStatus.STALE):
+                raise DomainError("INVALID_STATE", f"阶段 {stage} 当前状态为 {stage_state.status.value}，无法重试")
+
+            # Mark downstream stages as stale
+            from csboard.application.pipeline import STAGE_ORDER
+            try:
+                stage_idx = STAGE_ORDER.index(stage)
+            except ValueError:
+                raise DomainError("VALIDATION_ERROR", f"未知阶段: {stage}")
+            for downstream in STAGE_ORDER[stage_idx + 1:]:
+                if downstream in run.stages:
+                    run.stages[downstream].status = StageStatus.STALE
+
+            # Reset target stage
+            run.stages[stage] = StageState(StageStatus.PENDING, stage_state.attempt)
+            run.status = RunStatus.RUNNING
+            run.command_ids.append(context.command_id)
+            self.repository.save_run(run)
+
+            self.telemetry.append_event(task_id, run_id, {
+                "event_type": "StageRetryRequested",
+                "stage": stage,
+                "unit_id": unit_id,
+                "visual_id": visual_id,
+            })
+            self.telemetry.append_audit(task_id, run_id, {
+                "action": "stage.retry",
+                "stage": stage,
+                "command_id": context.command_id,
+                "unit_id": unit_id,
+                "visual_id": visual_id,
+            })
+
+            execution_plan = self._execution_plan(task_id)
+            return self.pipeline.run_pipeline(
+                task_id, run_id,
+                policy="targeted",
+                target_stage=stage,
+                context=context,
+                execution_plan=execution_plan,
+                manual_trigger_stage=stage if stage in execution_plan.manual_stages else None,
+            )
+
+    def stage_run(
+        self,
+        task_id: str,
+        run_id: str,
+        stage: str,
+        context: CommandContext | None = None,
+    ) -> dict[str, Any]:
+        """Explicitly trigger a stage, including a configured manual gate."""
+        if stage not in CANONICAL_STAGES: raise DomainError("VALIDATION_ERROR", "未知 Stage")
+        gates = self.repository.get_gates(task_id, run_id)
+        blocked = [gate.stage_id for gate in gates[:CANONICAL_STAGES.index(stage)] if gate.status != GATE_APPROVED]
+        if blocked: raise DomainError("STAGE_GATE_REQUIRED", "上游 Stage Gate 尚未批准", details={"unapproved_stages": blocked})
+        # Formal phase-one path deliberately does not ask PipelineOrchestrator
+        # to repair dependencies: one explicit HTTP/Skill action owns one Stage.
+        from csboard.application.work_orders import STAGE_INPUTS
+        store = FilesystemArtifactStore(self.repository)
+        missing = [key for key in STAGE_INPUTS[stage] if not self._valid_artifact(task_id, run_id, key)]
+        if missing: raise DomainError("STAGE_GATE_REQUIRED", "上游 Artifact 尚未验证", details={"missing_artifacts": missing})
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        result = self.pipeline._execute_stage(task_id, run_id, stage, context)
+        return self._stage_response(task_id, run_id, stage, result)
 
-        # Reset the stage status
-        stage_state = run.stages.get(stage)
-        if stage_state is None:
-            raise NotFoundError(f"阶段 {stage} 未在运行中注册")
-        if stage_state.status not in (StageStatus.FAILED, StageStatus.SUCCEEDED, StageStatus.STALE):
-            raise DomainError("INVALID_STATE", f"阶段 {stage} 当前状态为 {stage_state.status.value}，无法重试")
+    def _stage_response(self, task_id: str, run_id: str, stage: str, result: dict[str, Any]) -> dict[str, Any]:
+        run = self.repository.get_run(task_id, run_id)
+        for key, expected in {"task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage}.items():
+            if key in result and result[key] != expected:
+                safe = {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "error": "STAGE_RESPONSE_IDENTITY_CONFLICT"}
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [safe], "next_stage": None, "next_action": {"code": "FIX_STAGE_RESULT"}}
+        state = result.get("result")
+        successful = bool(result.get("ok")) and state in {"succeeded", "skipped"}
+        if successful and not self._exit_artifacts_valid(task_id, run_id, stage):
+            return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_OUTPUT_INVALID"}}
+        if successful:
+            try:
+                self.mark_gate_waiting(task_id, run_id, stage)
+            except Exception:
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_GATE_PERSIST_FAILED"}}
+            gate = self.get_gate(task_id, run_id, stage)
+            if gate["status"] != GATE_WAITING:
+                return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "STAGE_GATE_PERSIST_FAILED"}}
+            next_stage = CANONICAL_STAGES[CANONICAL_STAGES.index(stage) + 1] if stage != CANONICAL_STAGES[-1] else None
+            return {"ok": True, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": next_stage, "next_action": {"code": "GATE_REVIEW_REQUIRED"}}
+        return {"ok": False, "task_id": task_id, "run_id": run_id, "trace_id": run.trace_id, "stage": stage, "stages_executed": [stage], "results": [result], "next_stage": None, "next_action": {"code": "FIX_STAGE_RESULT"}}
 
-        # Mark downstream stages as stale
-        from csboard.application.pipeline import STAGE_ORDER
-        try:
-            stage_idx = STAGE_ORDER.index(stage)
-        except ValueError:
-            raise DomainError("VALIDATION_ERROR", f"未知阶段: {stage}")
-        for downstream in STAGE_ORDER[stage_idx + 1:]:
-            if downstream in run.stages:
-                run.stages[downstream].status = StageStatus.STALE
+    def _valid_artifact(self, task_id: str, run_id: str, key: str) -> bool:
+        import hashlib
+        item = FilesystemArtifactStore(self.repository).get(task_id, run_id, key)
+        if not item or item.get("status", "succeeded") != "succeeded": return False
+        path = self.repository.run_dir(task_id, run_id) / "artifacts" / str(item.get("relative_path", ""))
+        return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == item.get("sha256")
 
-        # Reset target stage
-        run.stages[stage] = StageState(StageStatus.PENDING, stage_state.attempt)
-        run.status = RunStatus.RUNNING
-        run.command_ids.append(context.command_id)
-        self.repository.save_run(run)
+    def _exit_artifacts_valid(self, task_id: str, run_id: str, stage: str) -> bool:
+        from csboard.application.work_orders import STAGE_OUTPUTS
+        return all(self._valid_artifact(task_id, run_id, key) for key in STAGE_OUTPUTS[stage])
 
-        self.telemetry.append_event(task_id, run_id, {
-            "event_type": "StageRetryRequested",
-            "stage": stage,
-            "unit_id": unit_id,
-            "visual_id": visual_id,
-        })
-        self.telemetry.append_audit(task_id, run_id, {
-            "action": "stage.retry",
-            "stage": stage,
-            "command_id": context.command_id,
-            "unit_id": unit_id,
-            "visual_id": visual_id,
-        })
-
-        # Execute the stage via pipeline
-        result = self.pipeline.run_pipeline(
-            task_id, run_id,
-            policy="targeted",
-            target_stage=stage,
-            context=context,
-        )
-        return result
+    def list_gates(self, task_id: str, run_id: str) -> dict[str, Any]: return {"items": [gate.to_dict() for gate in self.repository.get_gates(task_id, run_id)]}
+    def get_gate(self, task_id: str, run_id: str, stage: str) -> dict[str, Any]:
+        if stage not in CANONICAL_STAGES: raise DomainError("VALIDATION_ERROR", "未知 Stage")
+        return next(gate.to_dict() for gate in self.repository.get_gates(task_id, run_id) if gate.stage_id == stage)
+    def mark_gate_waiting(self, task_id: str, run_id: str, stage: str) -> None:
+        run, gates = self.repository.get_run(task_id, run_id), self.repository.get_gates(task_id, run_id)
+        changed = [StageGate(**{**gate.to_dict(), "status": GATE_WAITING, "attempt": run.stages[stage].attempt if stage in run.stages else gate.attempt, "revision": gate.revision + 1}) if gate.stage_id == stage else gate for gate in gates]
+        self.repository.save_gates(task_id, run_id, changed)
+    def decide_gate(self, task_id: str, run_id: str, stage: str, decision: str, actor: str, expected_revision: int | None = None, note: str | None = None, evidence: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        if stage not in CANONICAL_STAGES or decision not in {"approve", "reject", "redo"} or not actor.strip(): raise DomainError("VALIDATION_ERROR", "Gate 决定、Stage 和 actor 无效")
+        gates = self.repository.get_gates(task_id, run_id); gate = next(item for item in gates if item.stage_id == stage)
+        if expected_revision is not None and (isinstance(expected_revision, bool) or expected_revision != gate.revision): raise DomainError("GATE_DECISION_CONFLICT", "Gate revision 已变化")
+        wanted = {"approve": GATE_APPROVED, "reject": GATE_REJECTED, "redo": GATE_REDO}[decision]
+        if not isinstance(evidence or [], list) or len(evidence or []) > 100: raise DomainError("VALIDATION_ERROR", "evidence 无效")
+        allowed = {"logical_key", "sha256", "visual_id", "candidate_id", "revision", "source"}
+        if any(not isinstance(item, dict) or set(item) - allowed or not isinstance(item.get("logical_key"), str) or not isinstance(item.get("sha256"), str) for item in (evidence or [])): raise DomainError("VALIDATION_ERROR", "evidence 无效")
+        clean = [{key: str(value) for key, value in item.items()} for item in (evidence or [])]
+        if decision == "approve" and (not clean or not self._exit_artifacts_valid(task_id, run_id, stage)):
+            raise DomainError("VALIDATION_ERROR", "出口 Artifact 或 evidence 未验证")
+        if decision == "approve" and any(not self._valid_artifact(task_id, run_id, item["logical_key"]) or FilesystemArtifactStore(self.repository).get(task_id, run_id, item["logical_key"]).get("sha256") != item["sha256"] for item in clean): raise DomainError("VALIDATION_ERROR", "evidence 与当前 Artifact 不一致")
+        if gate.status == wanted and gate.actor == actor and list(gate.evidence) == clean: return gate.to_dict()
+        if gate.status == GATE_APPROVED: raise DomainError("GATE_DECISION_CONFLICT", "已批准的 Gate 不能被静默覆盖")
+        if gate.status != GATE_WAITING: raise DomainError("INVALID_STATE", "当前 Gate 尚不可决定")
+        replacement = StageGate(**{**gate.to_dict(), "status": wanted, "decision": decision, "actor": actor.strip(), "decided_at": utc_now(), "revision": gate.revision + 1, "evidence": tuple(clean)})
+        try: self.repository.replace_gate(task_id, run_id, stage, gate.revision, replacement)
+        except RuntimeError: raise DomainError("GATE_DECISION_CONFLICT", "Gate revision 已变化")
+        payload = {"stage": stage, "decision": decision, "actor": actor.strip(), "attempt": replacement.attempt, "revision": replacement.revision, "evidence": clean}
+        self.telemetry.append_event(task_id, run_id, {"event_type": "StageGateDecided", **payload}); self.telemetry.append_audit(task_id, run_id, {"action": "stage.gate", **payload})
+        return replacement.to_dict()
 
     def pipeline_run(
         self,
@@ -805,6 +1075,7 @@ class MountainCommands:
         policy: str = "auto",
         target_stage: str | None = None,
         context: CommandContext | None = None,
+        manual_trigger_stage: str | None = None,
     ) -> dict[str, Any]:
         """Run the pipeline with the given policy."""
         task = self.repository.get_task(task_id)
@@ -812,13 +1083,20 @@ class MountainCommands:
             run_id = task.active_run_id
         if not run_id:
             raise NotFoundError("任务没有活跃的运行")
-        context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_audit(task_id, run_id, {
-            "action": "pipeline.run",
-            "policy": policy,
-            "command_id": context.command_id,
-        })
-        return self.pipeline.run_pipeline(task_id, run_id, policy, target_stage, context)
+        with self.repository.task_lock(task_id):
+            context = context or CommandContext(entrypoint=Entrypoint.CLI)
+            result = self.pipeline.run_pipeline(
+                task_id, run_id, policy, target_stage, context,
+                execution_plan=self._execution_plan(task_id),
+                manual_trigger_stage=manual_trigger_stage,
+            )
+            if result.get("state") != "waiting-manual-trigger" or result.get("stages_executed"):
+                self.telemetry.append_audit(task_id, run_id, {
+                    "action": "pipeline.run",
+                    "policy": policy,
+                    "command_id": context.command_id,
+                })
+            return result
 
     def pipeline_resume(
         self,
@@ -833,13 +1111,28 @@ class MountainCommands:
             run_id = task.active_run_id
         if not run_id:
             raise NotFoundError("任务没有活跃的运行")
-        context = context or CommandContext(entrypoint=Entrypoint.CLI)
-        self.telemetry.append_audit(task_id, run_id, {
-            "action": "pipeline.resume",
-            "policy": policy,
-            "command_id": context.command_id,
-        })
-        return self.pipeline.resume_pipeline(task_id, run_id, policy, context)
+        with self.repository.task_lock(task_id):
+            context = context or CommandContext(entrypoint=Entrypoint.CLI)
+            result = self.pipeline.resume_pipeline(
+                task_id, run_id, policy, context,
+                execution_plan=self._execution_plan(task_id),
+            )
+            if result.get("state") != "waiting-manual-trigger" or result.get("stages_executed"):
+                self.telemetry.append_audit(task_id, run_id, {
+                    "action": "pipeline.resume",
+                    "policy": policy,
+                    "command_id": context.command_id,
+                })
+            return result
+
+    def _execution_plan(self, task_id: str) -> ExecutionPlan:
+        """Load the sole persisted execution decision source for every entrypoint."""
+        request = self.repository.get_request(task_id) or {}
+        return ExecutionPlan.from_dict(request.get("execution_plan", {}))
+
+    def work_order_show(self, task_id: str, run_id: str, stage: str) -> dict[str, Any]:
+        """Return the deterministic persisted Stage Work Order view."""
+        return WorkOrderService(self.repository).show(task_id, run_id, stage)
 
     # ── Stage executor wrappers ──────────────────────────────────────
 

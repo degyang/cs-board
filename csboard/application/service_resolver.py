@@ -43,7 +43,11 @@ class ServiceResolver:
 
         无可用服务时抛出 CAPABILITY_NOT_AVAILABLE。
         """
-        services = self._registry.list_services(capability=capability, enabled=True)
+        services = [
+            service
+            for service in self._configured_services(capability)
+            if self._registry.has_required_secrets(service)
+        ]
         if not services:
             raise DomainError(
                 "CAPABILITY_NOT_AVAILABLE",
@@ -51,6 +55,21 @@ class ServiceResolver:
                 details={"capability": capability},
             )
 
+        return services[0]
+
+    def resolve_configured(self, capability: str) -> ServiceDefinition:
+        """Choose configured service without claiming it can execute."""
+        services = self._configured_services(capability)
+        if not services:
+            raise DomainError(
+                "CAPABILITY_NOT_AVAILABLE",
+                f"没有可用的 {capability} 服务",
+                details={"capability": capability},
+            )
+        return services[0]
+
+    def _configured_services(self, capability: str) -> list[ServiceDefinition]:
+        services = self._registry.list_services(capability=capability, enabled=True)
         # 排序：is_default 降序 → priority 升序 → service_id 升序
         services.sort(
             key=lambda s: (
@@ -59,7 +78,7 @@ class ServiceResolver:
                 s.service_id,
             )
         )
-        return services[0]
+        return services
 
     def resolve_for_stage(self, stage_name: str) -> ServiceDefinition:
         """按 stage 名称选择服务。"""

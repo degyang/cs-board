@@ -3170,6 +3170,103 @@ docs(mountain): report task execution plan persistence
 
 先本地提交，不推送。执行者不得自行宣布审核通过。
 
+## 4T. PM 审核：CCB-TASK-EXECUTION-PLAN-23 纠偏
+
+### 4T.1 审核结论
+
+```text
+status: CORRECTION REQUIRED
+reviewed implementation: 4902dbb
+reviewed report: 32ae84a
+```
+
+实现方向正确，但未满足 4S 的行为证明和全量门禁。本轮不得进入 Stage Work Order，不扩大业务范围。
+
+PM 独立复现：新增专项 `3 passed`；随后 `tests/test_mountain_server.py::test_inputs_and_start_boundary` 超过 90 秒仍未结束并被人工终止。此前同一工作树基线报告为全量 `441 passed`，因此不得标记为 pre-existing 或以 timeout 代替通过。
+
+### 4T.2 必须修正的事实
+
+1. `tests/test_task_execution_plan_23.py` 只有 3 个测试，未覆盖 4S.4 的事务故障矩阵、并发一致性、CLI subprocess、旧数据、完整非法输入、安全脱敏和 auto start。
+2. `csboard/domain/execution_plan.py` 复制六阶段常量，而 `csboard/application/pipeline.py` 已有阶段顺序。必须建立一个领域层 canonical stage 单一来源并让 Pipeline、ExecutionPlan 和后续 Work Order 共用；禁止维护两份元组。
+3. `ExecutionPlan.create(execution_mode, manual_stages or [])` 会把部分 falsey 非 `None` 值静默转为空数组。只允许 `None` 表示默认；其他值必须进入领域校验。
+4. selective 无副作用测试只比较 `run.json`。必须证明目标 Task 的 run/stage、events、audit、logs、artifacts index 等持久状态前后不变；可对 Task/Run 树生成相对路径到 SHA-256 的快照，并明确排除测试自身临时文件。
+5. `start_run` 必须先验证 `task_id/run_id` 关系。不存在或不属于该 Task 的 run 仍按既有 404 契约处理，不能因为 selective 抢先返回 409。
+6. API JSON 解析只覆盖 `not-json`；非数组、空值、未知、重复、legacy、auto+非空、selective+空等没有逐项HTTP证明。
+7. `task show` 仅修改了返回值，没有用真实 CLI subprocess 证明 JSON DTO 与 GET inputs 同源。
+8. `webapp/error_contract.py` 改变全局错误 details 行为，必须增加回归测试：显式 details 优先、DomainError details fallback、敏感字段不透传。
+9. 全量测试挂起必须定位并修复；不得通过 skip、放宽 timeout、mock掉被测产品路径或删除原断言解决。
+
+### 4T.3 唯一纠偏范围
+
+- 保留现有 `ExecutionPlan` 产品语义和 multipart 字段。
+- 允许抽取共享 canonical stage 常量并更新 Pipeline 引用。
+- 修复 Application/API 边界验证和 start run 验证顺序。
+- 扩充 `tests/test_task_execution_plan_23.py` 及必要回归测试。
+- 不修改 `web-v2`，不实现 selective 编排，不实现 Work Order，不改 Provider/资产/TTS/渲染。
+
+### 4T.4 强制行为测试
+
+测试数量不设形式指标，但下列行为必须各有可识别断言：
+
+1. 默认 auto、显式 auto、selective 单项、多项乱序规范化。
+2. mode 非法；auto+非空；selective+空；unknown、duplicate、空字符串、非字符串、`segment-script`；JSON非法和JSON非数组。
+3. POST→GET inputs→Repository重建→CLI subprocess 的 `execution_plan` 完全相等。
+4. 未保存 inputs和旧 request缺字段均读为auto，且读取前后文件hash不变。
+5. request、task、reference 安装 checkpoint 故障分别证明旧 script/reference/execution plan 一起保持；复用现有事务注入机制，不复制提交算法。
+6. 两个并发保存完成后，最终 script、reference、preparation和execution plan来自同一事务组合。
+7. auto start走到既有预期边界且测试在30秒内结束；不得访问公网或真实外部Provider。
+8. selective start返回409、`retryable=false`、suggestion正确，整个Task/Run状态树快照不变。
+9. 错误响应、CLI、events、logs和diagnostics不包含完整测试script、reference bytes、绝对路径、Secret或traceback。
+10. 不存在run、其他Task的run分别保持既有NotFound契约。
+
+### 4T.5 门禁
+
+先运行挂起定位命令并在报告记录根因：
+
+```bash
+timeout 35s env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS \
+  /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -vv -s \
+  tests/test_mountain_server.py::test_inputs_and_start_boundary
+```
+
+最终门禁：
+
+```bash
+env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS \
+  /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q \
+  tests/test_task_execution_plan_23.py
+timeout 180s env -u PYTHONPATH -u CSBOARD_ALLOW_PLAINTEXT_SECRETS \
+  /mnt/d/workstation/projects/cs-board/.venv/bin/python -m pytest -q
+/mnt/d/workstation/projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts
+! rg -n "segment-script|execution_mode.*gated|selective.*gated" \
+  csboard/domain csboard/application/pipeline.py csboard/application/commands.py \
+  webapp/mountain_task_api.py cli tests/test_task_execution_plan_23.py
+git diff --check
+git status --short
+```
+
+仓库隔离的 Legacy API 不纳入本切片扫描；新 Mountain 生产路径和新测试必须零命中。全量pytest必须在180秒内0 failed完成，不能以 timeout 124交付。
+
+纠偏实现提交：
+
+```text
+fix(mountain): prove task execution plan invariants
+```
+
+新建纠偏报告，不改写旧报告：
+
+```text
+docs/Mountain/m07-ccb-task-execution-plan-23-correction-report.md
+```
+
+报告提交：
+
+```text
+docs(mountain): report execution plan correction evidence
+```
+
+报告必须列出挂起根因、canonical stage单一来源、非法输入矩阵、事务/并发矩阵、CLI/API DTO、selective目录快照、脱敏证据、专项/全量门禁和clean status。先本地提交，不推送，等待PM复审。
+
 ## 5. 联合验收区
 
 本节只由最终审核者填写。CCF 和 CCB 不得自行宣布联合验收通过。
