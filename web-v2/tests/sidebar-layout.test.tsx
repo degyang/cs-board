@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, waitFor, cleanup, within } from '@testing-library/react'
+import { render, waitFor, cleanup, within, act, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from '../src/components/layout/AppShell'
@@ -88,12 +88,20 @@ describe('Sidebar prototype interaction', () => {
     expect(pin).toHaveAttribute('aria-pressed', 'false')
     expect(within(sidebar).getByRole('navigation', { name: '主导航' })).toBeInTheDocument()
     expect(within(sidebar).getByRole('link', { name: '任务队列' })).toHaveAttribute('title', '任务队列')
+    expect(within(sidebar).getByRole('link', { name: /Demo 任务/ })).toHaveAttribute('href', '/tasks/task-001')
 
     await user.hover(brand)
     expect(sidebar).not.toHaveClass('rail-peeking')
 
     const triggers = within(sidebar).getAllByRole('button', { name: '展开侧边栏' })
     expect(triggers).toHaveLength(2)
+    expect(triggers[0]).toHaveAttribute('aria-controls', 'mountain-sidebar')
+    expect(triggers[1]).toHaveAttribute('aria-controls', 'mountain-sidebar')
+
+    await user.tab()
+    await waitFor(() => expect(sidebar).toHaveClass('rail-peeking'))
+    await user.unhover(sidebar)
+    await waitFor(() => expect(sidebar).not.toHaveClass('rail-peeking'))
 
     await user.hover(triggers[0])
     await waitFor(() => expect(sidebar).toHaveClass('rail-peeking'))
@@ -107,10 +115,12 @@ describe('Sidebar prototype interaction', () => {
     const pinWhilePeeking = within(sidebar).getByRole('button', { name: '钉住侧边栏' })
     await user.click(pinWhilePeeking)
     await waitFor(() => expect(container.querySelector('.app-shell')).toHaveClass('is-pinned'))
+    expect(localStorage.getItem(PIN_KEY)).toBe('1')
     expect(sidebar).not.toHaveClass('rail-peeking')
 
     await user.click(within(sidebar).getByRole('button', { name: '取消钉住侧边栏' }))
     await waitFor(() => expect(container.querySelector('.app-shell')).toHaveClass('is-rail'))
+    expect(localStorage.getItem(PIN_KEY)).toBe('0')
     expect(sidebar).not.toHaveClass('rail-peeking')
 
     await user.hover(triggers[0])
@@ -140,5 +150,43 @@ describe('Sidebar prototype interaction', () => {
 
     await user.hover(sidebar)
     expect(sidebar).not.toHaveClass('rail-peeking')
+  })
+
+  it('keeps peek open while moving inside the sidebar and collapses only on sidebar leave', async () => {
+    localStorage.setItem(PIN_KEY, '0')
+    const { container } = renderShell()
+    const user = userEvent.setup()
+    const sidebar = container.querySelector('.sidebar')!
+
+    await waitFor(() => expect(vi.mocked(fetchTasks)).toHaveBeenCalled())
+    await user.hover(within(sidebar).getAllByRole('button', { name: '展开侧边栏' })[0])
+    await waitFor(() => expect(sidebar).toHaveClass('rail-peeking'))
+
+    fireEvent.mouseOver(container.querySelector('.nav')!, { relatedTarget: within(sidebar).getAllByRole('button', { name: '展开侧边栏' })[0] })
+    expect(sidebar).toHaveClass('rail-peeking')
+    fireEvent.mouseOver(container.querySelector('.sidebar-footer')!, { relatedTarget: container.querySelector('.nav') })
+    expect(sidebar).toHaveClass('rail-peeking')
+
+    await user.unhover(sidebar)
+    await waitFor(() => expect(sidebar).not.toHaveClass('rail-peeking'))
+  })
+
+  it('aborts the runtime task request on sidebar unmount', async () => {
+    let resolveFetch!: (value: Task[]) => void
+    let requestSignal: AbortSignal | undefined
+    vi.mocked(fetchTasks).mockImplementationOnce((signal?: AbortSignal) => {
+      requestSignal = signal
+      return new Promise<Task[]>((resolve) => {
+        resolveFetch = resolve
+      })
+    })
+
+    const { unmount } = renderShell()
+    await waitFor(() => expect(vi.mocked(fetchTasks)).toHaveBeenCalled())
+    expect(requestSignal).toBeInstanceOf(AbortSignal)
+
+    unmount()
+    expect(requestSignal?.aborted).toBe(true)
+    await act(async () => resolveFetch(EMPTY_TASK))
   })
 })

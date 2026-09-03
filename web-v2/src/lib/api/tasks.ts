@@ -45,8 +45,8 @@ export function fetchCapabilities(): Promise<CapabilitiesResponse> {
 // Tasks
 // ---------------------------------------------------------------------------
 
-export function fetchTasks(): Promise<Task[]> {
-  return get('/tasks')
+export function fetchTasks(signal?: AbortSignal): Promise<Task[]> {
+  return get('/tasks', signal ? { signal } : undefined)
 }
 
 export function createTask(title: string, description?: string): Promise<TaskDetail> {

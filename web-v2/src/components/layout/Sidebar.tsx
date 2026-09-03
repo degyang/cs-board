@@ -8,9 +8,10 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
   const [peek, setPeek] = useState(false)
   const rail = !pinned
 
-  const loadRunInfo = useCallback(async () => {
+  const loadRunInfo = useCallback(async (signal: AbortSignal) => {
     try {
-      const tasks = await fetchTasks()
+      const tasks = await fetchTasks(signal)
+      if (signal.aborted) return
       const running = tasks.find((t) => t.status === 'running')
       setRunInfo(
         running
@@ -27,9 +28,13 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
   }, [])
 
   useEffect(() => {
-    loadRunInfo()
-    const t = setInterval(loadRunInfo, 30_000)
-    return () => clearInterval(t)
+    const controller = new AbortController()
+    void loadRunInfo(controller.signal)
+    const t = setInterval(() => void loadRunInfo(controller.signal), 30_000)
+    return () => {
+      controller.abort()
+      clearInterval(t)
+    }
   }, [loadRunInfo])
 
   useEffect(() => {
