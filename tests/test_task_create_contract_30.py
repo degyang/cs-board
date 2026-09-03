@@ -127,6 +127,14 @@ def test_uploaded_reference_preset_six_tab_round_trip_and_compatibility_mapping(
     assert str(client.app.state.data_dir) not in json.dumps(body, ensure_ascii=False)
 
 
+def test_formal_inputs_ignore_legacy_execution_plan_fields(client):
+    created = _create(client, "no-plan")
+    response = client.post(f"/api/v1/tasks/{created['task_id']}/inputs", data={**_form(), "execution_mode": "selective", "manual_stages": '["clone-voice"]'}, files={"reference": ("voice.wav", io.BytesIO(b"RIFF" + b"x" * 128), "audio/wav")})
+    assert response.status_code == 200
+    assert "execution_plan" not in response.json()
+    assert "execution_plan" not in client.get(f"/api/v1/tasks/{created['task_id']}/inputs").json()
+
+
 @pytest.mark.parametrize("field,value", [("voice_source", "voice-asset"), ("visual_source", "custom-reference"),
     ("style_asset_id", "missing"), ("shots_per_image", "5"), ("line_density", "detailed"),
     ("brand_text", "x" * 13), ("target_chars", "4")])

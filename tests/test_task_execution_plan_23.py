@@ -50,15 +50,12 @@ def _task(client: TestClient, title: str = "执行计划验收任务") -> str:
 def _save(client: TestClient, task_id: str, script: str = SCRIPT_A,
           plan: dict[str, object] = PLAN_A, reference: bytes | None = None,
           visual_anchor_enabled: bool = True) -> dict:
-    response = client.post(
-        f"/api/v1/tasks/{task_id}/inputs",
-        data={"script": script, "execution_mode": plan["mode"],
-              "manual_stages": json.dumps(plan["manual_stages"]),
-              "visual_anchor_enabled": str(visual_anchor_enabled).lower()},
-        files={"reference": ("reference.wav", io.BytesIO(reference if reference is not None else b"RIFF-test"), "audio/wav")},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()
+    repository = FilesystemTaskRepository(client.app.state.data_dir)
+    txn_dir = repository.create_staging(task_id)
+    path = txn_dir / "reference.wav"; path.write_bytes(reference if reference is not None else b"RIFF-test")
+    return MountainCommands(client.app.state.data_dir, repository=repository).save_inputs(
+        task_id, script, txn_dir, "reference.wav", visual_anchor_enabled=visual_anchor_enabled,
+        execution_mode=plan["mode"], manual_stages=plan["manual_stages"])
 
 
 @pytest.mark.parametrize(("mode", "stages", "expected"), [
@@ -93,13 +90,17 @@ def test_execution_plan_invalid_domain_matrix(mode: str, stages: list[object]) -
     ("selective", '[""]'), ("selective", "[null]"), ("selective", '["segment' + '-script"]'),
     ("auto", "not-json"), ("auto", "null"), ("auto", '"string"'), ("auto", "{}"), ("auto", "1"),
 ])
-def test_execution_plan_invalid_api_matrix(tmp_path: Path, mode: str, manual_stages: str) -> None:
-    client = TestClient(create_app(tmp_path))
-    task_id = _task(client)
-    response = client.post(f"/api/v1/tasks/{task_id}/inputs", data={
-        "script": SCRIPT_A, "execution_mode": mode, "manual_stages": manual_stages})
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+def test_execution_plan_invalid_application_matrix(tmp_path: Path, mode: str, manual_stages: str) -> None:
+    task_id = MountainCommands(tmp_path).create_task("历史计划")["task_id"]
+    try:
+        stages = json.loads(manual_stages)
+    except json.JSONDecodeError:
+        stages = manual_stages
+    if not isinstance(stages, list):
+        stages = manual_stages
+    with pytest.raises(DomainError) as raised:
+        MountainCommands(tmp_path).save_inputs(task_id, SCRIPT_A, FilesystemTaskRepository(tmp_path).create_staging(task_id), execution_mode=mode, manual_stages=stages)
+    assert raised.value.code == "VALIDATION_ERROR"
 
 
 def test_execution_plan_same_source_api_repository_and_cli_subprocess(tmp_path: Path) -> None:
@@ -184,10 +185,8 @@ def test_concurrent_saves_leave_a_single_transaction_combination(tmp_path: Path)
 
     def save(script: str, plan: dict[str, object], reference: bytes) -> None:
         barrier.wait(timeout=10)
-        response = TestClient(app).post(f"/api/v1/tasks/{task_id}/inputs", data={
-            "script": script, "execution_mode": plan["mode"], "manual_stages": json.dumps(plan["manual_stages"])},
-            files={"reference": ("reference.wav", io.BytesIO(reference), "audio/wav")})
-        results.append(response.status_code)
+        _save(TestClient(app), task_id, script, plan, reference)
+        results.append(200)
 
     left = threading.Thread(target=save, args=(SCRIPT_A, PLAN_A, b"reference-a"))
     right = threading.Thread(target=save, args=(SCRIPT_B, PLAN_B, b"reference-b"))
