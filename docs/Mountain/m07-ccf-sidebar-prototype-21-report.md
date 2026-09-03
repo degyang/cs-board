@@ -31,11 +31,12 @@
 
 §3 pin / rail / peek 行为证据
 
-单元测试（`web-v2/tests/sidebar-layout.test.tsx`，3 条）：
-  - 默认无持久化：`is-pinned`
-  - pin 的 `aria-pressed`、主导航和图标链接标签存在；品牌空白不展开
-  - 山标志、handle 分别展开；pin→pinned→rail 清除旧 peek；离开整个侧栏后收起
-  - rail 下 `nav`、`sidebar-footer` 和侧栏剩余区域悬停不触发 `.rail-peeking`
+自动化测试（`web-v2/tests/sidebar-layout.test.tsx`，5 条）补齐四类此前未验证行为，并保留原有默认态/负向断言：
+  - 精确触发区：品牌空白不展开，山标志和 handle 可通过鼠标及键盘 focus 展开。
+  - 侧栏内移动：从触发控件移动到 nav/footer 时 peek 保持，只有离开整个 aside 才收起。
+  - pin 状态机：peek→pinned、pinned→rail 均清除旧 peek，并验证 localStorage `1` / `0` 持久化。
+  - rail 内容与正式数据：图标链接具备可访问标签，运行入口使用动态任务 `task-001` 的正式 `/tasks/task-001` 路由。
+  - 卸载保护：Sidebar 卸载时 abort 动态运行任务请求；晚到响应不会更新已卸载组件。
 
 Chromium 证据（详见 §5）：
 - `sidebar-desktop-rail-collapsed.png`：未展开（宽 64）
@@ -44,21 +45,22 @@ Chromium 证据（详见 §5）：
 - `sidebar-desktop-rail-hover-footer-no-expand.png`：`footer` 悬停下无 `rail-peeking`
 - `sidebar-mobile-64.png`：移动端始终为 64
 - `sidebar-mobile-localstorage-empty-pinned.png`：fresh context 未预置 key，启动前为 `null`，启动后为 `1`，shell 为 pinned 且视觉栏宽 64
-- 独立 Chromium 断言还验证了 handle 展开、离开收起以及 pin→pinned / pinned→rail 两次转换。
+- 既有截图保持不变；本轮新增行为由上述自动化测试证明，不以单张截图替代负向交互验证。
 
 §4 自动化测试类别、数量和结果
 
 - 前端单测：`npm run test -- --run`
   - 文件数：16
-  - 用例数：367
+  - 用例数：369
   - 结果：通过（退出码 0）
-  - 侧栏交互测试：3 条（通过）
+  - 侧栏交互测试：5 条（通过，无 warning）
 - Contract checker：`npm run test:contract-checker`
   - 文件数：2
   - 用例数：48
   - 结果：通过（退出码 0）
 - 构建验证：`npm run build`
   - 结果：通过（退出码 0）
+- 本轮新增测试类别：焦点可访问性、父级 hover 边界、pin 持久化、运行入口正式路由、请求 AbortController 卸载保护。
 - 禁止项核对：未 skip、未删除断言、未仅增加 timeout。
 
 §5 Chromium 浏览器证据、尺寸和 SHA-256
@@ -85,27 +87,24 @@ Chromium 证据（详见 §5）：
 §6 全部门禁及正常退出结果
 
 - `npm run build`：退出码 0
-- `npm run test -- --run`：退出码 0（16 文件 / 367 用例）
+- `npm run test -- --run`：退出码 0（16 文件 / 369 用例）
 - `npm run test:contract-checker`：退出码 0（2 文件 / 48 用例）
-- `Chromium e2e 行为验证脚本`（重启后的本地 Vite + Playwright Chromium，抓图 + 行为断言）：退出码 0
-  - 完成交互断言：
-    - 默认 pinned
-    - 山标志展开、handle 展开、离开整个侧栏收起
-    - nav/footer 不展开
-    - pin→pinned、pinned→rail 不残留 peek
-    - 移动端 localStorage 启动前无值、默认 pinned、左侧 64px 保留
+- 既有真实 Chromium 门禁证据沿用且未修改；本轮不重新制作截图。
+  - 交互证据仍覆盖默认 pinned、山标志/handle 展开、nav/footer 负向、移动端无值 localStorage。
+  - 新增自动化覆盖侧栏内移动保持 peek、pin 持久化与 pin/rail 转换、Sidebar 卸载 abort 请求及晚到响应保护。
 - 所有门禁均使用真实命令执行；无 skip、无删除断言、无仅增加 timeout。
 
 §7 进程清理、git status 和提交 hash
 
 - 证据抓取前后端服务进程：
-  - 已启动并使用 127.0.0.1:4173 进行 Chromium 证据抓取
-  - 证据抓取完成后已停止 Vite 会话；最终核对无相关 Vite / Chromium / Playwright 进程残留。
-- 当前修复前基线 HEAD：`8a703fd`（旧报告实际提交；旧文档误写的 `ff970ee` 已纠正）。
-- 本次修复提交：`4636f1c597502bbc50b7d778bbc03316b2206b4e`（`fix(mountain-web): remediate sidebar prototype audit findings`）。
-- 本次报告提交：本报告提交完成后以 `git log -1 --format=%H` 核对；报告不自引用自身 hash，最终 hash 同时在交付回执中列出。
-- 最终 `git status --short`：报告提交后应为空；无推送。
+  - 本轮未启动浏览器服务；沿用已有 Chromium 证据，测试与 build 均为本地执行。
+  - 最终核对无 Vite / Chromium / Playwright 残留进程。
+- 上一轮修复提交：`4636f1c597502bbc50b7d778bbc03316b2206b4e`。
+- 上一轮报告提交：`9e11b674afa36551106debbf848d549b06cd10fd`。
+- 本轮修复提交：`642124e34474f7cabdb72d9095c1267cb069b381`（`fix(mountain-web): verify sidebar state and abort runtime request`）。
+- 本轮报告提交：本报告提交完成后以 `git log -1 --format=%H` 核对；报告不自引用自身 hash，最终 hash 在交付回执列出。
+- 最终 `git status --short`：报告提交后为空；只本地提交，不推送。
 
 §8 未完成项
 
-- 无。本回执仅记录整改、测试和证据，不自行宣布审核或用户验收通过。
+- 无。本轮只补齐自动化行为和请求卸载保护，不自行宣布审核或用户验收通过。
