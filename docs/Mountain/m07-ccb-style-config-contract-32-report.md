@@ -12,13 +12,13 @@
 
 list、preset list、detail、create、patch、copy 都通过 `StyleTemplate.to_dict()` 返回 `config`。Router 不拼接缺失字段；create/patch 非对象 config 返回验证错误。
 
-本轮以真实 HTTP 覆盖 create→detail→patch→list 的 config 等值回读、create/patch 非对象拒绝，以及 preset copy 的 config 深拷贝。preset 的 patch/delete/activate/deactivate 既有拒绝边界保持不变。
+最终证据补强：preset 的非空嵌套 config copy 后更新 custom 副本，源 preset config 保持不变；create/patch 的非对象 config 均断言完整统一 `body.error`（code/message/retryable/unavailable/details）。preset 的 patch/delete/activate/deactivate 既有拒绝边界保持不变。
 
 ## §4 专项和全量测试
 
-专项：`tests/test_style_template.py tests/test_asset_repository.py tests/test_mountain_asset_api.py`，52 passed，6.79s。
+专项：`tests/test_style_template.py tests/test_asset_repository.py tests/test_mountain_asset_api.py`，52 passed，6.71s。
 
-全量：558 passed、5 skipped、4 warnings、3 subtests passed，96.33s，exit 0（低于 180 秒门禁）。
+全量：558 passed、5 skipped、4 warnings、3 subtests passed，96.42s，exit 0（低于 180 秒门禁）。
 
 ## §5 真实 CCF checker
 
@@ -26,8 +26,8 @@ list、preset list、detail、create、patch、copy 都通过 `StyleTemplate.to_
 
 ## §6 进程清理、clean status 和提交 hash
 
-实现提交 `4db1869 fix(mountain): persist style template config dto`；测试提交 `519e1ff test(mountain): cover style config dto contract`；本报告为独立本地提交。测试和 checker 服务均正常退出；只本地提交，不推送。
+实现提交 `4db1869 fix(mountain): persist style template config dto`；最终测试提交 `f51604a test(mountain): strengthen style config contract evidence`；本报告为独立本地提交。全量测试已正常退出；只本地提交，不推送。
 
 ## §7 未完成项
 
-无。
+无。CCF 继续等待；本回执不宣布检查点 B 或用户验收通过。
