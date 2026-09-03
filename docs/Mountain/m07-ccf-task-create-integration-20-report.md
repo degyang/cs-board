@@ -50,7 +50,7 @@
 
 - 实现提交：`7769c0f0f312ea6820b1748c6b8b98ba77fae30a`，提交信息为 `fix(mountain-web): secure Task creation recovery`。
 - 实现提交后工作区 clean；无 push。
-- 回执提交将在本文件写入后单独建立，提交信息为 `docs(mountain): report Task creation integration`。
+- 回执提交信息：`docs(mountain): report Task creation integration`；报告提交后最终工作区 clean。
 
 ## §6 检查点 B 依赖状态
 
