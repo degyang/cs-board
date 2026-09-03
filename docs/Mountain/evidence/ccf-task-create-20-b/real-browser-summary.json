@@ -1,0 +1,704 @@
+{
+  "browser": "Chromium 134.0.6998.35",
+  "viewport": {
+    "width": 1440,
+    "height": 1000,
+    "deviceScaleFactor": 1
+  },
+  "api_base": "http://127.0.0.1:44793/api/v1",
+  "real_backend": true,
+  "fresh_local_storage_entries": 1,
+  "task_counts": {
+    "initial": 0,
+    "after_first_success": 1,
+    "before_second_create": 1,
+    "after_second_create": 2,
+    "before_response_fault": 2,
+    "after_response_fault": 2,
+    "after_real_retry": 2
+  },
+  "urls": {
+    "first_workbench": "/tasks/task-058539ec024b492a9be64dae8640a6bc",
+    "recovered_workbench": "/tasks/task-233a88eb2111426499e782908bcc19a9"
+  },
+  "response_fault": "Task 创建和恢复后的重试使用真实 CCB；首次输入保存由浏览器 route 注入 503 传输故障，未使用 fixture server。",
+  "forbidden_execution_requests": [],
+  "request_summary": [
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/8cb7474bd0eba2be58838f5e33c6d523379b958ea997d984f15f9903a7375d0e",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/991f11f77825c2c4dd9793a53d0e3ab95ae644f0614c3aeb3b3b54e55838d410",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/d6848f77cb165ea663c8a4705aaf83a1a4f555f831f117e5314716ae5c055ca3",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/be243c156c2addb0f6ae2d6513d05d569d0a0a9866ffc59d5d347a90a9d8bcd5",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/8bb05e2a85457a03e3999c53b1453dc76baf2991f87deedc9f106ebafac84e3c",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/994712cbe54c96dfb526d12cd63a42a617df98adcff0a9c7e102c2ae65fd4489",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/750a43ce3ea70876cb790e5f2f41830bc1030ef389c5cd716def05ebd43ed31c",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/867877b883438576ffbf79ebfe6aa356bb48f7eea44e28a087d0b957eccb246f",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/e958a37f2f5b53a619d9a6285eaa2091e487d9d7e4da8dc3142c534ca2bad999",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/3756454167346eaa3b9a7cb92b8b2837fd84efadf558eebea4cb7eb459653dc0",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/92e783fb1aaf54682c55bf80311439b62b12241a4ab6bc91f1ac887d91a71f72",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/76855dbb812ebe3c2f4da40959d6f016037917da6cd6e93ec2b0e95e1491ec97",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/runs/run-659abd1814a642adb359f158cfd33afe/units",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/runs/run-659abd1814a642adb359f158cfd33afe/events?after=0",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/runs/run-659abd1814a642adb359f158cfd33afe/logs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-058539ec024b492a9be64dae8640a6bc/runs/run-659abd1814a642adb359f158cfd33afe/events?after=2",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/8cb7474bd0eba2be58838f5e33c6d523379b958ea997d984f15f9903a7375d0e",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/991f11f77825c2c4dd9793a53d0e3ab95ae644f0614c3aeb3b3b54e55838d410",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/d6848f77cb165ea663c8a4705aaf83a1a4f555f831f117e5314716ae5c055ca3",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/be243c156c2addb0f6ae2d6513d05d569d0a0a9866ffc59d5d347a90a9d8bcd5",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/8bb05e2a85457a03e3999c53b1453dc76baf2991f87deedc9f106ebafac84e3c",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/994712cbe54c96dfb526d12cd63a42a617df98adcff0a9c7e102c2ae65fd4489",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/750a43ce3ea70876cb790e5f2f41830bc1030ef389c5cd716def05ebd43ed31c",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/867877b883438576ffbf79ebfe6aa356bb48f7eea44e28a087d0b957eccb246f",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/e958a37f2f5b53a619d9a6285eaa2091e487d9d7e4da8dc3142c534ca2bad999",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/3756454167346eaa3b9a7cb92b8b2837fd84efadf558eebea4cb7eb459653dc0",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/92e783fb1aaf54682c55bf80311439b62b12241a4ab6bc91f1ac887d91a71f72",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/blobs/76855dbb812ebe3c2f4da40959d6f016037917da6cd6e93ec2b0e95e1491ec97",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/units",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/events?after=0",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/logs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/events?after=2",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 503
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/create-options",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/voices",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/styles?kind=preset&engine=whiteboard",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/inputs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/units",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/events?after=0",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/logs",
+      "kind": "request",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/task-233a88eb2111426499e782908bcc19a9/runs/run-ea92116fa8f0411c900843c58aa30a98/events?after=3",
+      "kind": "request",
+      "status": 200
+    }
+  ],
+  "screenshots": [
+    "b-success-before-submit.png",
+    "b-success-workbench.png",
+    "b-failure-before-submit.png",
+    "b-input-save-failure.png",
+    "b-recovery-before-retry.png",
+    "b-recovery-workbench.png"
+  ]
+}
