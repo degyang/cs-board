@@ -30,9 +30,6 @@ from webapp.error_contract import domain_error_response
 from webapp.mountain_server import create_app
 
 
-pytestmark = pytest.mark.skip(reason="第一阶段六 Tab 正式路径不提供 auto/selective 执行策略（§4AI.3(10)）")
-
-
 SCRIPT_A = "这是用于执行计划验收的合成测试文案，内容足够长且不会调用任何外部能力。"
 SCRIPT_B = "这是另一份用于事务并发验收的合成测试文案，内容同样足够长且完全隔离。"
 PLAN_A = {"mode": "selective", "manual_stages": ["clone-voice"]}
@@ -45,9 +42,9 @@ def _snapshot(root: Path) -> dict[str, str]:
 
 
 def _task(client: TestClient, title: str = "执行计划验收任务") -> str:
-    response = client.post("/api/v1/tasks", json={"title": title})
-    assert response.status_code == 200
-    return response.json()["task_id"]
+    # Execution-plan is a historical contract: create legacy data outside the
+    # formal six-Tab HTTP create boundary, then exercise its API persistence.
+    return MountainCommands(client.app.state.data_dir).create_task(title)["task_id"]
 
 
 def _save(client: TestClient, task_id: str, script: str = SCRIPT_A,

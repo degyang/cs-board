@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, UploadFile
+from fastapi import APIRouter, Body, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from csboard.adapters.filesystem import FilesystemTaskRepository
@@ -69,16 +69,13 @@ def mountain_task_router(
     def create_task(payload: dict = Body(...)):
         """创建新任务。"""
         try:
-            title = str(payload.get("title", ""))
-            summary = str(payload.get("summary", ""))
-            submission_id = str(payload.get("submission_id", ""))
-            # Fully legacy callers have neither field.  Keep their local
-            # recovery path readable; a partially formal submission is never
-            # accepted without both identity fields.
-            if not summary and not submission_id:
-                summary = title
-                submission_id = None
-            if not summary.strip() or not submission_id and "submission_id" in payload:
+            required = {"title", "summary", "engine", "pipeline_id", "submission_id"}
+            if not isinstance(payload, dict) or required - set(payload) or not all(isinstance(payload.get(key), str) for key in required):
+                raise ValueError("title、summary、engine、pipeline_id 和 submission_id 为必填字段")
+            title = payload["title"]
+            summary = payload["summary"]
+            submission_id = payload["submission_id"]
+            if not summary.strip() or not submission_id.strip():
                 raise ValueError("summary 和 submission_id 不能为空")
             engine = Engine(payload.get("engine", "whiteboard"))
             pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
@@ -120,6 +117,7 @@ def mountain_task_router(
     @router.post("/tasks/{task_id}/inputs")
     async def upload_inputs(
         task_id: str,
+        request: Request,
         script: str = Form(...),
         reference: UploadFile | None = File(None),
         voice_source: str | None = Form(None),
@@ -151,6 +149,25 @@ def mountain_task_router(
 
             # 始终创建唯一事务目录
             txn_dir = repository.create_staging(task_id)
+
+            # execution-plan 是旧任务的未文档化兼容载荷，不能成为六 Tab
+            # 正式表单的一部分；保留读取与历史写入测试所需的解析边界。
+            form = await request.form()
+            execution_mode = form.get("execution_mode", "auto")
+            raw_manual_stages = form.get("manual_stages")
+            if not isinstance(execution_mode, str):
+                raise DomainError("VALIDATION_ERROR", "execution_mode 无效")
+            if raw_manual_stages is None:
+                manual_stages = None
+            elif not isinstance(raw_manual_stages, str):
+                raise DomainError("VALIDATION_ERROR", "manual_stages 无效")
+            else:
+                try:
+                    manual_stages = json.loads(raw_manual_stages)
+                except json.JSONDecodeError as error:
+                    raise DomainError("VALIDATION_ERROR", "manual_stages 必须为 JSON 数组") from error
+                if not isinstance(manual_stages, list):
+                    raise DomainError("VALIDATION_ERROR", "manual_stages 必须为 JSON 数组")
 
             # 分块写入 reference（如果有）
             if reference is not None:
@@ -192,6 +209,8 @@ def mountain_task_router(
                 shots_per_image=shots_per_image,
                 line_density=line_density,
                 brand_text=brand_text,
+                execution_mode=execution_mode,
+                manual_stages=manual_stages,
             )
 
             return result

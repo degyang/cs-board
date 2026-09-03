@@ -136,7 +136,7 @@ class CliCsboardTest(unittest.TestCase):
         client = TestClient(create_app(self.root))
         plan = {"mode": "selective", "manual_stages": list(CANONICAL_STAGES)}
         for stage in CANONICAL_STAGES:
-            created = client.post("/api/v1/tasks", json={"title": f"CLI {stage}"}).json()
+            created = client.post("/api/v1/tasks", json={"title": f"CLI {stage}", "summary": f"CLI {stage}", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": f"submit-cli-{stage}-0123456789abcdef"}).json()
             task_id, run_id = created["task_id"], created["run_id"]
             saved = client.post(f"/api/v1/tasks/{task_id}/inputs", data={
                 "script": "这是 CLI 六阶段统一分派的持久化测试文案，长度足够。",
@@ -160,7 +160,7 @@ class CliCsboardTest(unittest.TestCase):
         from starlette.testclient import TestClient
         from webapp.mountain_server import create_app
         client = TestClient(create_app(self.root))
-        created = client.post("/api/v1/tasks", json={"title": "CLI retry persisted plan"}).json()
+        created = client.post("/api/v1/tasks", json={"title": "CLI retry persisted plan", "summary": "CLI retry persisted plan", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-cli-retry-0123456789abcdef"}).json()
         task_id, run_id = created["task_id"], created["run_id"]
         # execution_plan is retained only for legacy CLI data.  The formal
         # six-tab HTTP multipart contract deliberately no longer exposes it.

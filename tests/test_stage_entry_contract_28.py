@@ -10,7 +10,7 @@ from csboard.domain.execution_plan import CANONICAL_STAGES
 from tests.test_stage_gates_24 import _commands
 
 def _created(client: TestClient) -> tuple[str, str]:
-    item = client.post("/api/v1/tasks", json={"title": "truth"}).json()
+    item = client.post("/api/v1/tasks", json={"title": "truth", "summary": "truth", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-entry-truth-0123456789abcdef"}).json()
     return item["task_id"], item["run_id"]
 
 def test_start_rejects_missing_reference_and_unsafe_reference(tmp_path: Path) -> None:

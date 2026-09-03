@@ -552,6 +552,10 @@ class MountainCommands:
         }
         if "execution_plan" in request_data:
             result["execution_plan"] = ExecutionPlan.from_dict(request_data["execution_plan"]).to_dict()
+        elif "style_asset_id" not in request_data:
+            # Old saved requests predate persisted plans.  Surface their
+            # historic default without writing a migration during a read.
+            result["execution_plan"] = ExecutionPlan().to_dict()
         return result
 
     def start_run(

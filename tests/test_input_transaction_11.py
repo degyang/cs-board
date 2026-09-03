@@ -64,6 +64,8 @@ def _create_task(client: TestClient, title: str = "测试任务") -> str:
     resp = client.post("/api/v1/tasks", json={
         "title": title,
         "summary": "输入事务回归测试",
+        "engine": "whiteboard",
+        "pipeline_id": "mountain-av-v1",
         "submission_id": f"txn-{hashlib.sha256(title.encode()).hexdigest()[:24]}",
     })
     assert resp.status_code == 200

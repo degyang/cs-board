@@ -30,12 +30,10 @@ EXPECTED_OUTPUTS = {
 
 def _created(tmp_path: Path) -> tuple[TestClient, str, str]:
     client = TestClient(create_app(tmp_path))
-    created = client.post("/api/v1/tasks", json={"title": "工作单测试"}).json()
+    created = client.post("/api/v1/tasks", json={"title": "工作单测试", "summary": "工作单测试", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-work-orders-0123456789abcdef"}).json()
     task_id, run_id = created["task_id"], created["run_id"]
     response = client.post(f"/api/v1/tasks/{task_id}/inputs", data={
-        "script": SCRIPT, "execution_mode": "selective",
-        "manual_stages": json.dumps(["clone-voice", "compose-video"]),
-        "style": "safe-style",
+        "script": SCRIPT, "style": "safe-style",
     })
     assert response.status_code == 200, response.text
     return client, task_id, run_id
