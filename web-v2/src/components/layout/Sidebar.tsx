@@ -1,16 +1,26 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { useEffect, useState, useCallback } from 'react'
 import { fetchTasks } from '../../lib/api/tasks'
 import { statusText } from '../../lib/formatting'
 
 export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
-  const [runInfo, setRunInfo] = useState<{ title: string; status: string } | null>(null)
+  const [runInfo, setRunInfo] = useState<{ taskId: string; title: string; status: string } | null>(null)
+  const [peek, setPeek] = useState(false)
+  const rail = !pinned
 
   const loadRunInfo = useCallback(async () => {
     try {
-      const items = await fetchTasks()
-      const running = items.find((t) => t.status === 'running')
-      setRunInfo(running ? { title: running.title, status: running.status } : null)
+      const tasks = await fetchTasks()
+      const running = tasks.find((t) => t.status === 'running')
+      setRunInfo(
+        running
+          ? {
+              taskId: running.task_id,
+              title: running.title,
+              status: running.status,
+            }
+          : null,
+      )
     } catch {
       // ignore — footer is non-critical
     }
@@ -22,9 +32,25 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
     return () => clearInterval(t)
   }, [loadRunInfo])
 
+  const expand = () => {
+    if (rail) {
+      setPeek(true)
+    }
+  }
+  const collapse = () => {
+    if (rail) {
+      setPeek(false)
+    }
+  }
+
   return (
-    <aside className="sidebar">
-      <button className="pin-btn" onClick={onTogglePin} title={pinned ? '取消固定' : '固定侧栏'}>
+    <aside className={`sidebar${peek ? ' rail-peeking' : ''}`} data-pinned={pinned} onMouseLeave={collapse}>
+      <button
+        type="button"
+        className={`pin-btn${pinned ? ' on' : ''}`}
+        onClick={onTogglePin}
+        title={pinned ? '取消固定' : '固定侧栏'}
+      >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path
             d="M11.5 1.5L14.5 4.5L10 9L9 14L8 14L7 9L2.5 4.5L5.5 1.5L8 3L11.5 1.5Z"
@@ -35,14 +61,15 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
         </svg>
       </button>
 
-      <div className="brand">
+      <div className="brand" onMouseEnter={expand}>
         <div className="brand-row">
-          <div className="brand-mark">M</div>
+          <div className="brand-mark">山</div>
           <div>
             <p className="brand-name">山野小读</p>
             <p className="brand-sub">Video Pipeline</p>
           </div>
         </div>
+        <div className="rail-handle" title="悬停品牌区展开导航" />
       </div>
 
       <nav className="nav">
@@ -98,16 +125,21 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
 
       <div className="sidebar-footer">
         {runInfo ? (
-          <div className="sidebar-footer-run">
+          <Link
+            className="runbar"
+            to={`/tasks/${runInfo.taskId}`}
+            title="进入工作台"
+          >
             <span className="dot" />
             <span>
               {runInfo.title} — {statusText(runInfo.status)}
             </span>
-          </div>
+          </Link>
         ) : (
-          <span style={{ color: 'var(--nt-text-muted)', fontSize: 12 }}>
-            v2.0 — powered by Vite
-          </span>
+          <div className="runbar">
+            <span className="dot" />
+            <span>v2.0 — powered by Vite</span>
+          </div>
         )}
       </div>
     </aside>

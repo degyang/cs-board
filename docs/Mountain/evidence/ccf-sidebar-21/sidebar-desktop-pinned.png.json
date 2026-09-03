@@ -1,0 +1,16 @@
+{
+  "file": "sidebar-desktop-pinned.png",
+  "shellClass": "app-shell is-pinned",
+  "sidebar": {
+    "width": 264,
+    "className": "sidebar",
+    "left": 0,
+    "top": 0,
+    "right": 264,
+    "bottom": 900
+  },
+  "mainRect": {
+    "left": 264,
+    "width": 1176
+  }
+}

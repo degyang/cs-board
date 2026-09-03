@@ -1,0 +1,74 @@
+[
+  {
+    "file": "sidebar-desktop-pinned.png",
+    "shellClass": "app-shell is-pinned",
+    "sidebarWidth": 264,
+    "sidebarLeft": 0,
+    "sidebarRight": 264,
+    "mainLeft": 264,
+    "mainWidth": 1176,
+    "sidebarClass": "sidebar",
+    "sha256": "d590c1b99ed40f0133dba0ea7fe7dbb36f9aff4cce0bcb1511936baa9c26a936",
+    "bytes": 21137
+  },
+  {
+    "file": "sidebar-desktop-rail-collapsed.png",
+    "shellClass": "app-shell is-rail",
+    "sidebarWidth": 64,
+    "sidebarLeft": 0,
+    "sidebarRight": 64,
+    "mainLeft": 64,
+    "mainWidth": 1376,
+    "sidebarClass": "sidebar",
+    "sha256": "6bb261e762009e8a70102de0e5e36de028bbf9061d4a0a2e913287211328ace1",
+    "bytes": 5299
+  },
+  {
+    "file": "sidebar-desktop-rail-expanded-by-brand.png",
+    "shellClass": "app-shell is-rail",
+    "sidebarWidth": 264,
+    "sidebarLeft": 0,
+    "sidebarRight": 264,
+    "mainLeft": 64,
+    "mainWidth": 1376,
+    "sidebarClass": "sidebar rail-peeking",
+    "sha256": "9cd8f67292d98dd36ac4125968ffe0b7f5aafad654fa4a5d1bc2993d5998d94c",
+    "bytes": 20513
+  },
+  {
+    "file": "sidebar-desktop-rail-hover-nav-no-expand.png",
+    "shellClass": "app-shell is-rail",
+    "sidebarWidth": 64,
+    "sidebarLeft": 0,
+    "sidebarRight": 64,
+    "mainLeft": 64,
+    "mainWidth": 1376,
+    "sidebarClass": "sidebar",
+    "sha256": "6bb261e762009e8a70102de0e5e36de028bbf9061d4a0a2e913287211328ace1",
+    "bytes": 5299
+  },
+  {
+    "file": "sidebar-desktop-rail-hover-footer-no-expand.png",
+    "shellClass": "app-shell is-rail",
+    "sidebarWidth": 64,
+    "sidebarLeft": 0,
+    "sidebarRight": 64,
+    "mainLeft": 64,
+    "mainWidth": 1376,
+    "sidebarClass": "sidebar",
+    "sha256": "6bb261e762009e8a70102de0e5e36de028bbf9061d4a0a2e913287211328ace1",
+    "bytes": 5299
+  },
+  {
+    "file": "sidebar-mobile-64.png",
+    "shellClass": "app-shell is-rail",
+    "sidebarWidth": 64,
+    "sidebarLeft": 0,
+    "sidebarRight": 64,
+    "mainLeft": 64,
+    "mainWidth": 326,
+    "sidebarClass": "sidebar",
+    "sha256": "c2f64a2a6b467c5a12a6c4f941b290cf88699e9a5e90661cebc515ed9055aec6",
+    "bytes": 5246
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "file": "sidebar-desktop-rail-collapsed.png",
+  "shellClass": "app-shell is-rail",
+  "sidebar": {
+    "width": 264,
+    "className": "sidebar rail-peeking",
+    "left": 0,
+    "top": 0,
+    "right": 264,
+    "bottom": 900
+  },
+  "mainRect": {
+    "left": 64,
+    "width": 1376
+  }
+}
