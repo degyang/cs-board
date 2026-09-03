@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from csboard.application.context import utc_now
-from csboard.domain.errors import NotFoundError
+from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.models import Task, Run
 from csboard.domain.stage_gate import StageGate
 from csboard.domain.execution_plan import CANONICAL_STAGES
@@ -32,6 +32,20 @@ class FilesystemTaskRepository:
         with self._locks_guard:
             return self._locks.setdefault(task_id, threading.RLock())
 
+    def submission_lock(self, submission_id: str) -> threading.RLock:
+        """独立锁用于 submission_id 幂等创建序列化。"""
+        with self._locks_guard:
+            return self._locks.setdefault(f"submission:{submission_id}", threading.RLock())
+
+    def submission_index_path(self, submission_id: str) -> Path:
+        return self.root / ".submissions" / f"{submission_id}.json"
+
+    def get_submission(self, submission_id: str) -> dict | None:
+        path = self.submission_index_path(submission_id)
+        if not path.exists():
+            return None
+        return self._read_json(path)
+
     def create_task(self, task: Task) -> None:
         target = self.task_dir(task.task_id)
         with self.task_lock(task.task_id):
@@ -39,6 +53,68 @@ class FilesystemTaskRepository:
                 raise FileExistsError(f"Task already exists: {task.task_id}")
             (target / "inputs").mkdir(parents=True)
             self._write_json(target / "task.json", task.to_dict())
+
+    def create_task_submission(
+        self,
+        submission_id: str,
+        task: Task,
+        run: Run,
+        request_signature: str,
+        *,
+        created_at: str | None = None,
+    ) -> dict:
+        """为 submission_id 创建新的 task/run 并写入幂等索引，任意失败点都回滚。
+
+        返回：
+          {"task_id", "run_id", "trace_id", "created_at"}
+        """
+        lock = self.submission_lock(submission_id)
+        with lock:
+            existing = self.get_submission(submission_id)
+            if existing:
+                if existing.get("request_signature") != request_signature:
+                    raise DomainError("SUBMISSION_CONFLICT", "同一 submission_id 已用于其他请求参数")
+                return existing
+
+            self._write_submission_checkpoint("before_task")
+            self.create_task(task)
+            try:
+                self._write_submission_checkpoint("before_run")
+                self.create_run(run)
+            except Exception:
+                # 回滚：删除 Task，不留孤立索引
+                self._delete_task(task.task_id)
+                raise
+
+            now = created_at or utc_now()
+            index_payload = {
+                "submission_id": submission_id,
+                "task_id": task.task_id,
+                "run_id": run.run_id,
+                "trace_id": run.trace_id,
+                "request_signature": request_signature,
+                "created_at": now,
+            }
+            try:
+                self._write_submission_checkpoint("before_index")
+                self._write_json(self.submission_index_path(submission_id), index_payload)
+            except Exception:
+                self._delete_task(task.task_id)
+                raise
+            return index_payload
+
+    def _delete_task(self, task_id: str) -> None:
+        task_dir = self.task_dir(task_id)
+        if task_dir.exists():
+            shutil.rmtree(task_dir)
+
+    def _delete_submission_index(self, submission_id: str) -> None:
+        path = self.submission_index_path(submission_id)
+        if path.exists():
+            path.unlink()
+
+    def _write_submission_checkpoint(self, name: str) -> None:
+        """测试钩子：子类可覆盖，用于故障注入。"""
 
     def get_task(self, task_id: str) -> Task:
         path = self.task_dir(task_id) / "task.json"

@@ -74,6 +74,27 @@ def test_invalid_output_failed_identity_and_gate_write_failure_are_safe(tmp_path
     persisted = commands._stage_response(task_id, run_id, "generate-visual-anchors", {"ok": True, "result": "succeeded"})
     assert not persisted["ok"] and persisted["next_action"]["code"] == "STAGE_GATE_PERSIST_FAILED"
 
+@pytest.mark.parametrize("damage", ["stale", "missing", "hash-mismatch"])
+def test_stage_response_rejects_stale_missing_or_hash_mismatched_exit_artifact(tmp_path: Path, damage: str) -> None:
+    """Production _stage_response must not mislead a Gate after artifact drift."""
+    commands, task_id, run_id = _commands(tmp_path)
+    _output(commands, task_id, run_id, "generate-visual-anchors")
+    store = FilesystemArtifactStore(commands.repository)
+    ref = store.get(task_id, run_id, "planning.av-plan")
+    path = commands.repository.run_dir(task_id, run_id) / "artifacts" / ref["relative_path"]
+    if damage == "stale":
+        index_path = commands.repository.run_dir(task_id, run_id) / "artifacts" / "index.json"
+        index = json.loads(index_path.read_text()); index["artifacts"]["planning.av-plan"]["status"] = "stale"; index_path.write_text(json.dumps(index))
+    elif damage == "missing":
+        path.unlink()
+    else:
+        path.write_bytes(b"tampered")
+    response = commands._stage_response(task_id, run_id, "generate-visual-anchors", {
+        "ok": True, "result": "succeeded", "task_id": task_id, "run_id": run_id,
+        "trace_id": commands.repository.get_run(task_id, run_id).trace_id, "stage": "generate-visual-anchors"})
+    assert not response["ok"] and response["next_action"]["code"] == "STAGE_OUTPUT_INVALID"
+    assert commands.get_gate(task_id, run_id, "generate-visual-anchors")["status"] != "waiting-review"
+
 @pytest.mark.parametrize("field", ["task_id", "run_id", "trace_id", "stage"])
 def test_identity_conflicts_never_echo_forged_identity(tmp_path: Path, field: str) -> None:
     commands, task_id, run_id = _commands(tmp_path)

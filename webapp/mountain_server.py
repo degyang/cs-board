@@ -110,6 +110,7 @@ def create_app(
         service_resolver=service_resolver,
         repository=task_repository,
         telemetry=telemetry,
+        asset_repository=asset_repository,
     )
 
     app.include_router(mountain_task_router(

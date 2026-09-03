@@ -61,7 +61,11 @@ def _count_task_artifacts(task_dir: Path) -> int:
 
 def _create_task(client: TestClient, title: str = "测试任务") -> str:
     """创建任务并返回 task_id。"""
-    resp = client.post("/api/v1/tasks", json={"title": title})
+    resp = client.post("/api/v1/tasks", json={
+        "title": title,
+        "summary": "输入事务回归测试",
+        "submission_id": f"txn-{hashlib.sha256(title.encode()).hexdigest()[:24]}",
+    })
     assert resp.status_code == 200
     return resp.json()["task_id"]
 

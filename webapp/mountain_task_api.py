@@ -63,22 +63,31 @@ def mountain_task_router(
     @router.get("/tasks/create-options")
     def create_options():
         """Server-owned constraints for the six-tab create form."""
-        return {"engines": [{"id": "whiteboard", "label": "白板动画", "available": True}],
-                "visual_sources": [{"id": "preset", "label": "预设风格", "available": True}, {"id": "custom-reference", "label": "自定义参考", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"}],
-                "voice_sources": [{"id": "voice-asset", "label": "音色资产", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"}, {"id": "uploaded-reference", "label": "上传参考音频", "available": True}],
-                "limits": {"script_min_chars": 10, "target_chars_min": 5, "target_chars_max": 500, "brand_text_max_chars": 12},
-                "defaults": {"engine": "whiteboard", "visual_source": "preset", "target_chars": 45, "shots_per_image": 2, "line_density": "rich", "visual_anchor_enabled": True, "include_subtitles": True}}
+        return commands.create_options()
 
     @router.post("/tasks")
     def create_task(payload: dict = Body(...)):
         """创建新任务。"""
         try:
             title = str(payload.get("title", ""))
+            summary = str(payload.get("summary", ""))
+            submission_id = str(payload.get("submission_id", ""))
+            # Fully legacy callers have neither field.  Keep their local
+            # recovery path readable; a partially formal submission is never
+            # accepted without both identity fields.
+            if not summary and not submission_id:
+                summary = title
+                submission_id = None
+            if not summary.strip() or not submission_id and "submission_id" in payload:
+                raise ValueError("summary 和 submission_id 不能为空")
             engine = Engine(payload.get("engine", "whiteboard"))
             pipeline_id = payload.get("pipeline_id", "mountain-av-v1")
             return commands.create_task(
-                title, pipeline_id, engine, context=_context()
+                title, pipeline_id, engine, context=_context(),
+                summary=summary, submission_id=submission_id,
             )
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code == "SUBMISSION_CONFLICT" else 400)
         except ValueError as error:
             return domain_error_response(DomainError("VALIDATION_ERROR", str(error)), status_code=400)
 
@@ -113,16 +122,15 @@ def mountain_task_router(
         task_id: str,
         script: str = Form(...),
         reference: UploadFile | None = File(None),
-        style: str = Form("极简粗线简笔白板风"),
+        voice_source: str | None = Form(None),
+        visual_source: str | None = Form(None),
+        style_asset_id: str | None = Form(None),
+        shots_per_image: int | None = Form(None),
+        line_density: str | None = Form(None),
+        brand_text: str | None = Form(None),
         include_subtitles: bool = Form(True),
-        pen_text: str = Form(""),
-        stroke_detail: str = Form("detailed"),
-        target_chars: int = Form(80),
-        min_chars: int = Form(35),
-        max_chars: int = Form(140),
+        target_chars: int = Form(45),
         visual_anchor_enabled: bool = Form(True),
-        execution_mode: str = Form("auto"),
-        manual_stages: str = Form("[]"),
     ):
         """上传任务输入（文案和参考音频）— 委托 Application 层。
 
@@ -168,30 +176,22 @@ def mountain_task_router(
                             )
                         f.write(chunk)
 
-            try:
-                parsed_manual_stages = json.loads(manual_stages)
-            except (TypeError, json.JSONDecodeError):
-                return domain_error_response(DomainError("VALIDATION_ERROR", "manual_stages 必须是合法 JSON 数组"), status_code=400)
-            if not isinstance(parsed_manual_stages, list):
-                return domain_error_response(DomainError("VALIDATION_ERROR", "manual_stages 必须是数组"), status_code=400)
-
             # 委托 Application 处理
             result = commands.save_inputs(
                 task_id,
                 script=script,
                 txn_dir=txn_dir,
                 reference_audio_filename=reference_audio_filename,
-                style=style,
                 include_subtitles=include_subtitles,
-                pen_text=pen_text,
-                stroke_detail=stroke_detail,
                 target_chars=target_chars,
-                min_chars=min_chars,
-                max_chars=max_chars,
                 visual_anchor_enabled=visual_anchor_enabled,
-                execution_mode=execution_mode,
-                manual_stages=parsed_manual_stages,
                 context=_context(),
+                voice_source=voice_source,
+                visual_source=visual_source,
+                style_asset_id=style_asset_id,
+                shots_per_image=shots_per_image,
+                line_density=line_density,
+                brand_text=brand_text,
             )
 
             return result

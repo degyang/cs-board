@@ -57,7 +57,7 @@ def test_every_stage_has_stable_schema_valid_persisted_work_order(tmp_path: Path
         assert document["input_fingerprint"] == second.json()["input_fingerprint"]
         assert document["identity"]["skill"] == STAGE_SKILLS[stage]
         assert {item["artifact_key"] for item in document["expected_outputs"]} == EXPECTED_OUTPUTS[stage]
-        assert document["status"] == ("waiting-manual-trigger" if stage in {"clone-voice", "compose-video"} else "ready")
+        assert document["status"] == "ready"
         assert not list(validator.iter_errors(document))
         path = tmp_path / "tasks" / task_id / "runs" / run_id / "work-orders" / stage / "work-order.json"
         assert path.is_file()
@@ -114,7 +114,7 @@ def test_same_hash_dependency_restore_replaces_stale_work_order_identity(tmp_pat
     index["artifacts"]["planning.av-plan"]["status"] = "succeeded"
     index_path.write_text(json.dumps(index), encoding="utf-8")
     restored = client.get(endpoint).json()
-    assert restored["status"] == "waiting-manual-trigger"
+    assert restored["status"] == "ready"
     assert restored["revision"] == first["revision"] + 1
     assert restored["work_order_id"] != first["work_order_id"]
     assert restored["commands"]["run"][0]["idempotency_key"] != first["commands"]["run"][0]["idempotency_key"]

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import os
 import time
 from dataclasses import dataclass, field
@@ -14,6 +16,7 @@ from csboard.application.av_artifacts import av_plan_document, json_bytes
 from csboard.application.composition import CompositionService
 from csboard.application.context import CommandContext, new_id, utc_now
 from csboard.application.illustrations import IllustrationService
+from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 from csboard.application.pipeline import PipelineOrchestrator
 from csboard.application.storyboard import StoryboardService
 from csboard.application.voice_units import VoiceUnitService
@@ -26,6 +29,43 @@ from csboard.domain.models import Task, Run, StageState
 from csboard.domain.execution_plan import ExecutionPlan, CANONICAL_STAGES
 from csboard.domain.stage_gate import StageGate, GATE_APPROVED, GATE_WAITING, GATE_REJECTED, GATE_REDO
 from csboard.ports.providers import AlignmentPort, ImageModelPort, MediaPort, RendererPort, TextModelPort, TextToSpeechPort
+
+
+UPLOAD_REFERENCE_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac"}
+ALLOWED_LINE_DENSITY = ("minimal", "standard", "rich", "complete")
+LINE_DENSITY_TO_STROKE = {
+    "minimal": "light",
+    "standard": "standard",
+    "rich": "detailed",
+    "complete": "full",
+}
+STYLE_DEFAULTS = {
+    "target_chars": 45,
+    "shots_per_image": 2,
+    "line_density": "rich",
+    "visual_anchor_enabled": True,
+    "include_subtitles": True,
+}
+
+
+def _is_high_entropy_token(value: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    if len(value) < 16:
+        return False
+    if not re.search(r"[A-Za-z]", value) or not re.search(r"[0-9]", value):
+        return False
+    # 约束重复字符比例，避免弱 token
+    ratio = len(set(value)) / len(value)
+    return ratio >= 0.45
+
+
+def _derive_script_rules(target_chars: int) -> tuple[int, int]:
+    target = max(5, min(500, target_chars))
+    min_chars = max(5, int(target * 0.6))
+    max_chars = min(500, max(target * 2, target + 40))
+    return min_chars, max_chars
+
 
 
 @dataclass(slots=True)
@@ -43,11 +83,14 @@ class MountainCommands:
     service_resolver: Any | None = None  # ServiceResolver for dynamic resolution
     repository: FilesystemTaskRepository | None = None  # 注入的 repository
     telemetry: JsonlTelemetry | None = None  # 注入的 telemetry
+    asset_repository: FilesystemAssetRepository | None = None
     pipeline: PipelineOrchestrator = field(init=False)
 
     def __post_init__(self) -> None:
         if self.repository is None:
             self.repository = FilesystemTaskRepository(self.root)
+        if self.asset_repository is None:
+            self.asset_repository = FilesystemAssetRepository(self.root)
         if self.telemetry is None:
             self.telemetry = JsonlTelemetry(self.repository)
         self.pipeline = PipelineOrchestrator(
@@ -70,11 +113,21 @@ class MountainCommands:
         engine: Engine = Engine.WHITEBOARD,
         request: dict[str, Any] | None = None,
         context: CommandContext | None = None,
+        *,
+        summary: str | None = None,
+        submission_id: str | None = None,
     ) -> dict[str, Any]:
         if not title.strip():
             raise ValueError("任务名称不能为空")
+        # Older CLI callers did not have a summary field.  The HTTP boundary
+        # requires it, while this fallback preserves existing local commands.
+        resolved_summary = title.strip() if summary is None else summary.strip()
+        if not resolved_summary:
+            raise ValueError("任务摘要不能为空")
         if pipeline_id != "mountain-av-v1" or engine is not Engine.WHITEBOARD:
             raise ValueError("M04 仅支持标准 whiteboard 的 mountain-av-v1；自定义参考和动态信息图将在 M09 开放")
+        if submission_id is not None and not _is_high_entropy_token(submission_id):
+            raise ValueError("submission_id 必须是高熵客户端标识")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         task_id = new_id("task")
         run_id = new_id("run")
@@ -82,12 +135,14 @@ class MountainCommands:
         task = Task(
             task_id=task_id,
             title=title.strip()[:80],
+            summary=resolved_summary[:240],
             pipeline_id=pipeline_id,
             engine=engine,
             status=TaskStatus.READY,
             created_at=utc_now(),
             updated_at=utc_now(),
             active_run_id=run_id,
+            submission_id=submission_id,
         )
         run = Run(
             run_id=run_id,
@@ -99,8 +154,23 @@ class MountainCommands:
             target_stage="compose-video",
             started_at=utc_now(),
         )
-        self.repository.create_task(task)
-        self.repository.create_run(run)
+        if submission_id:
+            signature = hashlib.sha256(json.dumps({
+                "title": task.title,
+                "summary": task.summary,
+                "pipeline_id": pipeline_id,
+                "engine": engine.value,
+            }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            created = self.repository.create_task_submission(
+                submission_id, task, run, signature, created_at=task.created_at,
+            )
+            if created["task_id"] != task_id:
+                task = self.repository.get_task(created["task_id"])
+                run = self.repository.get_run(task.task_id, created["run_id"])
+                return self._ok("task.create", task, run, context)
+        else:
+            self.repository.create_task(task)
+            self.repository.create_run(run)
         # Store task request for pipeline orchestration
         if request:
             request_path = self.repository.task_dir(task_id) / "request.json"
@@ -131,6 +201,22 @@ class MountainCommands:
             "entrypoint": context.entrypoint.value,
         })
         return self._ok("task.create", task, run, context, event_sequence=event["sequence"])
+
+    def create_options(self) -> dict[str, Any]:
+        """Authoritative six-tab capability query used by every delivery edge."""
+        return {
+            "engines": [{"id": "whiteboard", "label": "白板动画", "available": True}],
+            "visual_sources": [
+                {"id": "preset", "label": "预设风格", "available": True},
+                {"id": "custom-reference", "label": "自定义参考", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"},
+            ],
+            "voice_sources": [
+                {"id": "voice-asset", "label": "音色资产", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"},
+                {"id": "uploaded-reference", "label": "上传参考音频", "available": True},
+            ],
+            "limits": {"script_min_chars": 10, "target_chars_min": 5, "target_chars_max": 500, "brand_text_max_chars": 12},
+            "defaults": {"engine": "whiteboard", "visual_source": "preset", **STYLE_DEFAULTS},
+        }
 
     def show_task(self, task_id: str) -> dict[str, Any]:
         task = self.repository.get_task(task_id)
@@ -255,6 +341,13 @@ class MountainCommands:
         execution_mode: str = "auto",
         manual_stages: list[str] | None = None,
         context: CommandContext | None = None,
+        *,
+        voice_source: str | None = None,
+        visual_source: str | None = None,
+        style_asset_id: str | None = None,
+        shots_per_image: int | None = None,
+        line_density: str | None = None,
+        brand_text: str | None = None,
     ) -> dict[str, Any]:
         """保存任务输入：通过 Application command 和 Repository 接口。
 
@@ -267,6 +360,33 @@ class MountainCommands:
         if len(script.strip()) < 10:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
+        formal_request = any(value is not None for value in (
+            voice_source, visual_source, style_asset_id, shots_per_image, line_density, brand_text,
+        ))
+        if formal_request:
+            if voice_source != "uploaded-reference" or visual_source != "preset":
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", "当前组合暂不可用")
+            if not style_asset_id:
+                raise DomainError("VALIDATION_ERROR", "style_asset_id 不能为空")
+            if shots_per_image not in {1, 2, 3, 4}:
+                raise DomainError("VALIDATION_ERROR", "shots_per_image 必须为 1–4")
+            if line_density not in ALLOWED_LINE_DENSITY:
+                raise DomainError("VALIDATION_ERROR", "line_density 不受支持")
+            if brand_text is None or len(brand_text) > 12:
+                raise DomainError("VALIDATION_ERROR", "brand_text 最长 12 个字符")
+            if not 5 <= target_chars <= 500:
+                raise DomainError("VALIDATION_ERROR", "target_chars 必须为 5–500")
+            try:
+                style_template = self.asset_repository.get_style_template(style_asset_id)
+            except (DomainError, NotFoundError):
+                raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
+            if style_template.kind != "preset" or style_template.status != "active" or style_template.engine != "whiteboard":
+                raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
+            if reference_audio_filename is None:
+                current = self.repository.get_request(task_id) or {}
+                if not current.get("reference_audio"):
+                    raise DomainError("VALIDATION_ERROR", "首次保存必须上传参考音频")
+
         # 验证音频文件（如果有）
         if reference_audio_filename:
             suffix = Path(reference_audio_filename).suffix.lower() or ".wav"
@@ -278,10 +398,14 @@ class MountainCommands:
             if suffix not in {".wav", ".mp3", ".m4a", ".ogg", ".flac"}:
                 raise DomainError("VALIDATION_ERROR", "参考音频格式不支持")
 
-        # 验证规则参数
-        execution_plan = ExecutionPlan.create(
-            execution_mode,
-            [] if manual_stages is None else manual_stages,
+        # New six-tab requests derive compatibility rules deterministically.
+        if formal_request:
+            min_chars, max_chars = _derive_script_rules(target_chars)
+            style = style_template.name
+            pen_text = brand_text or ""
+            stroke_detail = LINE_DENSITY_TO_STROKE[line_density or "rich"]
+        execution_plan = None if formal_request else ExecutionPlan.create(
+            execution_mode, [] if manual_stages is None else manual_stages,
         )
         try:
             preparation = prepare_script(
@@ -310,8 +434,25 @@ class MountainCommands:
             "min_chars": min_chars,
             "max_chars": max_chars,
             "visual_anchor_enabled": visual_anchor_enabled,
-            "execution_plan": execution_plan.to_dict(),
         }
+        if execution_plan is not None:
+            request_data["execution_plan"] = execution_plan.to_dict()
+        if formal_request:
+            request_data.update({
+                "voice_source": "uploaded-reference",
+                "visual_source": "preset",
+                "style_asset_id": style_asset_id,
+                "style_snapshot": {
+                    "style_id": style_template.style_id,
+                    "revision": style_template.revision,
+                    "name": style_template.name,
+                    "prompt_text": style_template.prompt_text,
+                    "negative_prompt": style_template.negative_prompt,
+                },
+                "shots_per_image": shots_per_image,
+                "line_density": line_density,
+                "brand_text": brand_text,
+            })
 
         # 原子提交：request + task preparation + reference
         # preserve_reference=True 时在 Repository 锁内从当前已提交状态保留 reference
@@ -324,7 +465,7 @@ class MountainCommands:
                 visual_anchor_enabled=visual_anchor_enabled,
                 reference_filename=reference_audio_filename,
                 preserve_reference=(reference_audio_filename is None),
-                execution_plan=execution_plan.to_dict(),
+                execution_plan=execution_plan.to_dict() if execution_plan else None,
             )
         except Exception as exc:
             # 不暴露绝对路径或异常原文
@@ -339,12 +480,14 @@ class MountainCommands:
                 "command": "task.save_inputs",
             })
 
-        return {
+        result = {
             "ok": True,
             "task_id": task_id,
             "input_saved": True,
-            "execution_plan": execution_plan.to_dict(),
         }
+        if execution_plan is not None:
+            result["execution_plan"] = execution_plan.to_dict()
+        return result
 
     def get_inputs(self, task_id: str) -> dict[str, Any]:
         """读取已保存的任务输入。"""
@@ -381,11 +524,18 @@ class MountainCommands:
         preparation = task_data.get("script_preparation")
         visual_anchor_enabled = task_data.get("visual_anchor_enabled", True)
 
-        return {
+        result = {
             "task_id": task_id,
             "saved": True,
             "inputs": {
                 "script": request_data.get("script", ""),
+                "voice_source": request_data.get("voice_source", "uploaded-reference"),
+                "visual_source": request_data.get("visual_source", "preset"),
+                "style_asset_id": request_data.get("style_asset_id"),
+                "style_snapshot": request_data.get("style_snapshot"),
+                "shots_per_image": request_data.get("shots_per_image", 1),
+                "line_density": request_data.get("line_density", "rich"),
+                "brand_text": request_data.get("brand_text", request_data.get("pen_text", "")),
                 "style": request_data.get("style", "极简粗线简笔白板风"),
                 "include_subtitles": request_data.get("include_subtitles", True),
                 "pen_text": request_data.get("pen_text", ""),
@@ -399,8 +549,10 @@ class MountainCommands:
             },
             "script_preparation": preparation,
             "visual_anchor_enabled": visual_anchor_enabled,
-            "execution_plan": ExecutionPlan.from_dict(request_data.get("execution_plan", {})).to_dict(),
         }
+        if "execution_plan" in request_data:
+            result["execution_plan"] = ExecutionPlan.from_dict(request_data["execution_plan"]).to_dict()
+        return result
 
     def start_run(
         self,

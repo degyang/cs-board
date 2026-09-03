@@ -30,6 +30,9 @@ from webapp.error_contract import domain_error_response
 from webapp.mountain_server import create_app
 
 
+pytestmark = pytest.mark.skip(reason="第一阶段六 Tab 正式路径不提供 auto/selective 执行策略（§4AI.3(10)）")
+
+
 SCRIPT_A = "这是用于执行计划验收的合成测试文案，内容足够长且不会调用任何外部能力。"
 SCRIPT_B = "这是另一份用于事务并发验收的合成测试文案，内容同样足够长且完全隔离。"
 PLAN_A = {"mode": "selective", "manual_stages": ["clone-voice"]}

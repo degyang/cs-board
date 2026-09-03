@@ -162,13 +162,18 @@ class CliCsboardTest(unittest.TestCase):
         client = TestClient(create_app(self.root))
         created = client.post("/api/v1/tasks", json={"title": "CLI retry persisted plan"}).json()
         task_id, run_id = created["task_id"], created["run_id"]
-        client.post(f"/api/v1/tasks/{task_id}/inputs", data={
-            "script": "这是 CLI retry 使用持久化执行计划的测试文案，长度足够。",
-            "execution_mode": "selective",
-            "manual_stages": json.dumps(["generate-visual-anchors", "clone-voice"]),
-        })
+        # execution_plan is retained only for legacy CLI data.  The formal
+        # six-tab HTTP multipart contract deliberately no longer exposes it.
+        from csboard.application.commands import MountainCommands
         from csboard.adapters.filesystem.repository import FilesystemTaskRepository
         repository = FilesystemTaskRepository(self.root)
+        MountainCommands(self.root, repository=repository).save_inputs(
+            task_id,
+            script="这是 CLI retry 使用持久化执行计划的测试文案，长度足够。",
+            txn_dir=repository.create_staging(task_id),
+            execution_mode="selective",
+            manual_stages=["generate-visual-anchors", "clone-voice"],
+        )
         run = repository.get_run(task_id, run_id)
         run.stages["clone-voice"] = StageState(StageStatus.SUCCEEDED, 1)
         repository.save_run(run)
