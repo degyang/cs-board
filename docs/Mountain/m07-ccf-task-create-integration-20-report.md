@@ -22,6 +22,8 @@
 - Tabs 补齐 roving focus：Arrow/Home/End 选择并聚焦新 Tab；活动面板具备匹配的 `id`、`role=tabpanel`、`aria-labelledby`，无悬空 `aria-controls`。
 - 网络异常统一为稳定用户提示；未挂载组件的迟到请求不导航、不更新状态、不产生 warning/unhandled rejection；未使用 localStorage/sessionStorage 或旧 Project/fixture 路径冒充正式联调。
 - 本轮新增 13 项强制行为测试：共享默认值/异步顺序、StrictMode 单次创建与 loading、pending create 卸载、恢复后仅保存 inputs、reference true/false、伪造身份/404/loading fail-closed、安全错误、标题/摘要/资产边界以及真实取消路由；同时修正 StrictMode effect 重挂载时的 mounted guard 初始化。
+- 检查点 A 测试整改已保留并通过；新增的真实联调兼容性最小修复为：白板视觉预设请求显式携带 `engine=whiteboard`，避免真实后端返回其他引擎的首条风格；`submission_id` 改用 Web Crypto 高熵字母数字标识，满足 CCB 的唯一性校验。
+- 检查点 B 已使用真实 CCB 后端 `cb22f684d4eea0eee7efe70584c27eb751b2f3c6` 和临时 data dir 执行：真实创建两个 Task、真实保存两个 Task 的输入；第二个 Task 的恢复重试场景使用浏览器注入一次 503 传输故障，刷新后从真实 Task/inputs 恢复，再调用真实后端重试保存。全程未调用 start、Stage、Gate 或媒体编排。
 
 ## §3 自动化测试类别、数量和结果
 
@@ -38,31 +40,35 @@
 | 重挂载恢复实际断言 | 1 | PASS |
 | 实际工作台 active route 导航断言 | 1 | PASS |
 | response-lost 同 `submission_id` 重试断言 | 1 | PASS |
+| B 真实后端兼容单元断言（白板 style engine 过滤、高熵 submission_id） | 2 | PASS |
 | warning/unhandled/unmounted 扫描 | 0 命中 | PASS |
+| 真实 Chromium Task 创建/恢复/重试联调 | 1 场景；2 次创建、1 次故障、1 次恢复、1 次真实重试 | PASS（见 `evidence/ccf-task-create-20-b/real-browser-summary.json`） |
+| 真实后端 contract checker | 26 项后端 Style `config` 缺失 | FAIL（后端现状，未修改后端） |
 
 ## §4 全部门禁与耗时
 
-- `npm --prefix web-v2 run build`：PASS；TypeScript 检查通过，Vite build 用时约 `2.04s`。
-- `npm --prefix web-v2 test -- --run 2>&1 | tee /tmp/ccf-task-create-integration-20-test.log`：PASS，16 files / 388 tests，用时 `17.24s`（命令 wall time 约 `18.08s`）。
+- `npm --prefix web-v2 run build`：PASS；TypeScript 检查通过，Vite build 用时 `1.96s`（命令 wall time 约 `5.50s`）。
+- `npm --prefix web-v2 test -- --run 2>&1 | tee /tmp/ccf-task-create-integration-20-test.log`：PASS，16 files / 388 tests，Vitest duration `15.05s`（命令 wall time 约 `16.30s`）。
 - 测试日志扫描 act、Router Future Flag、Unhandled/unhandled rejection、unmounted state update：PASS，0 命中。
-- `npm --prefix web-v2 run test:contract-checker`：PASS，48 tests，用时 `10.11s`（命令 wall time 约 `10.94s`）。
+- `npm --prefix web-v2 run test:contract-checker`：PASS，48 tests，Vitest duration `4.45s`（命令 wall time 约 `5.50s`）。
 - 正式路径禁止 Project/project_id/策略词扫描：PASS，0 命中。
 - `localStorage/sessionStorage/Math.random/submission-.*Date.now` 扫描：PASS，0 命中。
-- `git diff --check 04a5087...HEAD`：PASS。
-- 本轮未重做已有效的 Chromium 截图；新恢复/导航行为由实际组件自动化断言证明，未以 fixture 或旧后端冒充检查点 B。
-- 本轮未重做视觉截图；Chromium 既有证据继续沿用，未新增浏览器证据文件。
+- `git diff --check 43b29e1...HEAD`：PASS。
+- 真实 CCB contract checker：FAIL，`Style list` 与 preset list 共报告 26 个 `items[*].config (required)` 缺失；该问题来自指定 CCB 后端响应，按范围未修改后端，完整输出保存在 `/tmp/ccf-task-create-20-real-checker.log`。
+- 真实 Chromium：Chromium `134.0.6998.35`，viewport `1440×1000`、DPR `1`；请求摘要、任务计数、故障/恢复/禁止执行请求及 6 张截图均保存在 `evidence/ccf-task-create-20-b/real-browser-summary.json`。
+- Task 数量证据：`0 → 1 → 2`（两次创建）；故障前 `2`、故障后 `2`、真实重试后 `2`，证明输入保存失败/恢复重试没有重复创建 Task。真实浏览器请求包含两次 `POST /tasks`、三次输入 POST（成功、503 注入、真实重试 200），没有禁止执行 POST。
 
 ## §5 clean status 和提交 hash
 
-- 实现提交：`1afb033de0b51843945dafe767fa0640b8f9d054`，提交信息为 `test(mountain-web): close Task creation checkpoint A`。
+- 实现提交：`976af50e7753c1ce19dd6d898a9c649a6ca4ac33`，提交信息为 `fix(mountain-web): integrate Task creation backend`；包含两处最小前端修复、对应测试断言和真实 Chromium 证据。
 - 实现提交前后均执行 `git status --short`；实现提交后工作区 clean；无 push。
-- 报告提交信息：`docs(mountain): report Task creation integration`；报告提交后再次核验最终工作区 clean。
+- 报告提交信息：`docs(mountain): report Task creation integration`；报告提交后再次核验最终工作区 clean。前后端临时进程和临时 data dir 已在最终核验后清理。
 
 ## §6 检查点 B 依赖状态
 
-检查点 B 仍阻塞，等待 CCB 后端整改审核通过。本轮没有调用旧后端、fixture 或伪造响应进行真实联调，也没有报告队列创建、自动派工、run 启动或 USER_ACCEPTANCE 通过。
+检查点 B 已完成真实浏览器联调步骤，但真实后端 contract checker 暴露 26 个 Style `config` 必填字段缺失，因此本回执只记录证据，不将检查点 B 标为审核通过。联调没有使用 fixture server、旧后端或正式用户数据；浏览器故障为一次明确的 503 传输注入，恢复后的重试请求实际到达指定 CCB 后端并返回 200。未执行队列创建、自动派工、run 启动、Stage、Gate、媒体编排或 `USER_ACCEPTANCE`。
 
 ## §7 未完成项
 
-1. 检查点 B 的 CCB 后端真实联调尚未执行，必须等待 CCB 审核通过后再验证正式 Task 创建、inputs 回写及服务端幂等返回。
-2. 本轮未执行检查点 B，也未宣布整体审核或 `USER_ACCEPTANCE` 通过；该项仍由审核者决定。
+1. 指定 CCB 后端的真实 contract checker 仍失败：全量风格列表与 preset 风格列表共 26 项缺少必填 `config`；需由 CCB 后端整改并重新审核。
+2. 本轮未宣布检查点 B、整体审核或 `USER_ACCEPTANCE` 通过；最终审核结论仍由审核者决定。
