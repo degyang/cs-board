@@ -189,4 +189,40 @@ describe('Sidebar prototype interaction', () => {
     expect(requestSignal?.aborted).toBe(true)
     await act(async () => resolveFetch(EMPTY_TASK))
   })
+
+  it('restores the persisted rail state after sidebar remount', async () => {
+    const user = userEvent.setup()
+    const first = renderShell('/')
+    const firstSidebar = first.container.querySelector('.sidebar')!
+
+    await waitFor(() => expect(vi.mocked(fetchTasks)).toHaveBeenCalled())
+    await user.click(within(firstSidebar).getByRole('button', { name: '取消钉住侧边栏' }))
+    await waitFor(() => expect(first.container.querySelector('.app-shell')).toHaveClass('is-rail'))
+    expect(localStorage.getItem(PIN_KEY)).toBe('0')
+    first.unmount()
+
+    const second = renderShell('/')
+    const secondSidebar = second.container.querySelector('.sidebar')!
+    await waitFor(() => expect(vi.mocked(fetchTasks).mock.calls.length).toBeGreaterThan(1))
+    expect(second.container.querySelector('.app-shell')).toHaveClass('is-rail')
+    expect(within(secondSidebar).getByRole('button', { name: '钉住侧边栏' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('navigates through sidebar links and exposes the active route', async () => {
+    const user = userEvent.setup()
+    const { container } = renderShell('/')
+    const sidebar = container.querySelector('.sidebar')!
+
+    await waitFor(() => expect(vi.mocked(fetchTasks)).toHaveBeenCalled())
+    const queueLink = within(sidebar).getByRole('link', { name: '任务队列' })
+    const createLink = within(sidebar).getByRole('link', { name: '新建任务' })
+    expect(queueLink).toHaveAttribute('href', '/')
+    expect(queueLink).toHaveAttribute('aria-current', 'page')
+    expect(createLink).not.toHaveAttribute('aria-current', 'page')
+
+    await user.click(createLink)
+    await waitFor(() => expect(container.querySelector('.main')).toHaveTextContent('创建任务'))
+    expect(createLink).toHaveAttribute('aria-current', 'page')
+    expect(queueLink).not.toHaveAttribute('aria-current', 'page')
+  })
 })
