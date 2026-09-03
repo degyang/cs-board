@@ -21,22 +21,22 @@
 - 六 Tab 契约：`tests/test_task_create_contract_30.py`，22 passed；覆盖 options 注入/schema、summary/旧数据、创建边界、顺序与并发幂等、三提交点回滚、真实 preset/reference round-trip、各字段原子失败、失败恢复和不自动执行。
 - Stage/Artifact 负向真值：`tests/test_stage_entry_contract_27.py`、`tests/test_stage_entry_contract_28.py`，18 passed；其中 `test_stage_response_rejects_stale_missing_or_hash_mismatched_exit_artifact` 覆盖 3 个审计阻断项。
 - 输入事务、资产、服务端与 CLI 回归：`tests/test_input_transaction_11.py`、`tests/test_mountain_asset_api.py`、`tests/test_mountain_server.py`、`tests/test_cli_csboard.py`，90 passed。
-- 指定专项总计：130 passed，23.27s。历史 `auto/selective` 策略测试为 42 skipped，理由为第一阶段六 Tab 正式路径明确排除该能力；遗留 request 仍可只读兼容。
+- 整改后，执行计划模块级 skip 已删除。历史 execution-plan 的 API、Repository 与 CLI 行为真实执行；正式 `POST /tasks` 则严格要求 `title`、`summary`、`engine`、`pipeline_id` 和高熵 `submission_id`，不再允许以旧请求绕过正式创建边界。
 
 ## §4 全量门禁与耗时
 
-- 指定专项命令（§4AI.5）：130 passed in 23.27s。
-- 全量命令：511 passed、47 skipped、4 warnings、3 subtests passed in 92.14s（外层 wall time 94.18s，exit 0）。
+- 整改专项：`tests/test_task_execution_plan_23.py tests/test_task_create_contract_30.py`，64 passed in 9.31s。
+- 全量命令：553 passed、5 skipped、4 warnings、3 subtests passed in 98.50s，exit 0。skip 数为整改前既有基线 5；此前“42 skipped”及“47 skipped”的描述不正确，已更正。
 - `/mnt/d/Workstation/Projects/cs-board/.venv/bin/python -m compileall csboard webapp cli scripts` 通过。
 - 两项 §4AI.5 `rg` 负向扫描通过；`git diff --check 3489a9f...HEAD` 与工作区 `git diff --check` 通过。
 
 ## §5 进程清理、clean status 和提交 hash
 
 - 全量 pytest 与其 CLI 子进程已退出；复查无残留 pytest/`cli.csboard` 子进程。
-- 实现提交：`7580d9a feat(mountain): complete uploaded-reference Task creation`。
+- 实现提交：`ae0a186 fix(mountain): restore task creation contract coverage`。
 - 报告提交见本回执写入后的独立本地提交；不推送。
 - 报告提交前实现工作区 clean；报告提交后再次检查 clean status。
 
 ## §6 未完成项
 
-无。本回执仅报告 CCB-TASK-CREATE-UPLOADED-PRESET-31 的实现与本地门禁事实；未自行宣布独立审核通过，亦未宣布 `USER_ACCEPTANCE`。
+无。本回执仅报告整改后的本地门禁事实；未自行宣布审核通过、CCF 联调或 `USER_ACCEPTANCE`。
