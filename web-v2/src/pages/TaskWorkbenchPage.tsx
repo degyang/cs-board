@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAsync } from '../lib/api/queries'
 import {
   fetchTask, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
-  startRun, cancelRun, retryRun, runStage, retryStage,
+  cancelRun,
   uploadInputs, fetchInputs, getFinalUrl,
 } from '../lib/api/client'
 import { formatTime, shortId, formatBytes, formatMs } from '../lib/formatting'
@@ -11,12 +11,59 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
 import { BackButton } from '../components/ui/BackButton'
 import { STAGE_KEYS, STAGE_NAMES } from '../lib/api/types'
+import type { StageKey } from '../lib/api/types'
 
 // ── Polling helper ──────────────────────────────────────────────────────
 
 function isTerminal(status: string): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
 }
+
+export type StageContractMetadata = {
+  id: StageKey
+  title: string
+  entry: string
+  persistedInputs: string
+  outputs: string
+  exit: string
+  operations: string
+}
+
+/** One typed source of truth for the six first-phase stage contract cards. */
+export const STAGE_CONTRACTS: readonly StageContractMetadata[] = [
+  {
+    id: 'generate-visual-anchors', title: STAGE_NAMES['generate-visual-anchors'],
+    entry: '已保存视频文案', persistedInputs: '文案、风格', outputs: '画面锚点数据',
+    exit: '画面锚定可供分镜使用', operations: '人工检查锚点后等待 Gate',
+  },
+  {
+    id: 'clone-voice', title: STAGE_NAMES['clone-voice'],
+    entry: '文案已分段且参考音频已保存', persistedInputs: '文案、参考音频', outputs: '配音单元与音频',
+    exit: '配音单元与时长可供后续阶段使用', operations: '人工确认声音结果后等待 Gate',
+  },
+  {
+    id: 'plan-storyboard', title: STAGE_NAMES['plan-storyboard'],
+    entry: '画面锚点与配音单元可用', persistedInputs: '画面锚点、配音单元', outputs: '分镜计划',
+    exit: '每个单元都有分镜计划', operations: '人工检查分镜后等待 Gate',
+  },
+  {
+    id: 'generate-illustrations', title: STAGE_NAMES['generate-illustrations'],
+    entry: '分镜计划已完成', persistedInputs: '分镜计划、风格', outputs: 'Codex 生成的插画候选',
+    exit: '人工选择候选插画并确认', operations: '生成候选 → 人工选择 → 等待 Gate',
+  },
+  {
+    id: 'render-visuals', title: STAGE_NAMES['render-visuals'],
+    entry: '已选择插画且分镜通过 Gate', persistedInputs: '分镜计划、已选插画', outputs: '视觉序列',
+    exit: '视觉序列渲染完成', operations: '人工检查渲染后等待 Gate',
+  },
+  {
+    id: 'compose-video', title: STAGE_NAMES['compose-video'],
+    entry: '视觉序列与配音均通过 Gate', persistedInputs: '视觉序列、音频', outputs: '最终视频',
+    exit: '成片可下载并通过最终检查', operations: '人工验收成片后等待 Gate',
+  },
+]
+
+const GATE_UNAVAILABLE = '后端人工 Gate 尚未就绪，当前操作不可用'
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -28,11 +75,12 @@ export function TaskWorkbenchPage() {
   const taskLoader = useCallback(() => fetchTask(taskId!), [taskId])
   const { data: taskData, loading: taskLoading, error: taskError } = useAsync(taskLoader, [taskId], pollMs)
 
-  const task = taskData?.task
-  const activeRun = taskData?.active_run ?? null
-  const stages = taskData?.stages ?? []
-  const artifacts = taskData?.artifacts ?? []
-  const trace = taskData?.trace ?? null
+  const taskIdentityMatches = Boolean(taskId && taskData?.task.task_id === taskId)
+  const task = taskIdentityMatches ? taskData?.task : undefined
+  const activeRun = taskIdentityMatches ? taskData?.active_run ?? null : null
+  const stages = taskIdentityMatches ? taskData?.stages ?? [] : []
+  const artifacts = taskIdentityMatches ? taskData?.artifacts ?? [] : []
+  const trace = taskIdentityMatches ? taskData?.trace ?? null : null
   const runId = activeRun?.run_id
 
   // Stop polling on terminal state
@@ -54,7 +102,8 @@ export function TaskWorkbenchPage() {
     if (!taskId) return Promise.resolve(null)
     return fetchInputs(taskId)
   }, [taskId])
-  const { data: inputsData } = useAsync(inputsLoader, [taskId])
+  const { data: inputsDataRaw } = useAsync(inputsLoader, [taskId])
+  const inputsData = inputsDataRaw?.task_id === taskId ? inputsDataRaw : null
 
   // ── Units (poll with task) ────────────────────────────────────────
   const unitsLoader = useCallback(() => {
@@ -68,16 +117,27 @@ export function TaskWorkbenchPage() {
   const [eventCursor, setEventCursor] = useState(0)
   const [allEvents, setAllEvents] = useState<Record<string, unknown>[]>([])
   const eventIdsRef = useRef(new Set<string>())
+  const eventIdentity = `${taskId ?? ''}:${runId ?? ''}`
+  const eventIdentityRef = useRef(eventIdentity)
+  const eventIdentityMatches = eventIdentityRef.current === eventIdentity
+
+  useEffect(() => {
+    if (eventIdentityRef.current === eventIdentity) return
+    eventIdentityRef.current = eventIdentity
+    setEventCursor(0)
+    setAllEvents([])
+    eventIdsRef.current.clear()
+  }, [eventIdentity])
 
   const eventsLoader = useCallback(() => {
     if (!taskId || !runId) return Promise.resolve({ items: [], next_cursor: 0 })
-    return fetchEvents(taskId, runId, eventCursor)
-  }, [taskId, runId, eventCursor])
-  const { data: eventsData } = useAsync(eventsLoader, [taskId, runId, eventCursor], pollMs)
+    return fetchEvents(taskId, runId, eventIdentityMatches ? eventCursor : 0)
+  }, [taskId, runId, eventCursor, eventIdentityMatches])
+  const { data: eventsData } = useAsync(eventsLoader, [taskId, runId, eventIdentityMatches ? eventCursor : 0], pollMs)
 
   // Append new events (dedup by sequence or index)
   useEffect(() => {
-    if (!eventsData?.items?.length) return
+    if (!eventIdentityMatches || !eventsData?.items?.length) return
     const newEvents = eventsData.items.filter((ev) => {
       const key = String(ev.sequence ?? ev.timestamp ?? JSON.stringify(ev))
       if (eventIdsRef.current.has(key)) return false
@@ -90,7 +150,7 @@ export function TaskWorkbenchPage() {
     if (eventsData.next_cursor > eventCursor) {
       setEventCursor(eventsData.next_cursor)
     }
-  }, [eventsData])
+  }, [eventsData, eventIdentityMatches])
 
   // ── Logs ─────────────────────────────────────────────────────────────
   const [logFilter, setLogFilter] = useState({ level: '', component: '', stage: '' })
@@ -114,11 +174,24 @@ export function TaskWorkbenchPage() {
   const [includeSubtitles, setIncludeSubtitles] = useState(false)
   const [penText, setPenText] = useState('')
   const [strokeDetail, setStrokeDetail] = useState('')
+  const inputsOwnerRef = useRef<string | null>(null)
 
   // Restore saved inputs when readback data arrives.
   // Only initializes on first load (inputsSaved is false) to avoid overwriting edits.
   useEffect(() => {
-    if (!inputsData?.saved || !inputsData.inputs || inputsSaved) return
+    if (!inputsData || inputsOwnerRef.current === taskId) return
+    inputsOwnerRef.current = taskId ?? null
+    if (!inputsData.saved || !inputsData.inputs) {
+      setScript('')
+      setStyle('')
+      setIncludeSubtitles(false)
+      setPenText('')
+      setStrokeDetail('')
+      setSavedAudioFilename(null)
+      setSavedAudioSize(null)
+      setInputsSaved(false)
+      return
+    }
     setScript(inputsData.inputs.script)
     setStyle(inputsData.inputs.style)
     setIncludeSubtitles(inputsData.inputs.include_subtitles)
@@ -130,7 +203,7 @@ export function TaskWorkbenchPage() {
     }
     setInputsSaved(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputsData])
+  }, [inputsData, taskId])
 
   // ── Action state ─────────────────────────────────────────────────────
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -163,7 +236,6 @@ export function TaskWorkbenchPage() {
       form.set('include_subtitles', String(includeSubtitles))
       if (penText) form.set('pen_text', penText)
       if (strokeDetail) form.set('stroke_detail', strokeDetail)
-
       const res = await uploadInputs(taskId, form)
       if (res.ok) {
         setInputsSaved(true)
@@ -171,22 +243,6 @@ export function TaskWorkbenchPage() {
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '保存失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  // ── Start run ────────────────────────────────────────────────────────
-  async function handleStart() {
-    if (!taskId || !runId) return
-    setActionLoading('start')
-    clearFeedback()
-    try {
-      await startRun(taskId, runId)
-      setActionSuccess('运行已启动')
-      setPollMs(10_000) // resume polling
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '启动失败')
     } finally {
       setActionLoading(null)
     }
@@ -207,51 +263,6 @@ export function TaskWorkbenchPage() {
     }
   }
 
-  async function handleRetry() {
-    if (!taskId || !runId) return
-    setActionLoading('retry')
-    clearFeedback()
-    try {
-      await retryRun(taskId, runId)
-      setActionSuccess('重试已提交')
-      setPollMs(10_000)
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '重试失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  // ── Stage run/retry ──────────────────────────────────────────────────
-  async function handleStageRun(stage: string) {
-    if (!taskId || !runId) return
-    setActionLoading(`stage-run-${stage}`)
-    clearFeedback()
-    try {
-      await runStage(taskId, runId, stage)
-      setActionSuccess(`${STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage} 已启动`)
-      setPollMs(10_000)
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '阶段启动失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  async function handleStageRetry(stage: string) {
-    if (!taskId || !runId) return
-    setActionLoading(`stage-retry-${stage}`)
-    clearFeedback()
-    try {
-      await retryStage(taskId, runId, stage)
-      setActionSuccess(`${STAGE_NAMES[stage as keyof typeof STAGE_NAMES] ?? stage} 重试已提交`)
-      setPollMs(10_000)
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '阶段重试失败')
-    } finally {
-      setActionLoading(null)
-    }
-  }
 
   // ── Loading / Error states ───────────────────────────────────────────
   if (taskLoading && !taskData) {
@@ -276,14 +287,15 @@ export function TaskWorkbenchPage() {
 
   // ── Derived state ────────────────────────────────────────────────────
   const stageStatuses: Record<string, string> = {}
-  for (const s of stages) stageStatuses[s.stage] = s.status ?? 'pending'
-  for (const key of STAGE_KEYS) if (!stageStatuses[key]) stageStatuses[key] = 'pending'
+  for (const s of stages) stageStatuses[s.stage] = s.status
+  for (const key of STAGE_KEYS) if (!stageStatuses[key]) stageStatuses[key] = 'unreported'
 
   const completedCount = STAGE_KEYS.filter((k) => stageStatuses[k] === 'succeeded').length
+  const stageStatusLabel = (status: string): string | undefined => status === 'unreported' ? '尚未报告' : undefined
+  const visibleEvents = eventIdentityMatches ? allEvents : []
   const hasFinal = artifacts.some((a) => a.producer_stage === 'compose-video' && a.status === 'succeeded')
   const runStatus = activeRun?.status ?? task.status
   const isRunning = activeRun?.status === 'running'
-  const isTerminalState = activeRun ? isTerminal(activeRun.status) : false
 
   return (
     <div className="page">
@@ -329,24 +341,12 @@ export function TaskWorkbenchPage() {
 
         {/* Run control buttons */}
         <div className="run-actions" style={{ marginTop: 12 }}>
-          {activeRun && activeRun.status === 'pending' && (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={handleStart}
-              disabled={!inputsSaved || !hasCapability || actionLoading === 'start'}
-              title={!inputsSaved ? '请先保存制作输入' : !hasCapability ? 'Provider 不可用' : undefined}
-            >
-              {actionLoading === 'start' ? <><span className="spinner" />启动中…</> : '开始制作'}
-            </button>
+          {activeRun?.status === 'pending' && (
+            <span className="hint">运行等待人工逐阶段操作；Gate 契约就绪后才能执行阶段。</span>
           )}
           {isRunning && (
             <button className="btn btn-danger btn-sm" onClick={handleCancel} disabled={actionLoading !== null}>
               {actionLoading === 'cancel' ? <><span className="spinner" />取消中…</> : '取消'}
-            </button>
-          )}
-          {isTerminalState && activeRun?.status === 'failed' && (
-            <button className="btn btn-primary btn-sm" onClick={handleRetry} disabled={actionLoading !== null}>
-              {actionLoading === 'retry' ? <><span className="spinner" />重试中…</> : '重试'}
             </button>
           )}
           {hasFinal && activeRun && (
@@ -367,7 +367,7 @@ export function TaskWorkbenchPage() {
       </div>
 
       {/* ── Inputs section ─────────────────────────────────────────────── */}
-      {activeRun && activeRun.status === 'pending' && (
+      {activeRun && activeRun.status === 'pending' && inputsOwnerRef.current === taskId && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 className="card-title">制作输入</h3>
           <p className="card-sub">配置视频文案、参考音频和视觉参数后保存</p>
@@ -499,50 +499,43 @@ export function TaskWorkbenchPage() {
             阶段工作区
             <span className="badge">{completedCount}/{STAGE_KEYS.length}</span>
           </div>
-          {activeRun ? (
-            <div>
-              {STAGE_KEYS.map((key) => {
-                const st = stageStatuses[key]
-                const stageData = stages.find((s) => s.stage === key)
-                return (
-                  <div key={key} style={{ padding: '10px 0', borderBottom: '1px solid var(--nt-border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <StatusBadge status={st} />
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{STAGE_NAMES[key]}</span>
-                      {stageData && stageData.attempt > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>#{stageData.attempt}</span>
-                      )}
-                      {/* Stage actions */}
-                      {st === 'pending' && activeRun.status !== 'pending' && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ marginLeft: 'auto', fontSize: 11 }}
-                          onClick={() => handleStageRun(key)}
-                          disabled={actionLoading !== null}
-                        >
-                          {actionLoading === `stage-run-${key}` ? '…' : '执行'}
-                        </button>
-                      )}
-                      {st === 'failed' && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ marginLeft: 'auto', fontSize: 11 }}
-                          onClick={() => handleStageRetry(key)}
-                          disabled={actionLoading !== null}
-                        >
-                          {actionLoading === `stage-retry-${key}` ? '…' : '重试'}
-                        </button>
-                      )}
-                    </div>
+          <div>
+            {!activeRun && <p className="hint" style={{ marginBottom: 12 }}><span>任务尚未启动运行</span>（没有 active Run）；以下契约卡仅展示真实阶段基线。</p>}
+            {activeRun && stages.length === 0 && <p className="hint" style={{ marginBottom: 12 }}>后端尚未报告 Stage 状态。</p>}
+            {STAGE_CONTRACTS.map((contract) => {
+              const st = stageStatuses[contract.id]
+              const stageData = stages.find((s) => s.stage === contract.id)
+              return (
+                <article key={contract.id} className="stage-contract-card" style={{ padding: '14px 0', borderBottom: '1px solid var(--nt-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <StatusBadge status={st} label={stageStatusLabel(st)} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{contract.title}</span>
+                    <code style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>{contract.id}</code>
+                    {stageData && <span style={{ fontSize: 11, color: 'var(--nt-text-muted)' }}>attempt {stageData.attempt}</span>}
                   </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="empty-state" style={{ padding: '24px 0' }}>
-              <div className="empty-sub">任务尚未启动运行</div>
-            </div>
-          )}
+                  <dl className="stage-contract-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 16px', margin: '10px 0 8px', fontSize: 12 }}>
+                    <div><dt className="hint">入口条件</dt><dd>{contract.entry}</dd></div>
+                    <div><dt className="hint">持久化输入</dt><dd>{contract.persistedInputs}</dd></div>
+                    <div><dt className="hint">预期输出</dt><dd>{contract.outputs}</dd></div>
+                    <div><dt className="hint">出口条件</dt><dd>{contract.exit}</dd></div>
+                  </dl>
+                  <div className="notice notice-warn" style={{ marginTop: 8 }}>
+                    <strong><span>人工 Gate</span>：</strong> {GATE_UNAVAILABLE}。{contract.operations}
+                  </div>
+                </article>
+              )
+            })}
+            {stages.filter((stage) => !STAGE_KEYS.includes(stage.stage as StageKey)).map((stage, index) => (
+              <article key={`unknown-${stage.stage}-${index}`} className="stage-contract-card" style={{ padding: '14px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <StatusBadge status={stage.status || 'unknown'} />
+                  <strong>未知阶段</strong>
+                  <code>{stage.stage}</code>
+                </div>
+                <p className="hint">后端返回了未登记的阶段，未执行任何前端操作。</p>
+              </article>
+            ))}
+          </div>
         </div>
 
         {/* Right: Artifacts */}
@@ -622,12 +615,12 @@ export function TaskWorkbenchPage() {
             </div>
 
             {/* Events */}
-            <h4 style={{ fontSize: 12, fontWeight: 600, color: 'var(--nt-text-muted)', marginBottom: 4 }}>事件 ({allEvents.length})</h4>
-            {allEvents.length === 0 ? (
+            <h4 style={{ fontSize: 12, fontWeight: 600, color: 'var(--nt-text-muted)', marginBottom: 4 }}>事件 ({visibleEvents.length})</h4>
+            {visibleEvents.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--nt-text-muted)', padding: '4px 0' }}>暂无事件</p>
             ) : (
               <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
-                {allEvents.map((ev, i) => (
+                {visibleEvents.map((ev, i) => (
                   <div key={i} style={{ padding: '3px 0', fontSize: 12, borderBottom: '1px solid var(--nt-border)' }}>
                     <span style={{ color: 'var(--nt-text-muted)', fontFamily: 'var(--nt-font-mono)', marginRight: 8 }}>
                       {ev.timestamp ? formatTime(String(ev.timestamp)) : ''}

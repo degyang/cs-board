@@ -1,0 +1,13 @@
+{
+  "file": "sidebar-desktop-rail-hover-nav-no-expand.png",
+  "interaction": "rail hover on navigation region must not peek",
+  "shellClass": "app-shell is-rail",
+  "sidebarClass": "sidebar",
+  "sidebarWidth": 64,
+  "sidebarLeft": 0,
+  "sidebarRight": 64,
+  "mainLeft": 64,
+  "mainWidth": 1376,
+  "sha256": "c0d6f3942ea1c24c049cc843287056d909e101abcedc94aabac2922c4989a802",
+  "bytes": 4917
+}

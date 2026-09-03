@@ -18,6 +18,7 @@ import {
   fetchLogs,
   getFinalUrl,
   fetchTasks,
+  MountainApiError,
 } from '../src/lib/api/client'
 
 // ── Mock global.fetch ───────────────────────────────────────────────────
@@ -103,6 +104,29 @@ describe('HTTP contract: run actions', () => {
     const [url, opts] = mockFetch.mock.calls[0]
     expect(url).toContain('/api/v1/tasks/p1/runs/r1/start')
     expect(opts.method).toBe('POST')
+  })
+
+  it('parses the standard domain-error envelope for selective plan feedback', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({
+      error: {
+        code: 'EXECUTION_PLAN_NOT_READY',
+        message: 'selective plan is not ready',
+        retryable: false,
+        details: { suggestion: '手动阶段编排尚未启用', ignored: 'never render me' },
+      },
+    }, 409))
+
+    try {
+      await startRun('p1', 'r1')
+      throw new Error('expected startRun to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(MountainApiError)
+      const apiError = (error as MountainApiError).apiError
+      expect(apiError).toMatchObject({
+        code: 'EXECUTION_PLAN_NOT_READY', retryable: false,
+        details: { suggestion: '手动阶段编排尚未启用' },
+      })
+    }
   })
 
   it('cancelRun sends POST to /tasks/{id}/runs/{runId}/cancel', async () => {

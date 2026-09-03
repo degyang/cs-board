@@ -13,6 +13,12 @@ export type StageKey =
   | 'render-visuals'
   | 'compose-video'
 
+/** Legacy persisted execution decision, retained only for read compatibility. */
+export interface ExecutionPlan {
+  mode: string
+  [key: string]: unknown
+}
+
 export const STAGE_KEYS: StageKey[] = [
   'generate-visual-anchors',
   'clone-voice',
@@ -73,6 +79,34 @@ export interface CapabilitiesResponse {
   }
 }
 
+export interface CreateOption {
+  id: string
+  label: string
+  available: boolean
+  reason?: string | null
+}
+
+export interface CreateOptionsResponse {
+  engines: CreateOption[]
+  visual_sources: CreateOption[]
+  voice_sources: CreateOption[]
+  limits: {
+    script_min_chars: number
+    target_chars_min: number
+    target_chars_max: number
+    brand_text_max_chars: number
+  }
+  defaults: {
+    engine: string
+    visual_source: string
+    target_chars: number
+    shots_per_image: number
+    line_density: string
+    visual_anchor_enabled: boolean
+    include_subtitles: boolean
+  }
+}
+
 // ── Tasks ───────────────────────────────────────────────────────────────
 
 export interface Task {
@@ -110,8 +144,10 @@ export interface TaskListResponse {
 
 export interface CreateTaskRequest {
   title: string
+  summary?: string
   engine?: string
   pipeline_id?: string
+  submission_id?: string
 }
 
 export interface CreateTaskResponse {
@@ -254,6 +290,7 @@ export interface SaveInputsResponse {
   ok: boolean
   task_id: string
   input_saved: boolean
+  execution_plan: ExecutionPlan
 }
 
 export interface VoiceUnitDTO {
@@ -281,6 +318,14 @@ export interface InputsReadback {
   inputs: {
     script: string
     style: string
+    voice_source?: string
+    voice_asset_id?: string | null
+    visual_source?: string
+    style_asset_id?: string | null
+    target_chars?: number
+    shots_per_image?: number
+    line_density?: string
+    brand_text?: string
     include_subtitles: boolean
     pen_text: string
     stroke_detail: string
@@ -294,6 +339,7 @@ export interface InputsReadback {
   rules: InputsRules | null
   script_preparation: ScriptPreparation | null
   visual_anchor_enabled: boolean
+  execution_plan: ExecutionPlan
 }
 
 export interface ApiError {

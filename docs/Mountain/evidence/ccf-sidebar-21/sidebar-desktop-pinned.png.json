@@ -1,0 +1,13 @@
+{
+  "file": "sidebar-desktop-pinned.png",
+  "interaction": "fresh desktop context without localStorage value; default pinned",
+  "shellClass": "app-shell is-pinned",
+  "sidebarClass": "sidebar",
+  "sidebarWidth": 264,
+  "sidebarLeft": 0,
+  "sidebarRight": 264,
+  "mainLeft": 264,
+  "mainWidth": 1176,
+  "sha256": "2c0f213a80b01a27f72211f6c982ddb6f47a1ed56ca69fa3da92189bc65f1e42",
+  "bytes": 20375
+}

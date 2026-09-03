@@ -1,0 +1,13 @@
+{
+  "file": "sidebar-desktop-rail-hover-footer-no-expand.png",
+  "interaction": "rail hover on footer/runtime region must not peek",
+  "shellClass": "app-shell is-rail",
+  "sidebarClass": "sidebar",
+  "sidebarWidth": 64,
+  "sidebarLeft": 0,
+  "sidebarRight": 64,
+  "mainLeft": 64,
+  "mainWidth": 1376,
+  "sha256": "c4357559a81870a428158086bfd8e2c6c28a05edfd4621ae70d48952be3fa854",
+  "bytes": 4978
+}

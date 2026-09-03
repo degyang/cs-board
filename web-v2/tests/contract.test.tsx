@@ -5,7 +5,7 @@
  * and renders real response data.
  *
  * All mock JSON fixtures derive from the real webapp/mountain_v1_api.py shapes.
- * Zero fake data, zero /api/mountain, zero localStorage.
+ * Zero fake data and no deprecated API namespace.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
@@ -325,7 +325,7 @@ function setupDefaultMocks() {
 function renderWorkbench(initialPath = '/tasks/proj-abc123def456') {
   return render(
     <MemoryRouter initialEntries={[initialPath]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Routes>
+      <Routes future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Route path="/tasks/:taskId" element={<TaskWorkbenchPage />} />
         <Route path="/tasks/:taskId/runs/:runId/diagnostics" element={<RunDiagnosticsPage />} />
       </Routes>
@@ -400,7 +400,7 @@ describe('Workbench contract: artifacts table', () => {
   it('renders artifact entries with keys and stages', async () => {
     renderWorkbench()
     await screen.findByText('segments')
-    expect(screen.getByText('storyboard')).toBeDefined()
+    expect(screen.getAllByText('storyboard').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('voice_001')).toBeDefined()
   })
 
@@ -591,7 +591,7 @@ describe('Workbench contract: finished_at display', () => {
     renderWorkbench()
     await screen.findByText('final')
     expect(screen.getByText('final')).toBeDefined()
-    expect(screen.getByText('compose-video')).toBeDefined()
+    expect(screen.getAllByText('compose-video').length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows video preview when final exists', async () => {
@@ -653,7 +653,7 @@ describe('Workbench contract: capability warning', () => {
   })
 })
 
-describe('Workbench contract: Start button disabled', () => {
+describe('Workbench contract: automatic start removed', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetchTask.mockResolvedValue(PENDING_TASK)
@@ -664,26 +664,24 @@ describe('Workbench contract: Start button disabled', () => {
     mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
   })
 
-  it('shows Start button when run is pending', async () => {
+  it('does not show a pipeline start button when run is pending', async () => {
     renderWorkbench()
-    await screen.findByText('开始制作')
-    expect(screen.getByText('开始制作')).toBeDefined()
+    await screen.findByText('阶段工作区')
+    expect(screen.queryByText('开始制作')).toBeNull()
   })
 
-  it('Start button is disabled when inputs not saved', async () => {
+  it('does not expose start controls while inputs are unsaved', async () => {
     renderWorkbench()
-    await screen.findByText('开始制作')
-    const btn = screen.getByText('开始制作')
-    expect(btn.hasAttribute('disabled')).toBe(true)
+    await screen.findByText('阶段工作区')
+    expect(screen.queryByText('开始制作')).toBeNull()
   })
 
-  it('Start button is disabled when capability data is loading', async () => {
+  it('does not expose start controls while capabilities are loading', async () => {
     // Never resolve capabilities — simulates loading state
     mockFetchCapabilities.mockReturnValue(new Promise(() => {}))
     renderWorkbench()
-    await screen.findByText('开始制作')
-    const btn = screen.getByText('开始制作')
-    expect(btn.hasAttribute('disabled')).toBe(true)
+    await screen.findByText('阶段工作区')
+    expect(screen.queryByText('开始制作')).toBeNull()
   })
 })
 
@@ -764,7 +762,7 @@ describe('Workbench contract: uploadInputs FormData', () => {
   })
 })
 
-describe('Workbench contract: cancel & retry run', () => {
+describe('Workbench contract: cancel only', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetchCapabilities.mockResolvedValue(CAPABILITIES_RESPONSE)
@@ -791,29 +789,22 @@ describe('Workbench contract: cancel & retry run', () => {
     })
   })
 
-  it('shows Retry button when failed', async () => {
+  it('does not expose pipeline retry when failed', async () => {
     mockFetchTask.mockResolvedValue(FAILED_TASK)
     renderWorkbench()
-    await screen.findByText('重试')
-    expect(screen.getByText('重试')).toBeDefined()
+    await screen.findByText('阶段工作区')
+    expect(screen.queryByText('重试')).toBeNull()
   })
 
-  it('calls retryRun on Retry click', async () => {
+  it('never calls retryRun from the workbench', async () => {
     mockFetchTask.mockResolvedValue(FAILED_TASK)
-    mockRetryRun.mockResolvedValue({
-      ok: true, command: 'retry', task_id: 'proj-abc123def456',
-      run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-retry-1',
-    })
     renderWorkbench()
-    await screen.findByText('重试')
-    await userEvent.click(screen.getByText('重试'))
-    await waitFor(() => {
-      expect(mockRetryRun).toHaveBeenCalledWith('proj-abc123def456', 'run-xyz789abc123')
-    })
+    await screen.findByText('阶段工作区')
+    expect(mockRetryRun).not.toHaveBeenCalled()
   })
 })
 
-describe('Workbench contract: stage run/retry', () => {
+describe('Workbench contract: Gate unavailable', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetchTask.mockResolvedValue(RUNNING_TASK)
@@ -823,7 +814,7 @@ describe('Workbench contract: stage run/retry', () => {
     mockFetchLogs.mockResolvedValue(LOGS_RESPONSE)
   })
 
-  it('calls runStage for pending stage', async () => {
+  it('does not expose stage execution before Gate contract exists', async () => {
     mockRunStage.mockResolvedValue({
       ok: true, command: 'run-stage', task_id: 'proj-abc123def456',
       run_id: 'run-xyz789abc123', trace_id: 'trace-aaa111bbb222', command_id: 'cmd-stage-1',
@@ -832,11 +823,11 @@ describe('Workbench contract: stage run/retry', () => {
     await screen.findAllByText('文案整理与画面锚定重点')
     const stageNames = screen.getAllByText('合成成片')
     expect(stageNames.length).toBeGreaterThanOrEqual(1)
-    const executeBtns = screen.getAllByText('执行')
-    expect(executeBtns.length).toBeGreaterThan(0)
+    expect(screen.queryByText('执行')).toBeNull()
+    expect(mockRunStage).not.toHaveBeenCalled()
   })
 
-  it('calls retryStage for failed stage', async () => {
+  it('does not expose stage retry before Gate contract exists', async () => {
     const withFailedStage = {
       ...RUNNING_TASK,
       stages: RUNNING_TASK.stages.map((s) =>
@@ -852,8 +843,8 @@ describe('Workbench contract: stage run/retry', () => {
     await screen.findAllByText('文案整理与画面锚定重点')
     const stageNames = screen.getAllByText('白板渲染')
     expect(stageNames.length).toBeGreaterThanOrEqual(1)
-    const retryBtns = screen.getAllByText('重试')
-    expect(retryBtns.length).toBeGreaterThan(0)
+    expect(screen.queryByText('重试')).toBeNull()
+    expect(mockRetryStage).not.toHaveBeenCalled()
   })
 })
 
@@ -946,30 +937,27 @@ describe('Workbench contract: inputs readback', () => {
     expect(screen.getByText(/200\.0 KB/)).toBeDefined()
   })
 
-  it('Start button enabled when inputs saved and capability available', async () => {
+  it('saved inputs do not reintroduce an automatic start control', async () => {
     mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
     renderWorkbench()
-    await screen.findByText('开始制作')
-    const btn = screen.getByText('开始制作')
-    expect(btn.hasAttribute('disabled')).toBe(false)
+    await screen.findByText('保存制作输入')
+    expect(screen.queryByText('开始制作')).toBeNull()
   })
 
-  it('Start button disabled after editing saved inputs', async () => {
+  it('editing saved inputs still leaves automatic start absent', async () => {
     mockFetchInputs.mockResolvedValue(SAVED_INPUTS)
     renderWorkbench()
     await screen.findByText('这是一段已保存的测试文案，包含多个句子用于验证回填功能。')
     // Edit the script textarea to trigger inputsSaved=false
     const textarea = screen.getByRole('textbox', { name: /文案/ })
     fireEvent.change(textarea, { target: { value: '修改后的文案' } })
-    const btn = screen.getByText('开始制作')
-    expect(btn.hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByText('开始制作')).toBeNull()
   })
 
-  it('Start button disabled when fetchInputs returns unsaved', async () => {
+  it('unsaved inputs still leave automatic start absent', async () => {
     mockFetchInputs.mockResolvedValue(UNSAVED_INPUTS)
     renderWorkbench()
-    await screen.findByText('开始制作')
-    const btn = screen.getByText('开始制作')
-    expect(btn.hasAttribute('disabled')).toBe(true)
+    await screen.findByText('阶段工作区')
+    expect(screen.queryByText('开始制作')).toBeNull()
   })
 })
