@@ -31,12 +31,14 @@
 
 §3 pin / rail / peek 行为证据
 
-自动化测试（`web-v2/tests/sidebar-layout.test.tsx`，5 条）补齐四类此前未验证行为，并保留原有默认态/负向断言：
+自动化测试（`web-v2/tests/sidebar-layout.test.tsx`，7 条）在保留原有交互断言的基础上补齐最终两项行为：
   - 精确触发区：品牌空白不展开，山标志和 handle 可通过鼠标及键盘 focus 展开。
   - 侧栏内移动：从触发控件移动到 nav/footer 时 peek 保持，只有离开整个 aside 才收起。
   - pin 状态机：peek→pinned、pinned→rail 均清除旧 peek，并验证 localStorage `1` / `0` 持久化。
   - rail 内容与正式数据：图标链接具备可访问标签，运行入口使用动态任务 `task-001` 的正式 `/tasks/task-001` 路由。
   - 卸载保护：Sidebar 卸载时 abort 动态运行任务请求；晚到响应不会更新已卸载组件。
+  - 重新挂载恢复：取消 pin 后卸载并重新挂载，仍从 localStorage 恢复 `is-rail` 与 `aria-pressed="false"`。
+  - 实际导航与 active route：从 `/` 点击“新建任务”后内容变为“创建任务”，目标链接获得 `aria-current="page"`，队列链接失去 active。
 
 Chromium 证据（详见 §5）：
 - `sidebar-desktop-rail-collapsed.png`：未展开（宽 64）
@@ -51,16 +53,16 @@ Chromium 证据（详见 §5）：
 
 - 前端单测：`npm run test -- --run`
   - 文件数：16
-  - 用例数：369
+  - 用例数：371
   - 结果：通过（退出码 0）
-  - 侧栏交互测试：5 条（通过，无 warning）
+  - 侧栏交互测试：7 条（通过，无 warning）
 - Contract checker：`npm run test:contract-checker`
   - 文件数：2
   - 用例数：48
   - 结果：通过（退出码 0）
 - 构建验证：`npm run build`
   - 结果：通过（退出码 0）
-- 本轮新增测试类别：焦点可访问性、父级 hover 边界、pin 持久化、运行入口正式路由、请求 AbortController 卸载保护。
+- 本轮新增测试类别：焦点可访问性、父级 hover 边界、pin 持久化、运行入口正式路由、请求 AbortController 卸载保护、重新挂载状态恢复、实际导航 active route。
 - 禁止项核对：未 skip、未删除断言、未仅增加 timeout。
 
 §5 Chromium 浏览器证据、尺寸和 SHA-256
@@ -87,11 +89,12 @@ Chromium 证据（详见 §5）：
 §6 全部门禁及正常退出结果
 
 - `npm run build`：退出码 0
-- `npm run test -- --run`：退出码 0（16 文件 / 369 用例）
+- `npm run test -- --run`：退出码 0（16 文件 / 371 用例）
 - `npm run test:contract-checker`：退出码 0（2 文件 / 48 用例）
 - 既有真实 Chromium 门禁证据沿用且未修改；本轮不重新制作截图。
   - 交互证据仍覆盖默认 pinned、山标志/handle 展开、nav/footer 负向、移动端无值 localStorage。
   - 新增自动化覆盖侧栏内移动保持 peek、pin 持久化与 pin/rail 转换、Sidebar 卸载 abort 请求及晚到响应保护。
+  - 最终两项行为断言通过：重新挂载状态恢复；实际侧栏导航及 active route 更新。
 - 所有门禁均使用真实命令执行；无 skip、无删除断言、无仅增加 timeout。
 
 §7 进程清理、git status 和提交 hash
@@ -101,10 +104,11 @@ Chromium 证据（详见 §5）：
   - 最终核对无 Vite / Chromium / Playwright 残留进程。
 - 上一轮修复提交：`4636f1c597502bbc50b7d778bbc03316b2206b4e`。
 - 上一轮报告提交：`9e11b674afa36551106debbf848d549b06cd10fd`。
-- 本轮修复提交：`642124e34474f7cabdb72d9095c1267cb069b381`（`fix(mountain-web): verify sidebar state and abort runtime request`）。
+- 本轮前置修复提交：`642124e34474f7cabdb72d9095c1267cb069b381`（`fix(mountain-web): verify sidebar state and abort runtime request`）。
+- 本轮测试提交：`80eae9bdbd719fbef2f45ff663e52f251e3e7978`（`test(mountain-web): close sidebar prototype verification`）。
 - 本轮报告提交：本报告提交完成后以 `git log -1 --format=%H` 核对；报告不自引用自身 hash，最终 hash 在交付回执列出。
 - 最终 `git status --short`：报告提交后为空；只本地提交，不推送。
 
 §8 未完成项
 
-- 无。本轮只补齐自动化行为和请求卸载保护，不自行宣布审核或用户验收通过。
+- 无。两项最终行为均已有实际断言；本回执不自行宣布审核或用户验收通过。
