@@ -1,6 +1,6 @@
 param(
     [int]$IntervalSeconds = 600,
-    [int]$BackendPort = 18765
+    [int]$BackendPort = 8000
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,8 +16,8 @@ function Write-MonitorLog([string]$message) {
 
 function Get-ActiveJobCount {
     try {
-        $response = Invoke-RestMethod "http://127.0.0.1:$BackendPort/api/jobs?limit=100" -TimeoutSec 10
-        return @($response.items | Where-Object { $_.status -in @("queued", "running") }).Count
+        $response = Invoke-RestMethod "http://127.0.0.1:$BackendPort/api/v1/tasks?limit=100" -TimeoutSec 10
+        return @($response.items | Where-Object { $_.active_run.status -in @("pending", "running") }).Count
     }
     catch {
         return $null
@@ -48,13 +48,14 @@ while ($true) {
         Start-Sleep -Milliseconds 800
     }
 
-    Start-Process -FilePath $python -ArgumentList "-m", "uvicorn", "webapp.server:app", "--host", "127.0.0.1", "--port", "$BackendPort" -WorkingDirectory $workspace -WindowStyle Hidden
+    $launcher = Join-Path $workspace "scripts\run_mountain_backend.py"
+    Start-Process -FilePath $python -ArgumentList $launcher, "--host", "127.0.0.1", "--port", "$BackendPort" -WorkingDirectory $workspace -WindowStyle Hidden
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         Start-Sleep -Seconds 1
         try {
-            $health = Invoke-RestMethod "http://127.0.0.1:$BackendPort/api/health" -TimeoutSec 5
+            $health = Invoke-RestMethod "http://127.0.0.1:$BackendPort/api/v1/health" -TimeoutSec 5
             if ($health.status -eq "ok") {
-                Write-MonitorLog "Backend restarted safely. Voice concurrency: $($health.queues.voice.concurrency). Model concurrency: $($health.queues.model.concurrency)."
+                Write-MonitorLog "Native Mountain backend restarted safely."
                 exit 0
             }
         }

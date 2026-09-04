@@ -524,6 +524,26 @@ def _build_cfg(args) -> sr.Config:
     return sr.Config(**kw)
 
 
+def _reusable_output(path: Path, expected_ms: int) -> bool:
+    """Return true only for a complete, decodable clip with matching duration."""
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    capture = cv2.VideoCapture(str(path))
+    try:
+        if not capture.isOpened():
+            return False
+        fps = float(capture.get(cv2.CAP_PROP_FPS))
+        frames = float(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if fps <= 0 or frames <= 0 or width <= 0 or height <= 0:
+            return False
+        actual_ms = frames * 1000.0 / fps
+        return abs(actual_ms - expected_ms) <= max(250.0, expected_ms * 0.02)
+    finally:
+        capture.release()
+
+
 def main(argv=None) -> int:
     args = _parse_args(argv)
     cfg = _build_cfg(args)
@@ -553,6 +573,14 @@ def main(argv=None) -> int:
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path = out_path.with_name(out_path.stem + "_raw.mp4")
+
+    # Rendering is deterministic for a frozen run.  A retry or a parallel
+    # pre-render may already have produced the exact clip; never overwrite a
+    # valid result, but do not trust a partial or duration-mismatched file.
+    if _reusable_output(out_path, int(total_ms)):
+        print(f"[reuse] 已存在有效片段: {out_path}")
+        print(f"OUTPUT={out_path}")
+        return 0
 
     hand_png = Path(args.hand) if args.hand else None
     stroke_limits = {"light": 24, "standard": 48, "detailed": 96, "full": 0}

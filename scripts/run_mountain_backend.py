@@ -18,7 +18,6 @@ import asyncio
 import os
 import signal
 import socket
-import struct
 import sys
 from pathlib import Path
 
@@ -36,16 +35,17 @@ def _ensure_importable(repo_root: Path) -> None:
 
 
 def _create_listening_socket(host: str, port: int) -> socket.socket:
-    """Bind the server socket with immediate-reuse shutdown semantics.
+    """Bind a reusable server socket without abortive connection shutdown.
 
     Fresh-data-dir smoke tests repeatedly start a short-lived backend. Keeping
-    the listener under the launcher's lifecycle prevents a normal SIGTERM from
-    leaving the same port unavailable to the immediately following child.
+    the listener under the launcher's lifecycle and enabling ``SO_REUSEADDR``
+    permits prompt rebinding after a normal SIGTERM.  Do not enable
+    ``SO_LINGER`` with a zero timeout here: that is an abortive close which can
+    reset proxied connections before a large response body has been drained.
     """
     try:
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
         listener.bind((host, port))
         listener.listen(socket.SOMAXCONN)
         return listener
@@ -93,6 +93,10 @@ def main() -> None:
     # 1. 解析仓库根并确保可导入
     repo_root = _resolve_repo_root()
     _ensure_importable(repo_root)
+    # The data directory may be a disposable runtime location.  Package
+    # outputs are deliberately rooted in the checkout unless the caller
+    # explicitly configures an allowed root through the Task API/CLI.
+    os.environ.setdefault("CSBOARD_PROJECT_ROOT", str(repo_root))
 
     # 2. 设置 data-dir 环境变量（必须在导入 app 之前）
     if args.data_dir:
@@ -126,10 +130,17 @@ def main() -> None:
     def request_graceful_shutdown(_signum, _frame) -> None:
         server.should_exit = True
 
+    async def serve() -> None:
+        await server._serve(sockets=[listener])
+
     try:
         signal.signal(signal.SIGTERM, request_graceful_shutdown)
-        server.config.setup_event_loop()
-        asyncio.run(server._serve(sockets=[listener]))
+        if hasattr(server.config, "get_loop_factory"):
+            with asyncio.Runner(loop_factory=server.config.get_loop_factory()) as runner:
+                runner.run(serve())
+        else:
+            server.config.setup_event_loop()
+            asyncio.run(serve())
     finally:
         signal.signal(signal.SIGTERM, previous_sigterm)
         listener.close()
