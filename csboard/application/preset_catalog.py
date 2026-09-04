@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
-import json
-import hashlib
 from pathlib import Path
+
+from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
+from csboard.domain.style_template import StyleTemplate
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -102,68 +103,90 @@ STYLE_META = {
     "国风动态信息图": ("ps-cs-13", "", ["国风", "信息图", "宣纸", "知识"]),
 }
 
+REFERENCE_ROUTE_SPECS = {
+    "纸感隐喻拼贴风": (
+        "paper-metaphor",
+        [
+            ("paper-process", "流程", ["流程", "系统", "自动化", "生产", "步骤", "机器", "效率"], ["03-process-machine.png"]),
+            ("paper-compare", "对比", ["对比", "选择", "判断", "黑白", "两种", "不是", "而是"], ["05-choice-black-white.png", "09-road-between-extremes.png"]),
+            ("paper-cause", "因果", ["因果", "原因", "结果", "影响", "关系"], ["01-cause-heart-vs-wound.png"]),
+            ("paper-hierarchy", "层级", ["层级", "成长", "方向", "阶段", "进阶"], ["09-road-between-extremes.png"]),
+            ("paper-list", "清单", ["清单", "资源", "经验", "多个", "要素"], ["08-dual-boxes.png"]),
+            ("paper-matrix", "矩阵", ["矩阵", "四象限", "双维度"], ["02-balance-many-forces.png"]),
+            ("paper-value", "价值权衡", ["价值", "权衡", "平衡", "责任", "收益"], ["07-scale-values.png"]),
+            ("paper-pressure", "压力过载", ["压力", "过载", "诱惑", "信息"], ["04-overload-pushback.png", "06-work-stress.png"]),
+            ("paper-boundary", "边界冲突", ["边界", "群体", "立场", "冲突"], ["10-boundary-two-crowds.png"]),
+        ],
+    ),
+    "漫画墨线解释风": (
+        "oil-visual",
+        [
+            ("oil-compare", "机制对比", ["对比", "差异", "两种", "成本", "取舍"], ["explainer-cost-comparison.png"]),
+            ("oil-cycle", "机制循环", ["循环", "反馈", "闭环"], ["feedback-loop.png"]),
+            ("oil-process", "机制流程", ["流程", "步骤", "瓶颈", "管线", "机制"], ["pipeline-bottleneck.png"]),
+            ("oil-character", "角色场景", ["人物", "角色", "讲解者", "陪伴", "团队", "主人公"], ["transparent-illustration.png"]),
+            ("oil-default", "概念解释", ["概念", "解释", "观点", "其它"], ["from-complex-to-clear.png"]),
+        ],
+    ),
+}
 
-def _install_preview(data_dir: Path, source: Path) -> str:
-    content = source.read_bytes()
-    asset_id = hashlib.sha256(content).hexdigest()
-    destination = data_dir / "assets" / "blobs" / asset_id[:2] / asset_id
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if not destination.exists():
-        destination.write_bytes(content)
-    return asset_id
+
+def _reference_routing(repository: FilesystemAssetRepository, name: str) -> dict | None:
+    spec = REFERENCE_ROUTE_SPECS.get(name)
+    if spec is None:
+        return None
+    directory, rules = spec
+    result = []
+    for order, (rule_id, label, keywords, filenames) in enumerate(rules, 1):
+        asset_ids = [
+            _install_preview(repository, ROOT / "assets" / "style-references" / directory / filename)
+            for filename in filenames
+        ]
+        result.append({
+            "rule_id": rule_id, "name": label, "keywords": keywords,
+            "reference_asset_ids": asset_ids, "order": order,
+        })
+    return {"enabled": True, "match_mode": "first", "rules": result}
+
+
+def _install_preview(repository: FilesystemAssetRepository, source: Path) -> str:
+    mime_type = "image/png" if source.suffix.lower() == ".png" else "image/webp"
+    return repository.save_asset_from_file(source, source.name, mime_type).asset_id
 
 
 def seed(data_dir: Path, catalog_root: Path | None = None) -> dict:
     """将内置 preset 幂等安装到正式 Asset Repository 数据结构。"""
-    styles_dir = data_dir / "assets" / "styles"
-    styles_dir.mkdir(parents=True, exist_ok=True)
-    templates_path = styles_dir / "styles.json"
     catalog_root = catalog_root or ROOT / "assets" / "preset-styles"
-
-    # 读取现有模板
-    existing = []
-    if templates_path.exists():
-        try:
-            existing = json.loads(templates_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            existing = []
-
-    # 检查是否已有 seed 数据
-    existing_ids = {t.get("style_id") for t in existing}
+    repository = FilesystemAssetRepository(data_dir)
 
     # 生成 seed 模板
     now = "2026-08-31T00:00:00Z"
-    templates = []
+    installed = 0
     for name, prompt in STYLE_PRESETS.items():
         style_id, preview_path, tags = STYLE_META[name]
-        if style_id in existing_ids:
-            continue
         preview_asset_id = ""
         if preview_path:
             source = catalog_root / preview_path
             if source.is_file():
-                preview_asset_id = _install_preview(data_dir, source)
-        templates.append({
-            "style_id": style_id,
-            "revision": 1,
-            "name": name,
-            "kind": "preset",
-            "prompt_text": prompt,
-            "negative_prompt": "",
-            "description": " · ".join(tags),
-            "engine": "infographic-remotion" if name == "国风动态信息图" else "whiteboard",
-            "tags": tags,
-            "preview_asset_id": preview_asset_id,
-            "status": "active",
-            "created_at": now,
-            "updated_at": now,
-        })
+                preview_asset_id = _install_preview(repository, source)
+        template = StyleTemplate(
+            style_id=style_id,
+            revision=1,
+            name=name,
+            kind="preset",
+            prompt_text=prompt,
+            negative_prompt="",
+            description=" · ".join(tags),
+            engine="infographic-remotion" if name == "国风动态信息图" else "whiteboard",
+            tags=tags,
+            preview_asset_id=preview_asset_id,
+            status="active",
+            created_at=now,
+            updated_at=now,
+            config={"reference_routing": routing} if (routing := _reference_routing(repository, name)) else {},
+        )
+        installed += int(repository.install_style_template_if_missing(template))
+        if routing:
+            repository.install_style_reference_routing_if_missing(style_id, routing)
 
-    # 合并写入
-    all_templates = existing + templates
-    templates_path.write_text(
-        json.dumps(all_templates, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    return {"ok": True, "message": "preset 安装完成", "count": len(templates)}
+    return {"ok": True, "message": "preset 安装完成", "count": installed}

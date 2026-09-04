@@ -23,12 +23,12 @@ class AssetRepository(Protocol):
         """获取单个风格模板。不存在时抛出 NotFoundError。"""
         ...
 
-    def save_style_template(self, template: StyleTemplate) -> None:
-        """保存风格模板（创建或更新）。preset 禁止修改。"""
+    def save_style_template(self, template: StyleTemplate, expected_revision: int | None = None) -> None:
+        """保存或版本化更新风格模板。"""
         ...
 
     def deactivate_style_template(self, style_id: str) -> None:
-        """标记自定义风格为 inactive。"""
+        """软删除：标记风格为 inactive。"""
         ...
 
     def activate_style_template(self, style_id: str) -> None:
@@ -45,7 +45,7 @@ class AssetRepository(Protocol):
         """获取单个语音资产。不存在时抛出 NotFoundError。"""
         ...
 
-    def save_voice_asset(self, content: bytes, name: str, duration_ms: int, sample_rate: int, channels: int, format_ext: str) -> VoiceAsset:
+    def save_voice_asset(self, content: bytes, name: str, duration_ms: int, sample_rate: int, channels: int, format_ext: str, metadata: dict | None = None) -> VoiceAsset:
         """保存语音资产（内容 + 元数据）。"""
         ...
 

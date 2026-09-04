@@ -43,6 +43,122 @@ def _make_wav_bytes(duration_ms: int = 100, sample_rate: int = 44100, channels: 
     return buf.getvalue()
 
 
+def _upload_image(client: TestClient, marker: bytes = b"") -> str:
+    response = client.post(
+        "/api/v1/assets/uploads",
+        files={"file": ("reference.png", b"\x89PNG\r\n\x1a\nminimal-image" + marker, "image/png")},
+    )
+    assert response.status_code == 200
+    return response.json()["asset_id"]
+
+
+def test_custom_style_characters_round_trip_revision_conflict_and_copy(client: TestClient):
+    image_ids = [_upload_image(client, bytes([index])) for index in range(3)]
+    characters = [{
+        "character_id": "host", "name": "主讲人", "description": "讲解角色",
+        "reference_asset_ids": image_ids,
+    }]
+    created = client.post("/api/v1/assets/styles", json={
+        "name": "角色风格", "prompt_text": "x", "characters": characters,
+    })
+    assert created.status_code == 200
+    style = created.json()
+    style_id = style["style_id"]
+    assert client.get(f"/api/v1/assets/styles/{style_id}").json()["characters"] == characters
+    assert next(x for x in client.get("/api/v1/assets/styles").json()["items"] if x["style_id"] == style_id)["characters"] == characters
+
+    replaced = client.patch(f"/api/v1/assets/styles/{style_id}", json={
+        "expected_revision": style["revision"], "characters": [],
+    })
+    assert replaced.status_code == 200
+    assert replaced.json()["revision"] == style["revision"] + 1
+    assert replaced.json()["characters"] == []
+    assert client.patch(f"/api/v1/assets/styles/{style_id}", json={
+        "expected_revision": style["revision"], "characters": characters,
+    }).status_code == 409
+
+    repo = __import__("csboard.adapters.filesystem.asset_repository", fromlist=["FilesystemAssetRepository"]).FilesystemAssetRepository(client.app.state.data_dir)
+    seeded = repo._load_styles()
+    seeded.append({**style, "style_id": "preset-with-characters", "kind": "preset", "revision": 1, "characters": characters})
+    repo._save_styles(seeded)
+    assert client.patch("/api/v1/assets/styles/preset-with-characters", json={"characters": []}).status_code == 200
+    copied = client.post("/api/v1/assets/styles/preset-with-characters/copy")
+    assert copied.status_code == 200 and copied.json()["characters"] == []
+    copied_id = copied.json()["style_id"]
+    assert client.patch(f"/api/v1/assets/styles/{copied_id}", json={"characters": characters}).status_code == 200
+    assert client.get("/api/v1/assets/styles/preset-with-characters").json()["characters"] == []
+
+
+@pytest.mark.parametrize("characters", [
+    [],
+    [{"character_id": "a", "name": "A", "description": "x", "reference_asset_ids": []}],
+    [{"character_id": "a", "name": "A", "description": "x", "reference_asset_ids": ["missing"]}],
+    [{"character_id": "a", "name": "A", "description": "x", "reference_asset_ids": ["a", "b", "c", "d"]}],
+    [{"character_id": "same", "name": "A", "description": "x", "reference_asset_ids": ["a"]}, {"character_id": "same", "name": "B", "description": "x", "reference_asset_ids": ["a"]}],
+])
+def test_custom_style_character_invalid_contract(client: TestClient, characters: list[dict]):
+    # Empty character arrays are valid replacement/create values; the other forms must be rejected.
+    if characters == []:
+        assert client.post("/api/v1/assets/styles", json={"name": "empty", "prompt_text": "x", "characters": characters}).status_code == 200
+        return
+    response = client.post("/api/v1/assets/styles", json={"name": "bad", "prompt_text": "x", "characters": characters})
+    assert response.status_code == 400
+
+
+def test_character_rejects_non_image_blob(client: TestClient):
+    blob = client.post("/api/v1/assets/uploads", files={"file": ("not-image.txt", b"text", "image/png")}).json()["asset_id"]
+    response = client.post("/api/v1/assets/styles", json={"name": "bad", "prompt_text": "x", "characters": [{
+        "character_id": "a", "name": "A", "description": "x", "reference_asset_ids": [blob],
+    }]})
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("reference_count", [1, 2, 3])
+def test_character_accepts_one_to_three_image_references(client: TestClient, reference_count: int):
+    refs = [_upload_image(client, bytes([index])) for index in range(reference_count)]
+    response = client.post("/api/v1/assets/styles", json={"name": "valid", "prompt_text": "x", "characters": [{
+        "character_id": "host", "name": "主持人", "description": "x", "reference_asset_ids": refs,
+    }]})
+    assert response.status_code == 200
+
+
+def test_voice_metadata_round_trip_and_server_media_truth(client: TestClient):
+    compatibility = {"engines": ["indextts-2"], "emotion_modes": ["speaker"], "limitations": []}
+    created = client.post("/api/v1/assets/voices", files={"file": ("voice.wav", _make_wav_bytes(), "audio/wav")}, data={
+        "name": "旁白", "language": "zh-CN", "emotion_mode": "speaker", "example_text": "大家好",
+        "availability_status": "verified", "status_note": "已验收", "engine": "indextts-2",
+        "compatibility": json.dumps(compatibility),
+    })
+    assert created.status_code == 200
+    voice = created.json()
+    voice_id = voice["voice_id"]
+    expected_metadata = {
+        "language": "zh-CN", "emotion_mode": "speaker", "example_text": "大家好",
+        "availability_status": "verified", "status_note": "已验收", "engine": "indextts-2",
+        "compatibility": compatibility,
+    }
+    for field, value in expected_metadata.items():
+        assert voice[field] == value
+    assert "storage_path" not in voice
+    duration, audio_format = voice["duration_ms"], voice["format"]
+    patched = client.patch(f"/api/v1/assets/voices/{voice_id}", json={"availability_status": "limited", "status_note": "仅普通话"})
+    assert patched.status_code == 200
+    assert patched.json()["availability_status"] == "limited" and patched.json()["is_active"] is True
+    assert patched.json()["duration_ms"] == duration and patched.json()["format"] == audio_format
+    assert client.get(f"/api/v1/assets/voices/{voice_id}").json()["language"] == "zh-CN"
+    assert next(x for x in client.get("/api/v1/assets/voices").json()["items"] if x["voice_id"] == voice_id)["engine"] == "indextts-2"
+
+
+@pytest.mark.parametrize("payload", [
+    {"emotion_mode": "invalid"}, {"availability_status": "inactive"}, {"compatibility": {}},
+    {"compatibility": {"engines": [], "emotion_modes": ["speaker"], "limitations": []}},
+])
+def test_voice_metadata_rejects_invalid_values(client: TestClient, payload: dict):
+    created = client.post("/api/v1/assets/voices", files={"file": ("voice.wav", _make_wav_bytes(), "audio/wav")})
+    response = client.patch(f"/api/v1/assets/voices/{created.json()['voice_id']}", json=payload)
+    assert response.status_code == 400
+
+
 def test_list_styles(client: TestClient):
     response = client.get("/api/v1/assets/styles")
     assert response.status_code == 200
@@ -347,8 +463,8 @@ def test_style_not_found(client: TestClient):
     assert data["error"]["code"] == "NOT_FOUND"
 
 
-def test_style_presets_readonly(client: TestClient):
-    """Preset 风格的 PATCH/DELETE/activate/deactivate 应返回 400。"""
+def test_style_presets_are_versioned_and_soft_deleted(client: TestClient):
+    """Preset 与 custom 一样支持编辑、启停和软删除。"""
     from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 
     repo = FilesystemAssetRepository(client.app.state.data_dir)
@@ -362,16 +478,40 @@ def test_style_presets_readonly(client: TestClient):
     repo._save_styles(styles)
 
     resp = client.patch("/api/v1/assets/styles/seed-001", json={"name": "x"})
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["revision"] == 2
 
     resp = client.delete("/api/v1/assets/styles/seed-001")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert repo.get_style_template("seed-001").status == "inactive"
 
     resp = client.post("/api/v1/assets/styles/seed-001/activate")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "active"
 
     resp = client.post("/api/v1/assets/styles/seed-001/deactivate")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "inactive"
+
+
+def test_style_reference_routing_validates_real_images_and_normalizes_order(client: TestClient):
+    uploaded = client.post("/api/v1/assets/uploads", files={"file": ("route.png", b"\x89PNG\r\n\x1a\nroute", "image/png")})
+    assert uploaded.status_code == 200
+    style = client.get("/api/v1/assets/styles/ps-cs-9").json()
+    config = dict(style["config"])
+    config["reference_routing"] = {"enabled": True, "match_mode": "first", "rules": [{
+        "rule_id": "custom-route", "name": "测试规则", "keywords": ["流程", "流程"],
+        "reference_asset_ids": [uploaded.json()["asset_id"]], "order": 99,
+    }]}
+    response = client.patch("/api/v1/assets/styles/ps-cs-9", json={"config": config, "expected_revision": style["revision"]})
+    assert response.status_code == 200
+    rule = response.json()["config"]["reference_routing"]["rules"][0]
+    assert rule["keywords"] == ["流程"] and rule["order"] == 1
+
+    config["reference_routing"]["rules"][0]["reference_asset_ids"] = ["missing"]
+    invalid = client.patch("/api/v1/assets/styles/ps-cs-9", json={"config": config})
+    assert invalid.status_code == 400
+    assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_no_project_id_in_response(client: TestClient):

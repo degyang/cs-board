@@ -58,14 +58,18 @@ def test_list_filters_by_kind(repository: FilesystemAssetRepository):
     assert result[0].kind == "preset"
 
 
-def test_save_preset_forbidden(repository: FilesystemAssetRepository):
+def test_save_preset_is_supported_and_versioned(repository: FilesystemAssetRepository):
     preset = StyleTemplate(
         style_id="seed-001", revision=1, name="极简粗线简笔白板风", kind="preset",
         prompt_text="...", engine="whiteboard", tags=[], status="active",
         created_at="2026-08-31T00:00:00Z", updated_at="2026-08-31T00:00:00Z",
     )
-    with pytest.raises(Exception, match="preset 风格禁止修改"):
-        repository.save_style_template(preset)
+    repository.save_style_template(preset)
+    preset.name = "已编辑预置"
+    repository.save_style_template(preset, expected_revision=1)
+    restored = repository.get_style_template("seed-001")
+    assert restored.name == "已编辑预置"
+    assert restored.revision == 2
 
 
 def test_deactivate_custom(repository: FilesystemAssetRepository):
@@ -94,3 +98,18 @@ def test_activate(repository: FilesystemAssetRepository):
 def test_get_not_found(repository: FilesystemAssetRepository):
     with pytest.raises(NotFoundError):
         repository.get_style_template("nope")
+
+
+def test_save_asset_from_file_preserves_content_identity_and_reuses_same_filesystem_blob(tmp_path):
+    source = tmp_path / "reference.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\nimmutable-reference")
+    first_repo = FilesystemAssetRepository(tmp_path / "first")
+    second_repo = FilesystemAssetRepository(tmp_path / "second")
+
+    first = first_repo.save_asset_from_file(source, source.name, "image/png")
+    second = second_repo.save_asset_from_file(source, source.name, "image/png")
+
+    assert first.asset_id == second.asset_id
+    assert first_repo.read_asset_bytes(first.asset_id) == source.read_bytes()
+    assert second_repo.read_asset_bytes(second.asset_id) == source.read_bytes()
+    assert first_repo._blob_path(first.asset_id).stat().st_ino == second_repo._blob_path(second.asset_id).stat().st_ino

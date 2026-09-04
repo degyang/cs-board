@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import threading
@@ -10,27 +11,172 @@ from pathlib import Path
 from csboard.application.context import utc_now
 from csboard.domain.errors import DomainError, NotFoundError
 from csboard.domain.models import Task, Run
+from csboard.domain.enums import Engine, Entrypoint, RunStatus, TaskStatus
 from csboard.domain.stage_gate import StageGate
 from csboard.domain.execution_plan import CANONICAL_STAGES
 
 
 class FilesystemTaskRepository:
-    """Local task persistence with in-process task-level mutual exclusion."""
+    """Task persistence with canonical task packages and legacy read fallback.
 
-    def __init__(self, root: Path) -> None:
-        self.root = root
+    New tasks live in ``<output-root>/<task-id>``.  The state directory keeps
+    only a small, atomic locator record so a subsequent process can resolve a
+    package without scanning arbitrary user directories.  Pre-package tasks
+    remain readable from ``root/tasks`` and are never migrated implicitly.
+    """
+
+    _shared_task_locks: dict[tuple[str, str], threading.RLock] = {}
+    _shared_locks_guard = threading.Lock()
+
+    def __init__(self, root: Path, *, project_root: Path | None = None) -> None:
+        self.root = root.resolve()
+        # Standalone repository callers (including isolated tests) treat their
+        # state root as the project root.  Production composition roots pass
+        # the actual checkout explicitly.
+        self.project_root = (project_root or root).resolve()
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
 
     def task_dir(self, task_id: str) -> Path:
+        locator = self.package_locator_path(task_id)
+        if locator.is_file():
+            value = self._read_json(locator)
+            package = Path(str(value["package_dir"])).resolve()
+            recorded_project = Path(str(value.get("project_root", self.project_root))).resolve()
+            try:
+                package.relative_to(recorded_project)
+            except ValueError as error:
+                raise DomainError("TASK_PACKAGE_INVALID", "任务包位置不在允许范围内") from error
+            if not self._is_allowed_package_dir(package) and "project_root" not in value:
+                raise DomainError("TASK_PACKAGE_INVALID", "任务包位置不在允许范围内")
+            return package
         return self.root / "tasks" / task_id
+
+    def package_locator_path(self, task_id: str) -> Path:
+        return self.root / ".task-packages" / f"{task_id}.json"
+
+    def list_task_ids(self) -> list[str]:
+        """Return package tasks plus legacy tasks without importing either."""
+        ids: set[str] = set()
+        locators = self.root / ".task-packages"
+        if locators.is_dir():
+            for path in locators.glob("*.json"):
+                try:
+                    task_id = str(self._read_json(path)["task_id"])
+                    if self.task_dir(task_id).joinpath("task.json").is_file():
+                        ids.add(task_id)
+                except (OSError, ValueError, KeyError, DomainError):
+                    continue
+        legacy = self.root / "tasks"
+        if legacy.is_dir():
+            ids.update(path.parent.name for path in legacy.glob("*/task.json"))
+        return sorted(ids)
+
+    def _is_allowed_package_dir(self, path: Path) -> bool:
+        try:
+            path.relative_to(self.project_root)
+            return True
+        except ValueError:
+            return False
+
+    def resolve_output_root(self, requested_root: str | None) -> Path:
+        """Validate the user-facing output root before any package is made.
+
+        A relative root is relative to the project; all roots must remain
+        beneath it.  This deliberately fail-closes rather than falling back to
+        ``outputs`` when a user supplied path is invalid or unwritable.
+        """
+        if requested_root is None or not str(requested_root).strip():
+            candidate = self.project_root / "outputs"
+        elif not isinstance(requested_root, str):
+            raise DomainError("OUTPUT_ROOT_INVALID", "输出目录必须是字符串")
+        else:
+            raw = Path(requested_root).expanduser()
+            candidate = raw if raw.is_absolute() else self.project_root / raw
+        candidate = candidate.resolve(strict=False)
+        try:
+            candidate.relative_to(self.project_root)
+        except ValueError as error:
+            raise DomainError("OUTPUT_ROOT_FORBIDDEN", "输出目录必须位于项目目录内") from error
+        existing = candidate
+        while not existing.exists() and existing != existing.parent:
+            existing = existing.parent
+        if not existing.is_dir() or not os.access(existing, os.W_OK | os.X_OK):
+            raise DomainError("OUTPUT_ROOT_UNWRITABLE", "输出目录不可写")
+        return candidate
+
+    def browse_project_directory(self, requested_path: str | None = None) -> dict:
+        """Read-only listing of one project-relative directory.
+
+        The filesystem is never mutated here.  Symlinks are rejected on the
+        requested path and omitted from children so they cannot become a
+        navigation escape hatch.
+        """
+        raw = "." if requested_path is None or requested_path == "" else requested_path
+        if not isinstance(raw, str):
+            raise DomainError("DIRECTORY_INVALID_PATH", "目录路径必须是字符串")
+        candidate_path = Path(raw)
+        if candidate_path.is_absolute() or any(part == ".." for part in candidate_path.parts):
+            raise DomainError("DIRECTORY_FORBIDDEN", "目录路径必须位于项目目录内")
+        if any(part in {"", "."} for part in candidate_path.parts) and raw not in {".", ""}:
+            # Normalize harmless repeated separators/dot segments only after
+            # rejecting parent traversal; the returned path is canonical.
+            candidate_path = Path(*[part for part in candidate_path.parts if part not in {"", "."}])
+        candidate = (self.project_root / candidate_path)
+        try:
+            resolved = candidate.resolve(strict=True)
+        except FileNotFoundError as error:
+            raise NotFoundError("目录不存在") from error
+        except OSError as error:
+            raise DomainError("DIRECTORY_READ_ERROR", "目录无法读取") from error
+        try:
+            resolved.relative_to(self.project_root)
+        except ValueError as error:
+            raise DomainError("DIRECTORY_FORBIDDEN", "目录路径必须位于项目目录内") from error
+        current = self.project_root
+        for part in candidate_path.parts:
+            current = current / part
+            if current.is_symlink():
+                raise DomainError("DIRECTORY_FORBIDDEN", "不允许通过符号链接访问目录")
+        if not resolved.is_dir():
+            raise DomainError("DIRECTORY_NOT_DIRECTORY", "目标路径不是目录")
+        try:
+            children = []
+            for child in resolved.iterdir():
+                if child.name.startswith(".") or child.is_symlink() or not child.is_dir():
+                    continue
+                child_resolved = child.resolve(strict=True)
+                try:
+                    child_resolved.relative_to(self.project_root)
+                except ValueError:
+                    continue
+                relative = child_resolved.relative_to(self.project_root).as_posix()
+                children.append({"name": child.name, "path": relative})
+        except OSError as error:
+            raise DomainError("DIRECTORY_READ_ERROR", "目录无法读取") from error
+        children.sort(key=lambda item: item["name"].casefold())
+        relative_current = resolved.relative_to(self.project_root).as_posix() or "."
+        return {"path": relative_current, "directories": children}
+
+    def _write_package_locator(self, task_id: str, package_dir: Path) -> None:
+        self._write_json(self.package_locator_path(task_id), {
+            "schema_version": 1,
+            "task_id": task_id,
+            "package_dir": str(package_dir),
+            "project_root": str(self.project_root),
+        })
 
     def run_dir(self, task_id: str, run_id: str) -> Path:
         return self.task_dir(task_id) / "runs" / run_id
 
     def task_lock(self, task_id: str) -> threading.RLock:
-        with self._locks_guard:
-            return self._locks.setdefault(task_id, threading.RLock())
+        # Repository instances are intentionally cheap and are created by
+        # separate API/CLI entrypoints. The lock must therefore be shared by
+        # canonical root + task, otherwise concurrent instances can interleave
+        # the request/task/reference transaction.
+        key = (str(self.root), task_id)
+        with self._shared_locks_guard:
+            return self._shared_task_locks.setdefault(key, threading.RLock())
 
     def submission_lock(self, submission_id: str) -> threading.RLock:
         """独立锁用于 submission_id 幂等创建序列化。"""
@@ -46,13 +192,53 @@ class FilesystemTaskRepository:
             return None
         return self._read_json(path)
 
-    def create_task(self, task: Task) -> None:
-        target = self.task_dir(task.task_id)
+    def create_task(self, task: Task, *, output_root: str | None = None) -> None:
+        """Atomically create a canonical package for a new task.
+
+        The staging directory is adjacent to the final package to guarantee
+        ``replace`` is atomic.  Any failure removes the package and locator;
+        no fallback to the volatile state directory is attempted.
+        """
+        root = self.resolve_output_root(output_root)
+        target = root / task.task_id
         with self.task_lock(task.task_id):
-            if target.exists():
+            if target.exists() or self.package_locator_path(task.task_id).exists() or (self.root / "tasks" / task.task_id).exists():
                 raise FileExistsError(f"Task already exists: {task.task_id}")
-            (target / "inputs").mkdir(parents=True)
-            self._write_json(target / "task.json", task.to_dict())
+            root.mkdir(parents=True, exist_ok=True)
+            staging_root = root / ".csboard-staging"
+            staging_root.mkdir(exist_ok=True)
+            staging = staging_root / uuid.uuid4().hex
+            try:
+                for child in ("inputs/assets", "inputs/parameters", "runs"):
+                    (staging / child).mkdir(parents=True)
+                self._write_json(staging / "task.json", task.to_dict())
+                self._write_json(staging / "task-package.json", {
+                    "schema_version": 1,
+                    "task_id": task.task_id,
+                    "package_kind": "csboard-task-package",
+                    "created_at": task.created_at,
+                    "inputs": {"assets_dir": "inputs/assets", "parameters_dir": "inputs/parameters"},
+                    "runs_dir": "runs",
+                })
+                self._package_txn_checkpoint("before_commit", task.task_id)
+                os.replace(staging, target)
+                self._package_txn_checkpoint("before_locator", task.task_id)
+                self._write_package_locator(task.task_id, target)
+            except Exception:
+                if staging.exists():
+                    shutil.rmtree(staging, ignore_errors=True)
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                locator = self.package_locator_path(task.task_id)
+                if locator.exists():
+                    locator.unlink()
+                raise
+            finally:
+                if staging_root.exists() and not any(staging_root.iterdir()):
+                    staging_root.rmdir()
+
+    def _package_txn_checkpoint(self, name: str, task_id: str) -> None:
+        """Test hook for package-creation transaction fault injection."""
 
     def create_task_submission(
         self,
@@ -62,6 +248,7 @@ class FilesystemTaskRepository:
         request_signature: str,
         *,
         created_at: str | None = None,
+        output_root: str | None = None,
     ) -> dict:
         """为 submission_id 创建新的 task/run 并写入幂等索引，任意失败点都回滚。
 
@@ -77,7 +264,7 @@ class FilesystemTaskRepository:
                 return existing
 
             self._write_submission_checkpoint("before_task")
-            self.create_task(task)
+            self.create_task(task, output_root=output_root)
             try:
                 self._write_submission_checkpoint("before_run")
                 self.create_run(run)
@@ -107,6 +294,9 @@ class FilesystemTaskRepository:
         task_dir = self.task_dir(task_id)
         if task_dir.exists():
             shutil.rmtree(task_dir)
+        locator = self.package_locator_path(task_id)
+        if locator.exists():
+            locator.unlink()
 
     def _delete_submission_index(self, submission_id: str) -> None:
         path = self.submission_index_path(submission_id)
@@ -122,6 +312,109 @@ class FilesystemTaskRepository:
             raise NotFoundError("任务不存在")
         return Task.from_dict(self._read_json(path))
 
+    def recovery_metadata(self, task_id: str) -> dict | None:
+        """Return sanitized historical-recovery metadata, if present."""
+        path = self.task_dir(task_id) / "task-package.json"
+        if not path.is_file():
+            return None
+        value = self._read_json(path).get("recovery")
+        return value if isinstance(value, dict) else None
+
+    def final_path(self, task_id: str, run_id: str) -> Path:
+        """Resolve a final video through the canonical package repository."""
+        canonical = self.run_dir(task_id, run_id) / "artifacts" / "output" / "final.mp4"
+        if canonical.is_file():
+            return canonical
+        return self.run_dir(task_id, run_id) / "final" / "final.mp4"
+
+    def import_partial_historical_final(
+        self,
+        *,
+        task_id: str,
+        run_id: str,
+        source_file: Path,
+        expected_size: int,
+        expected_sha256: str,
+        authority_refs: list[str],
+        missing_evidence: list[str],
+        output_root: str | None = None,
+    ) -> dict:
+        """Import one verified surviving final as an explicitly partial package."""
+        source_file = Path(source_file).expanduser()
+        if not source_file.is_file():
+            raise DomainError("RECOVERY_SOURCE_NOT_FOUND", "来源成片不存在")
+        actual_size = source_file.stat().st_size
+        if actual_size != expected_size:
+            raise DomainError("RECOVERY_SIZE_MISMATCH", "来源成片大小校验失败")
+        digest = hashlib.sha256()
+        with source_file.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual_sha256 = digest.hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise DomainError("RECOVERY_HASH_MISMATCH", "来源成片 SHA-256 校验失败")
+        if not task_id or not run_id or not expected_sha256:
+            raise DomainError("VALIDATION_ERROR", "恢复标识和 hash 不能为空")
+
+        output_root = self.resolve_output_root(output_root)
+        target = output_root / task_id
+        package_file = target / "task-package.json"
+        recovery = {
+            "recovery_status": "partial",
+            "kind": "partial_historical_import",
+            "original_task_id": task_id,
+            "original_run_id": run_id,
+            "source_file": source_file.name,
+            "source_size_bytes": actual_size,
+            "source_sha256": actual_sha256,
+            "authority_references": list(authority_refs),
+            "missing_evidence": list(missing_evidence),
+        }
+        with self.task_lock(task_id):
+            if target.exists() or self.package_locator_path(task_id).exists() or (self.root / "tasks" / task_id).exists():
+                if package_file.is_file():
+                    existing = self._read_json(package_file).get("recovery")
+                    if existing == recovery and self.final_path(task_id, run_id).is_file():
+                        return {"task_id": task_id, "run_id": run_id, "recovery_status": "partial", "idempotent": True}
+                raise DomainError("RECOVERY_TARGET_CONFLICT", "恢复目标已存在且内容不一致")
+
+            now = utc_now()
+            task = Task(task_id=task_id, title="昨日任务（部分历史恢复）", summary="基于已验证成片的部分历史导入", pipeline_id="mountain-av-v1", engine=Engine.WHITEBOARD, status=TaskStatus.SUCCEEDED, created_at=now, updated_at=now, active_run_id=run_id)
+            run = Run(run_id=run_id, task_id=task_id, trace_id="trace-recovered-" + run_id.removeprefix("run-"), entrypoint=Entrypoint.CLI, command_ids=[], status=RunStatus.SUCCEEDED, target_stage="compose-video", started_at=now, finished_at=now)
+            staging_root = output_root / ".csboard-staging"
+            staging_root.mkdir(parents=True, exist_ok=True)
+            staging = staging_root / uuid.uuid4().hex
+            try:
+                (staging / "inputs/assets").mkdir(parents=True)
+                (staging / "inputs/parameters").mkdir(parents=True)
+                run_dir = staging / "runs" / run_id
+                for child in ("planning", "audio", "images", "clips", "subtitles", "manifests", "evidence", "final", "artifacts/output"):
+                    (run_dir / child).mkdir(parents=True, exist_ok=True)
+                self._write_json(staging / "task.json", task.to_dict())
+                self._write_json(staging / "task-package.json", {"schema_version": 1, "task_id": task_id, "package_kind": "csboard-task-package", "created_at": now, "recovery": recovery, "missing_evidence": list(missing_evidence)})
+                self._write_json(run_dir / "run.json", run.to_dict())
+                self._write_json(run_dir / "artifacts/index.json", {"schema_version": 1, "artifacts": {"final.video": {"relative_path": "output/final.mp4", "sha256": actual_sha256, "size_bytes": actual_size, "producer_stage": "compose-video", "status": "verified"}}})
+                staged_final = run_dir / "artifacts/output/final.mp4.partial"
+                shutil.copyfile(source_file, staged_final)
+                if staged_final.stat().st_size != expected_size:
+                    raise DomainError("RECOVERY_SIZE_MISMATCH", "导入中成片大小校验失败")
+                staged_final.replace(run_dir / "artifacts/output/final.mp4")
+                os.replace(staging, target)
+                self._write_package_locator(task_id, target)
+            except Exception:
+                if staging.exists():
+                    shutil.rmtree(staging, ignore_errors=True)
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                locator = self.package_locator_path(task_id)
+                if locator.exists():
+                    locator.unlink()
+                raise
+            finally:
+                if staging_root.exists() and not any(staging_root.iterdir()):
+                    staging_root.rmdir()
+        return {"task_id": task_id, "run_id": run_id, "recovery_status": "partial", "idempotent": False}
+
     def save_task(self, task: Task) -> None:
         with self.task_lock(task.task_id):
             current = self.get_task(task.task_id)
@@ -136,7 +429,7 @@ class FilesystemTaskRepository:
                 raise NotFoundError("任务不存在")
             if target.exists():
                 raise FileExistsError(f"Run already exists: {run.run_id}")
-            for child in ("artifacts", "media", "observability", "diagnostics"):
+            for child in ("planning", "audio", "images", "clips", "subtitles", "manifests", "evidence", "final", "artifacts", "media", "observability", "diagnostics"):
                 (target / child).mkdir(parents=True, exist_ok=True)
             self._write_json(target / "run.json", run.to_dict())
             self._write_json(target / "artifacts" / "index.json", {"schema_version": 1, "artifacts": {}})
