@@ -19,7 +19,8 @@ description: Create visual storyboard from AV Plan and Timeline. Use for the vis
 ## CLI 命令
 
 ```bash
-# 运行分镜规划
+# 先读取工作单，再执行 commands.run[].argv
+python -m cli.csboard work-order show --task <id> --run <run-id> --stage plan-storyboard --json
 python -m cli.csboard stage run --task <id> --run <run-id> --stage plan-storyboard --json
 
 # 查看生成的 Storyboard
@@ -43,7 +44,7 @@ python -m cli.csboard artifact show --task <id> --run <run-id> --key planning.st
 
 ## 与其他 Skill 的协作
 
-- **上游**：script-segmenter（av-plan）、voice-cloner（timeline）
+- **上游**：visual-anchor-generator（av-plan）、voice-cloner（timeline）
 - **下游**：illustration-generator 使用 storyboard 生成插画
 
 ## 错误处理

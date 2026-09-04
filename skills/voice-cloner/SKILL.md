@@ -21,15 +21,16 @@ description: Generate unit-level voice synthesis with Whisper alignment and fall
 ## CLI 命令
 
 ```bash
-# 运行语音克隆
-python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice --reference /path/to/reference.wav --json
+# 先读取工作单，再执行 commands.run[].argv
+python -m cli.csboard work-order show --task <id> --run <run-id> --stage clone-voice --json
+python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice --json
 
 # 重试特定 Unit
 python -m cli.csboard stage retry --task <id> --run <run-id> --stage clone-voice --unit unit-003 --json
 
-# 使用自定义 TTS 服务
-python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice --reference ref.wav --tts-url http://localhost:8080 --tts-mode fastapi --json
 ```
+
+参考音频与服务选择只读取 Task 和 Service Registry；不得从聊天或额外 CLI 参数注入。
 
 ## 输出格式
 
@@ -49,7 +50,7 @@ python -m cli.csboard stage run --task <id> --run <run-id> --stage clone-voice -
 
 ## 与其他 Skill 的协作
 
-- **上游**：script-segmenter 生成 av-plan
+- **上游**：visual-anchor-generator 生成 av-plan
 - **下游**：storyboard-planner 使用 timeline，av-compositor 使用 voice-manifest
 
 ## 错误处理

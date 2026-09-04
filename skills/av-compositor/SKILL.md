@@ -19,7 +19,8 @@ description: Compose final video with audio, subtitles and quality validation. U
 ## CLI 命令
 
 ```bash
-# 运行最终合成
+# 先读取工作单，再执行 commands.run[].argv
+python -m cli.csboard work-order show --task <id> --run <run-id> --stage compose-video --json
 python -m cli.csboard stage run --task <id> --run <run-id> --stage compose-video --json
 
 # 查看最终清单

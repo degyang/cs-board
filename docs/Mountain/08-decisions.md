@@ -172,6 +172,24 @@ Provider 密钥、Authorization、Cookie、完整 Prompt、完整原文和媒体
 
 状态：接受。`webapp.mountain_server:app` 是新产品唯一启动入口，只装配 Mountain v1 API、共享内核和新版 SPA。旧 `webapp/server.py`、LegacyJobBridge、旧 Job API 与旧 Mountain routes 不参与新产品启动或测试。
 
+### D-031：以渐进式替换脱离旧混合服务
+
+状态：接受。停止向旧 `webapp/server.py` 增加新业务、工作流、资产常量或新产品 API。先用 inventory 和 characterization tests 固定迁移输入，再把领域规则、应用用例、Stage、端口和 adapter 逐项迁入共享内核；新 `mountain_server` 最终只负责组合根、生命周期、API 适配和 SPA 托管。未证明新运行时零依赖前不得删除旧数据或旧模块，迁移期间也不得由新代码 import 旧模块复用业务。
+
+### D-032：自定义人物是一等资产
+
+状态：接受为后续规划，不进入当前第一阶段实现。资产管理规划增加“自定义人物”，人物与人物组使用稳定 ID、revision、启停、参考素材、授权信息和引擎兼容性；Task 引用 revision，Run 保存不可变 character snapshot。人物不得继续作为旧 `server.py` prompt 字典、页面常量或某个 Stage 的私有配置存在。详细路线见 `28-domain-extraction-and-character-assets-roadmap.md`。
+
+### D-033：模型服务只管理外部 Provider
+
+状态：接受。模型服务页面使用左侧列表、右侧详情和原位编辑；本地 IndexTTS、Whisper、FFmpeg、白板渲染器等从该页面移除，分别由语音与对齐或工具链页面表达，但其底层运行时注册不因 UI 分类而删除。用户表单只保留名称、多选能力、适配器、BaseURL、模型列表、自动服务 ID 和默认项；其他适配器等待厂商 API 参考后实现专用 Provider。
+
+### D-034：风格模板与输出引擎解耦，参考图采用显式路由规则
+
+状态：接受。
+
+预置风格和自定义风格描述视觉语义，不绑定白板动画或动态信息图；输出引擎由 Task 独立选择。风格可保存有序 `reference_routing`：每条规则包含名称、关键字和一至三张真实图片资产，运行时按列表顺序首条命中，命中后把图片按保存顺序传给具备图生图能力的图片 Provider。规则为空、路由关闭或没有命中时只使用 Prompt，不设隐式默认图；Provider 不支持参考图时必须返回明确能力错误，不得静默忽略。Task 保存完整 style revision snapshot，使后续资产编辑不改变已建立的任务。
+
 ## 2. 暂缓决策
 
 ### P-001：允许用户编辑 Voice Unit 或 Visual Item 边界

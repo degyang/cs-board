@@ -19,7 +19,8 @@ description: Render video clips for each Visual Item using the whiteboard render
 ## CLI 命令
 
 ```bash
-# 运行视觉渲染
+# 先读取工作单，再执行 commands.run[].argv
+python -m cli.csboard work-order show --task <id> --run <run-id> --stage render-visuals --json
 python -m cli.csboard stage run --task <id> --run <run-id> --stage render-visuals --json
 
 # 重试特定 Visual

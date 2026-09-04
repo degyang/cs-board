@@ -62,9 +62,7 @@ python -m cli.csboard diagnostics export --task <id> --run <run-id> --json
 {
   "title": "任务标题",
   "script": "旁白文案内容...",
-  "reference_audio": "/path/to/reference.wav",
-  "tts_url": "http://127.0.0.1:7860",
-  "tts_mode": "gradio",
+  "reference_audio": "inputs/reference.wav",
   "pipeline": "mountain-av-v1",
   "engine": "whiteboard"
 }
@@ -82,4 +80,5 @@ python -m cli.csboard diagnostics export --task <id> --run <run-id> --json
 
 ## 能力限制
 
-M04 仅支持 `mountain-av-v1` + `whiteboard`。拒绝 custom-reference 和 infographic 请求，不静默切换到旧流程。
+当前仅支持 `mountain-av-v1` + `whiteboard`。每一阶段先读取 Work Order；插画必须走
+Codex候选 import/validate/accept，不静默切换到旧流程或直接修改 Artifact index。

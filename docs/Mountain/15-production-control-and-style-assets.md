@@ -79,7 +79,9 @@ Task → Run → Stage → Unit/Visual    风格模板 / 参考素材 / 音色�
 
 ## 5. 风格模板与资产管理
 
-资产管理包含“预置风格”“自定义风格”“音色库”。预置模板可复制为自定义模板；自定义模板可引用参考图、角色组与授权素材。
+当前资产管理包含“预置风格”“自定义风格”“音色库”和“前置条件”。“预置”表示随产品交付并从旧业务代码/冻结 WebUI 基准迁移的初始模板，不表示只读。预置风格、自定义风格和音色均在右侧详情区从预览原位切换到编辑状态，只提供编辑与删除，不提供独立启停或“复制为自定义”功能；新建/上传仍使用独立表单。删除采用保留历史修订与引用的软删除。启动 seed 只能幂等安装缺失的初始资产，不得覆盖用户修改，也不得把已软删除的内置条目重新恢复。
+
+冻结 WebUI 基准中的 2 个自定义风格示例和 11 个音色示例属于首批迁移资产，必须进入真实 Repository。音色示例必须携带真实可读取、可试听的 WAV 内容及相应 metadata，不能只迁移名称、使用假路径或由前端 mock/localStorage 伪造。自定义模板可引用参考图、人物 revision、人物组与授权素材。人物是独立版本化资产，不是风格模板中的匿名 prompt 片段；风格与人物组合由 Capability 校验，Run 分别保存不可变 style snapshot 与 character snapshot。
 
 ```json
 {
@@ -98,6 +100,8 @@ Task → Run → Stage → Unit/Visual    风格模板 / 参考素材 / 音色�
 新建任务只选择 `style_template_id` 与 revision；创建 Run 时生成 `style.snapshot` Artifact。Storyboard、Codex 任务包和 Renderer 均消费快照，而非查询可变模板。
 
 风格 CRUD、上传、版本、启停、预览属于资产管理领域；Pipeline 只校验模板与 Engine 兼容性和快照引用完整性。Provider 配置属于设置，不属于风格资产；密钥不得进入模板、任务包、Artifact、日志或浏览器存储。
+
+人物 CRUD、参考图上传、版本、启停、预览、授权和人物组管理同样属于资产管理领域。Storyboard、插画和渲染只能消费 Run 的人物快照，不能直接读取旧 `webapp/server.py` 的人物/提示词常量或可变的“最新人物”。详细规划见 [28-domain-extraction-and-character-assets-roadmap.md](28-domain-extraction-and-character-assets-roadmap.md)。
 
 ## 6. 新服务入口与验收
 

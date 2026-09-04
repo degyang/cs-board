@@ -16,18 +16,17 @@ description: Generate illustrations for each Visual Item based on the storyboard
 - 素材必须通过 Artifact Store 读取；
 - 不根据 `web|skill` 入口改变 prompt 或 Provider profile。
 
-## CLI 命令
+## Codex 外部候选闭环
 
 ```bash
-# 运行插画生成
-python -m cli.csboard stage run --task <id> --run <run-id> --stage generate-illustrations --json
-
-# 重试特定 Visual
-python -m cli.csboard stage retry --task <id> --run <run-id> --stage generate-illustrations --visual visual-003-01 --json
-
-# 查看插画清单
-python -m cli.csboard artifact show --task <id> --run <run-id> --key illustrations.manifest --json
+python -m cli.csboard work-order show --task <id> --run <run-id> --stage generate-illustrations --json
 ```
+
+Read Storyboard prompts and generate one image for every expected `visual_id` with Codex imagegen.
+Copy each generated source into the work order's `output_directory`, then write `candidate.json`
+there using `{schema_version, work_order_id, candidate_id, items}`. Each item contains
+`visual_id`, `unit_id`, and its run-relative `path`. Execute the returned `import`, `validate`,
+and `accept` command arrays in that order. Only `accept` may publish `illustrations.manifest`.
 
 ## 输出格式
 
@@ -36,7 +35,7 @@ python -m cli.csboard artifact show --task <id> --run <run-id> --key illustratio
 ```json
 {
   "ok": true,
-  "command": "stage.run",
+  "command": "work-order.accept",
   "stage": "generate-illustrations",
   "result": "succeeded",
   "artifacts": ["illustrations.manifest"],
@@ -52,5 +51,5 @@ python -m cli.csboard artifact show --task <id> --run <run-id> --key illustratio
 ## 错误处理
 
 - storyboard 缺失 → 先运行 plan-storyboard
-- 图片模型不可用 → `IMAGE_SERVICE_UNAVAILABLE`（可重试）
+- 候选缺图或规格错误 → 修正候选后重新 import/validate
 - 单图生成失败 → 可独立重试，不影响其他 Visual
