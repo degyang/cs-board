@@ -6,10 +6,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 from contextlib import redirect_stdout
 from pathlib import Path
 
 from cli.csboard import EXIT_NOT_FOUND, EXIT_OK, EXIT_VALIDATION, main
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.domain.enums import StageStatus
 from csboard.domain.execution_plan import CANONICAL_STAGES
 from csboard.domain.models import StageState
@@ -19,6 +21,7 @@ class CliCsboardTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        self.repository = FilesystemTaskRepository(self.root)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -28,6 +31,64 @@ class CliCsboardTest(unittest.TestCase):
         with redirect_stdout(output):
             code = main(["--data-dir", str(self.root), *args])
         return code, json.loads(output.getvalue())
+
+    def test_voice_cli_public_contract_redacts_storage_path_and_keeps_metadata(self) -> None:
+        voice_file = self.root / "voice.wav"
+        with wave.open(str(voice_file), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(8000)
+            wav.writeframes(b"\x00\x00" * 800)
+
+        code, imported = self.invoke(
+            "asset", "voice", "import", "--file", str(voice_file), "--name", "CLI 旁白",
+            "--language", "zh-CN", "--example-text", "大家好", "--engine", "test-engine", "--json",
+        )
+        self.assertEqual(code, EXIT_OK)
+        voice_id = imported["voice_id"]
+        self.assertEqual(imported["language"], "zh-CN")
+        self.assertEqual(imported["example_text"], "大家好")
+        self.assertEqual(imported["engine"], "test-engine")
+        self.assertNotIn("storage_path", imported)
+        self.assertNotIn(str(self.root), json.dumps(imported, ensure_ascii=False))
+
+        for command in (
+            ("asset", "voice", "show", "--id", voice_id, "--json"),
+            ("asset", "voice", "list", "--json"),
+            ("asset", "voice", "update", "--id", voice_id, "--status-note", "已更新", "--json"),
+            ("asset", "voice", "deactivate", "--id", voice_id, "--json"),
+            ("asset", "voice", "activate", "--id", voice_id, "--json"),
+        ):
+            code, result = self.invoke(*command)
+            self.assertEqual(code, EXIT_OK)
+            payloads = result.get("items", []) if command[2] == "list" else [result]
+            self.assertTrue(payloads)
+            for payload in payloads:
+                self.assertNotIn("storage_path", payload)
+                self.assertNotIn(str(self.root), json.dumps(payload, ensure_ascii=False))
+                if command[2] == "update":
+                    self.assertEqual(payload["status_note"], "已更新")
+                else:
+                    self.assertEqual(payload["voice_id"], voice_id)
+
+    def test_preset_style_cli_create_update_and_deactivate(self) -> None:
+        code, created = self.invoke(
+            "asset", "style", "create", "--kind", "preset", "--name", "CLI 预置",
+            "--prompt", "CLI prompt", "--json",
+        )
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(created["kind"], "preset")
+        code, edited = self.invoke(
+            "asset", "style", "update", "--id", created["style_id"],
+            "--name", "CLI 已编辑预置", "--expected-revision", "1", "--json",
+        )
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(edited["revision"], 2)
+        code, inactive = self.invoke(
+            "asset", "style", "deactivate", "--id", created["style_id"], "--json",
+        )
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(inactive["status"], "inactive")
 
     def test_project_create_exposes_all_correlation_ids(self) -> None:
         code, result = self.invoke("task", "create", "--title", "CLI 标准任务", "--json")
@@ -55,7 +116,7 @@ class CliCsboardTest(unittest.TestCase):
         task_id = created["task_id"]
         # Simulate input save: write script_preparation to task.json
         preparation = prepare_script("第一句话。第二句话。")
-        task_json = self.root / "tasks" / task_id / "task.json"
+        task_json = self.repository.task_dir(task_id) / "task.json"
         task_data = json.loads(task_json.read_text(encoding="utf-8"))
         task_data["script_preparation"] = preparation
         task_data["visual_anchor_enabled"] = False
@@ -79,7 +140,7 @@ class CliCsboardTest(unittest.TestCase):
         task_id = created["task_id"]
         # Simulate input save: write script_preparation to task.json
         preparation = prepare_script("测试文案。")
-        task_json = self.root / "tasks" / task_id / "task.json"
+        task_json = self.repository.task_dir(task_id) / "task.json"
         task_data = json.loads(task_json.read_text(encoding="utf-8"))
         task_data["script_preparation"] = preparation
         task_data["visual_anchor_enabled"] = False
@@ -101,11 +162,11 @@ class CliCsboardTest(unittest.TestCase):
         _, created = self.invoke("task", "create", "--title", "Pipeline 测试", "--json")
         task_id = created["task_id"]
         # Write request.json and script_preparation to task.json
-        request_path = self.root / "tasks" / task_id / "request.json"
+        request_path = self.repository.task_dir(task_id) / "request.json"
         request_path.parent.mkdir(parents=True, exist_ok=True)
         request_path.write_text('{"script": "流水线测试文案。"}', encoding="utf-8")
         preparation = prepare_script("流水线测试文案。")
-        task_json = self.root / "tasks" / task_id / "task.json"
+        task_json = self.repository.task_dir(task_id) / "task.json"
         task_data = json.loads(task_json.read_text(encoding="utf-8"))
         task_data["script_preparation"] = preparation
         task_data["visual_anchor_enabled"] = False

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from csboard.application.commands import MountainCommands
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.domain.enums import Engine
 from csboard.domain.errors import DomainError, NotFoundError
 
@@ -35,8 +36,18 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--request", type=Path)
     create.add_argument("--pipeline", default="mountain-av-v1")
     create.add_argument("--engine", default="whiteboard", choices=[item.value for item in Engine])
+    create.add_argument("--output-root", help="任务包输出根（必须位于当前项目目录）")
     show = task_actions.add_parser("show")
     show.add_argument("--task", required=True)
+    recover = task_actions.add_parser("recover")
+    recover.add_argument("--task", required=True)
+    recover.add_argument("--run", required=True)
+    recover.add_argument("--source", type=Path, required=True)
+    recover.add_argument("--size", type=int, required=True)
+    recover.add_argument("--sha256", required=True)
+    recover.add_argument("--authority-ref", action="append", required=True)
+    recover.add_argument("--missing-evidence", action="append", required=True)
+    recover.add_argument("--output-root", help="任务包输出根（必须位于当前项目目录）")
 
     # ── run ──────────────────────────────────────────────────────────
     run = resources.add_parser("run")
@@ -83,6 +94,15 @@ def parser() -> argparse.ArgumentParser:
     work_order_show.add_argument("--task", required=True)
     work_order_show.add_argument("--run", required=True)
     work_order_show.add_argument("--stage", required=True)
+    for action in ("import", "validate", "accept", "reject"):
+        command = work_order_actions.add_parser(action)
+        command.add_argument("--task", required=True)
+        command.add_argument("--run", required=True)
+        command.add_argument("--work-order-id", required=True)
+        if action == "import":
+            command.add_argument("--manifest", required=True)
+        if action == "reject":
+            command.add_argument("--reason", required=True)
 
     # ── pipeline ─────────────────────────────────────────────────────
     pipeline = resources.add_parser("pipeline")
@@ -113,8 +133,10 @@ def parser() -> argparse.ArgumentParser:
     style_create = style_actions.add_parser("create")
     style_create.add_argument("--name", required=True)
     style_create.add_argument("--prompt", required=True)
+    style_create.add_argument("--kind", default="custom", choices=["preset", "custom"])
     style_create.add_argument("--engine", default="whiteboard")
     style_create.add_argument("--tags", default="[]")
+    style_create.add_argument("--characters", default="[]", help="人物组 JSON（含 reference_asset_ids）")
     style_copy = style_actions.add_parser("copy")
     style_copy.add_argument("--id", required=True, help="源 style_id")
     style_copy.add_argument("--name", help="新名称")
@@ -122,6 +144,8 @@ def parser() -> argparse.ArgumentParser:
     style_update.add_argument("--id", required=True)
     style_update.add_argument("--name")
     style_update.add_argument("--prompt")
+    style_update.add_argument("--characters", help="完整人物组 JSON；传入即替换，可表达删除")
+    style_update.add_argument("--expected-revision", type=int)
     style_activate = style_actions.add_parser("activate")
     style_activate.add_argument("--id", required=True)
     style_deactivate = style_actions.add_parser("deactivate")
@@ -136,9 +160,24 @@ def parser() -> argparse.ArgumentParser:
     voice_import = voice_actions.add_parser("import")
     voice_import.add_argument("--file", type=Path, required=True)
     voice_import.add_argument("--name", default="")
+    voice_import.add_argument("--language", default="und")
+    voice_import.add_argument("--emotion-mode", default="speaker", choices=["speaker", "reference_audio", "vector", "text"])
+    voice_import.add_argument("--example-text", default="")
+    voice_import.add_argument("--availability-status", default="available", choices=["available", "verified", "limited"])
+    voice_import.add_argument("--status-note", default="")
+    voice_import.add_argument("--engine", default="unknown")
+    voice_import.add_argument("--compatibility", help="compatibility JSON object")
     voice_update = voice_actions.add_parser("update")
     voice_update.add_argument("--id", required=True)
-    voice_update.add_argument("--name", required=True)
+    voice_update.add_argument("--name")
+    voice_update.add_argument("--language")
+    voice_update.add_argument("--emotion-mode", choices=["speaker", "reference_audio", "vector", "text"])
+    voice_update.add_argument("--example-text")
+    voice_update.add_argument("--availability-status", choices=["available", "verified", "limited"])
+    voice_update.add_argument("--status-note")
+    voice_update.add_argument("--engine")
+    voice_update.add_argument("--compatibility", help="compatibility JSON object")
+    voice_update.add_argument("--expected-revision", type=int)
     voice_activate = voice_actions.add_parser("activate")
     voice_activate.add_argument("--id", required=True)
     voice_deactivate = voice_actions.add_parser("deactivate")
@@ -214,6 +253,13 @@ def _get_asset_repository(data_dir: Path):
     return FilesystemAssetRepository(data_dir)
 
 
+def _voice_to_public(voice) -> dict[str, Any]:
+    """Return the public Voice DTO without repository-only storage details."""
+    data = voice.to_dict()
+    data.pop("storage_path", None)
+    return data
+
+
 def execute(args: argparse.Namespace) -> dict[str, Any]:
     import os
     from csboard.adapters.secrets import create_secret_store
@@ -230,15 +276,25 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         args.data_dir,
         provider_factory=provider_factory,
         service_resolver=service_resolver,
+        repository=FilesystemTaskRepository(args.data_dir, project_root=ROOT),
     )
 
     # ── task ──────────────────────────────────────────────────────
     if (args.resource, args.action) == ("task", "create"):
         request = {} if args.request is None else json.loads(args.request.read_text(encoding="utf-8"))
+        if args.output_root is not None:
+            request["output_root"] = args.output_root
         title = args.title or request.get("title", "")
         return commands.create_task(title, request.get("pipeline", args.pipeline), Engine(request.get("engine", args.engine)), request)
     if (args.resource, args.action) == ("task", "show"):
         return commands.show_task(args.task)
+    if (args.resource, args.action) == ("task", "recover"):
+        return commands.import_partial_historical_final(
+            task_id=args.task, run_id=args.run, source_file=args.source,
+            expected_size=args.size, expected_sha256=args.sha256,
+            authority_refs=args.authority_ref, missing_evidence=args.missing_evidence,
+            output_root=args.output_root,
+        )
 
     # ── run ──────────────────────────────────────────────────────────
     if (args.resource, args.action) == ("run", "trace"):
@@ -281,6 +337,14 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
 
     if (args.resource, args.action) == ("work-order", "show"):
         return commands.work_order_show(args.task, args.run, args.stage)
+    if (args.resource, args.action) == ("work-order", "import"):
+        return commands.work_order_import(args.task, args.run, args.work_order_id, args.manifest)
+    if (args.resource, args.action) == ("work-order", "validate"):
+        return commands.work_order_validate(args.task, args.run, args.work_order_id)
+    if (args.resource, args.action) == ("work-order", "accept"):
+        return commands.work_order_accept(args.task, args.run, args.work_order_id)
+    if (args.resource, args.action) == ("work-order", "reject"):
+        return commands.work_order_reject(args.task, args.run, args.work_order_id, args.reason)
 
     # ── pipeline ─────────────────────────────────────────────────────
     if (args.resource, args.action) == ("pipeline", "run"):
@@ -317,19 +381,21 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "create":
             import uuid
             tags = json.loads(args.tags) if args.tags else []
+            characters = repo.validate_style_characters(json.loads(args.characters))
             now = utc_now()
             from csboard.domain.style_template import StyleTemplate
             template = StyleTemplate(
                 style_id=uuid.uuid4().hex[:16],
                 revision=1,
                 name=args.name,
-                kind="custom",
+                kind=args.kind,
                 prompt_text=args.prompt,
                 engine=args.engine,
                 tags=tags,
                 status="active",
                 created_at=now,
                 updated_at=now,
+                characters=characters,
             )
             repo.save_style_template(template)
             return template.to_dict()
@@ -344,13 +410,13 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             return custom.to_dict()
         if args.action == "update":
             template = repo.get_style_template(args.id)
-            if template.kind == "preset":
-                raise DomainError("VALIDATION_ERROR", "preset 风格禁止修改")
             if args.name:
                 template.name = args.name
             if args.prompt:
                 template.prompt_text = args.prompt
-            repo.save_style_template(template)
+            if args.characters is not None:
+                template.characters = repo.validate_style_characters(json.loads(args.characters))
+            repo.save_style_template(template, expected_revision=args.expected_revision)
             return template.to_dict()
         if args.action == "activate":
             repo.activate_style_template(args.id)
@@ -364,9 +430,9 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         repo = _get_asset_repository(args.data_dir)
         if args.action == "list":
             voices = repo.list_voice_assets()
-            return {"items": [v.to_dict() for v in voices], "total": len(voices)}
+            return {"items": [_voice_to_public(v) for v in voices], "total": len(voices)}
         if args.action == "show":
-            return repo.get_voice_asset(args.id).to_dict()
+            return _voice_to_public(repo.get_voice_asset(args.id))
         if args.action == "import":
             from csboard.adapters.ffmpeg.media_adapter import FFmpegMediaAdapter
             import tempfile
@@ -383,21 +449,34 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 if tmp_path:
                     os.unlink(tmp_path)
             name = args.name or args.file.name
-            asset = repo.save_voice_asset(content, name, probe.duration_ms, probe.sample_rate, probe.channels, ext.lstrip("."))
-            return asset.to_dict()
+            metadata = {
+                "language": args.language, "emotion_mode": args.emotion_mode,
+                "example_text": args.example_text, "availability_status": args.availability_status,
+                "status_note": args.status_note, "engine": args.engine,
+                "compatibility": json.loads(args.compatibility) if args.compatibility else {
+                    "engines": [args.engine], "emotion_modes": [args.emotion_mode], "limitations": [],
+                },
+            }
+            repo.validate_voice_metadata(metadata)
+            asset = repo.save_voice_asset(content, name, probe.duration_ms, probe.sample_rate, probe.channels, ext.lstrip("."), metadata=metadata)
+            return _voice_to_public(asset)
         if args.action == "update":
-            voice = repo.get_voice_asset(args.id)
-            meta_path = repo._voice_meta_path(args.id)
-            data = json.loads(meta_path.read_text(encoding="utf-8"))
-            data["name"] = args.name
-            meta_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            return repo.get_voice_asset(args.id).to_dict()
+            metadata = {field: getattr(args, field) for field in (
+                "language", "emotion_mode", "example_text", "availability_status", "status_note", "engine"
+            ) if getattr(args, field) is not None}
+            if args.compatibility is not None:
+                metadata["compatibility"] = json.loads(args.compatibility)
+            repo.validate_voice_metadata(metadata)
+            return _voice_to_public(repo.update_voice_meta(
+                args.id, name=args.name, metadata=metadata,
+                expected_revision=args.expected_revision,
+            ))
         if args.action == "activate":
             repo.activate_voice_asset(args.id)
-            return repo.get_voice_asset(args.id).to_dict()
+            return _voice_to_public(repo.get_voice_asset(args.id))
         if args.action == "deactivate":
             repo.deactivate_voice_asset(args.id)
-            return repo.get_voice_asset(args.id).to_dict()
+            return _voice_to_public(repo.get_voice_asset(args.id))
 
     # ── service ──────────────────────────────────────────────────────
     if args.resource == "service":

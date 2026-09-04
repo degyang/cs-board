@@ -21,7 +21,10 @@ const outputPath = path.resolve(outputArgument);
 const cacheRoot = path.join(rendererRoot, '.cache');
 const whisperPath = path.join(cacheRoot, 'whisper.cpp-1.5.5');
 const modelFolder = path.join(cacheRoot, 'models');
-const convertedPath = path.join(path.dirname(outputPath), 'voice.alignment-16k.wav');
+// The adapter may be used by more than one Task/diagnostic process.  A fixed
+// /tmp/voice.alignment-16k.wav lets concurrent alignments overwrite each
+// other's input and can associate timestamps with the wrong unit.
+const convertedPath = `${outputPath}.alignment-16k.wav`;
 const whisperVersion = '1.5.5';
 const model = process.env.INFOGRAPHIC_WHISPER_MODEL || 'medium';
 
@@ -102,3 +105,4 @@ fs.writeFileSync(outputPath, JSON.stringify({
   speechSegments,
   captions,
 }, null, 2));
+fs.rmSync(convertedPath, {force: true});

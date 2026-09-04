@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-platform launcher for the local whiteboard workshop."""
+"""Cross-platform launcher for the native Mountain WebUI."""
 from __future__ import annotations
 
 import json
@@ -17,9 +17,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 STATE_DIR = ROOT / ".webapp"
-BACKEND_URL = "http://127.0.0.1:18765/api/health"
-FRONTEND_URL = "http://127.0.0.1:13000"
-PIPELINE_VERSION = "narrated_deck_v8_oil_visual"
+BACKEND_PORT = 8000
+FRONTEND_PORT = 5175
+BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}/api/v1/health"
+FRONTEND_URL = f"http://127.0.0.1:{FRONTEND_PORT}"
 
 
 def venv_python() -> Path:
@@ -39,7 +40,7 @@ def backend_ready() -> bool:
     if not payload:
         return False
     try:
-        return json.loads(payload).get("pipeline_version") == PIPELINE_VERSION
+        return json.loads(payload).get("status") in {"ok", "degraded"}
     except json.JSONDecodeError:
         return False
 
@@ -82,7 +83,7 @@ def main() -> int:
     if not npm:
         print("Node.js/npm was not found. Install Node.js 22.13 or newer first.", file=sys.stderr)
         return 1
-    if not (ROOT / "web" / "node_modules").is_dir() or not (ROOT / "video_renderer" / "node_modules").is_dir():
+    if not (ROOT / "web-v2" / "node_modules").is_dir() or not (ROOT / "video_renderer" / "node_modules").is_dir():
         print("Frontend or renderer dependencies are missing. Run npm ci in both web and video_renderer.", file=sys.stderr)
         return 1
 
@@ -92,18 +93,23 @@ def main() -> int:
     if address := lan_address():
         print(f"LAN URL: http://{address}:13000")
 
-    if not backend_ready() and port_in_use(18765):
-        print("Port 18765 is occupied by an unavailable or older backend. Stop that process, then run the launcher again.", file=sys.stderr)
+    if not backend_ready() and port_in_use(BACKEND_PORT):
+        print(f"Port {BACKEND_PORT} is occupied by an unavailable backend. Stop that process, then run the launcher again.", file=sys.stderr)
         return 1
     if not backend_ready():
-        launch([str(python), "-m", "uvicorn", "webapp.server:app", "--host", "127.0.0.1", "--port", "18765"], ROOT, STATE_DIR / "backend-output.log", STATE_DIR / "backend-error.log")
+        launch(
+            [str(python), str(ROOT / "scripts" / "run_mountain_backend.py"), "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
+            ROOT,
+            STATE_DIR / "backend-output.log",
+            STATE_DIR / "backend-error.log",
+        )
     else:
         print("Backend is already running.")
-    if not frontend_ready() and port_in_use(13000):
-        print("Port 13000 is occupied by an unavailable frontend. Stop that process, then run the launcher again.", file=sys.stderr)
+    if not frontend_ready() and port_in_use(FRONTEND_PORT):
+        print(f"Port {FRONTEND_PORT} is occupied by an unavailable frontend. Stop that process, then run the launcher again.", file=sys.stderr)
         return 1
     if not frontend_ready():
-        launch([npm, "run", "dev"], ROOT / "web", STATE_DIR / "frontend-output.log", STATE_DIR / "frontend-error.log")
+        launch([npm, "run", "dev", "--", "--host", "127.0.0.1"], ROOT / "web-v2", STATE_DIR / "frontend-output.log", STATE_DIR / "frontend-error.log")
     else:
         print("Frontend is already running.")
 
