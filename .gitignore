@@ -20,6 +20,7 @@ web/dist/
 web/.wrangler/
 web/coverage/
 web/outputs/
+outputs/
 web/work/
 web/*.tsbuildinfo
 web-v2/vite.config.ts.timestamp-*.mjs
