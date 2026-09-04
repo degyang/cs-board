@@ -129,6 +129,17 @@ def test_revision_grows(registry: FilesystemServiceRegistry):
     assert deactivated.revision == 4
 
 
+def test_changing_capability_preserves_one_default_per_capability(registry: FilesystemServiceRegistry):
+    text = registry.create_service(_make_service("svc-text", capability="text_generation"))
+    image = registry.create_service(_make_service("svc-image", capability="image_generation"))
+    assert text.is_default is True
+    assert image.is_default is True
+
+    moved = registry.update_service("svc-text", {"capability": "image_generation"})
+    assert moved.is_default is True
+    assert registry.get_service("svc-image").is_default is False
+
+
 def test_revision_conflict(registry: FilesystemServiceRegistry):
     """revision conflict 返回 REVISION_CONFLICT。"""
     svc = registry.create_service(_make_service("svc-1"))
@@ -197,3 +208,117 @@ def test_disable_default_service(registry: FilesystemServiceRegistry):
     svc = registry.get_service("svc-1")
     assert svc.enabled is False
     assert svc.is_default is False
+
+
+# ── MODEL-SERVICE-API-KEY-REWORK-018: API Key 白名单修复 ─────────────
+
+
+def test_set_secret_openai_compatible_legacy_service(registry: FilesystemServiceRegistry):
+    """历史 openai_compatible 服务 required_secrets=[] 也能设置 api_key。"""
+    svc = _make_service("legacy-openai", required_secrets=[], optional_secrets=[])
+    registry.create_service(svc)
+    # 应成功设置 api_key（由 adapter 标准 secret 允许）
+    registry.set_secret("legacy-openai", "api_key", "sk-test-123")
+    assert registry.get_secret_value("legacy-openai", "api_key") == "sk-test-123"
+
+
+def test_set_secret_anthropic_compatible_legacy_service(registry: FilesystemServiceRegistry):
+    """历史 anthropic_compatible 服务 required_secrets=[] 也能设置 api_key。"""
+    svc = _make_service(
+        "legacy-anthropic",
+        adapter_type="anthropic_compatible",
+        required_secrets=[],
+        optional_secrets=[],
+    )
+    registry.create_service(svc)
+    registry.set_secret("legacy-anthropic", "api_key", "sk-ant-test")
+    assert registry.get_secret_value("legacy-anthropic", "api_key") == "sk-ant-test"
+
+
+def test_set_secret_other_adapter_rejects_api_key(registry: FilesystemServiceRegistry):
+    """other 适配器 required_secrets=[] 不允许设置 api_key。"""
+    svc = _make_service(
+        "other-svc",
+        adapter_type="other",
+        required_secrets=[],
+        optional_secrets=[],
+    )
+    registry.create_service(svc)
+    with pytest.raises(DomainError) as exc_info:
+        registry.set_secret("other-svc", "api_key", "sk-should-fail")
+    assert "未知 secret" in str(exc_info.value)
+
+
+def test_load_service_auto_populates_required_secrets(tmp_path: Path):
+    """历史服务 JSON required_secrets=[] 在加载时自动按 adapter_type 补齐。"""
+    secret_store = PlaintextSecretStore(tmp_path / ".secrets")
+    reg = FilesystemServiceRegistry(tmp_path, secret_store)
+
+    # 手动写入一个 required_secrets=[] 的 openai_compatible 服务
+    svc_data = {
+        "schema_version": 1,
+        "revision": 1,
+        "service_id": "legacy-svc",
+        "display_name": "Legacy",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+        "endpoint": "https://api.openai.com/v1",
+        "model": "gpt-4o",
+        "enabled": True,
+        "priority": 100,
+        "is_default": False,
+        "config": {},
+        "required_secrets": [],
+        "optional_secrets": [],
+        "created_at": "2026-08-31T00:00:00Z",
+        "updated_at": "2026-08-31T00:00:00Z",
+    }
+    svc_path = tmp_path / "settings" / "services" / "legacy-svc.json"
+    svc_path.write_text(json.dumps(svc_data), encoding="utf-8")
+
+    # 加载时应自动补齐 required_secrets
+    loaded = reg.get_service("legacy-svc")
+    assert loaded.required_secrets == ["api_key"]
+
+    # 持久化后重新加载也应保持
+    reloaded = reg.get_service("legacy-svc")
+    assert reloaded.required_secrets == ["api_key"]
+
+
+def test_load_service_preserves_existing_required_secrets(registry: FilesystemServiceRegistry):
+    """已有 required_secrets 的服务不应被修改。"""
+    svc = _make_service("existing-svc", required_secrets=["api_key", "custom_key"])
+    registry.create_service(svc)
+
+    loaded = registry.get_service("existing-svc")
+    assert loaded.required_secrets == ["api_key", "custom_key"]
+
+
+def test_load_service_other_adapter_no_auto_populate(tmp_path: Path):
+    """other 适配器不会自动补齐 required_secrets。"""
+    secret_store = PlaintextSecretStore(tmp_path / ".secrets")
+    reg = FilesystemServiceRegistry(tmp_path, secret_store)
+
+    svc_data = {
+        "schema_version": 1,
+        "revision": 1,
+        "service_id": "other-svc",
+        "display_name": "Other",
+        "capability": "text_generation",
+        "adapter_type": "other",
+        "endpoint": "",
+        "model": "",
+        "enabled": True,
+        "priority": 100,
+        "is_default": False,
+        "config": {},
+        "required_secrets": [],
+        "optional_secrets": [],
+        "created_at": "2026-08-31T00:00:00Z",
+        "updated_at": "2026-08-31T00:00:00Z",
+    }
+    svc_path = tmp_path / "settings" / "services" / "other-svc.json"
+    svc_path.write_text(json.dumps(svc_data), encoding="utf-8")
+
+    loaded = reg.get_service("other-svc")
+    assert loaded.required_secrets == []

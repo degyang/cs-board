@@ -146,3 +146,47 @@ def test_diagnostics_no_secrets(tmp_path: Path):
     assert resp.status_code == 200
     resp_text = json.dumps(resp.json())
     assert "sk-secret123" not in resp_text
+
+
+@pytest.mark.parametrize("key_variant", [
+    "api_key", "ApiKey", "API_KEY", "apikey", "APIKEY", "apiKey",
+    "token", "Token", "TOKEN",
+    "secret", "Secret", "SECRET",
+    "password", "Password",
+    "authorization", "Authorization",
+    "access_token", "AccessToken", "accessToken",
+    "refresh_token", "RefreshToken",
+    "api_secret", "ApiSecret",
+])
+def test_config_sanitizes_all_sensitive_key_variants(tmp_path: Path, key_variant: str):
+    """config 中各种大小写/下划线变体的敏感字段都必须被过滤。"""
+    from csboard.adapters.filesystem.service_registry import _sanitize_config
+    config = {key_variant: "sk-leaked-value", "model": "gpt-4o"}
+    sanitized = _sanitize_config(config)
+    assert key_variant not in sanitized, f"敏感字段 '{key_variant}' 未被过滤"
+    assert "model" in sanitized, "非敏感字段被误删"
+
+
+def test_api_config_never_leaks_camelcase_sensitive_keys(tmp_path: Path):
+    """API 响应 config 中不得出现 camelCase 敏感字段。"""
+    from webapp.mountain_server import create_app
+
+    app = create_app(tmp_path)
+    client = TestClient(app)
+
+    client.post("/api/v1/services", json={
+        "service_id": "test-svc",
+        "display_name": "Test",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+        "config": {"ApiKey": "sk-leaked-camel-case", "model": "gpt-4o"},
+    })
+
+    resp = client.get("/api/v1/services/test-svc")
+    config = resp.json().get("config", {})
+    assert "ApiKey" not in config, "camelCase 敏感字段泄漏"
+    assert "model" in config
+
+    resp = client.get("/api/v1/services")
+    list_text = json.dumps(resp.json())
+    assert "sk-leaked-camel-case" not in list_text

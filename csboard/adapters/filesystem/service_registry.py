@@ -22,17 +22,29 @@ from csboard.domain.service_definition import ServiceDefinition
 _SERVICE_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 _FORBIDDEN_ID_PATTERNS = ["..", "/", "\\"]
 
+# adapter_type → 标准 required / optional secrets
+# 不含 "other"：other 适配器的 Secret 字段由创建时的 Service 契约决定
+_ADAPTER_REQUIRED_SECRETS: dict[str, list[str]] = {
+    "openai_compatible": ["api_key"],
+    "anthropic_compatible": ["api_key"],
+}
+_ADAPTER_OPTIONAL_SECRETS: dict[str, list[str]] = {
+    "openai_compatible": [],
+    "anthropic_compatible": [],
+}
+
 # PATCH 允许的字段白名单
 _PATCHABLE_FIELDS = {
-    "display_name", "endpoint", "model", "enabled", "priority",
+    "display_name", "capability", "adapter_type", "endpoint", "model", "enabled", "priority",
     "config", "required_secrets", "optional_secrets",
 }
 
-# config 中敏感字段（大小写不敏感）
+# config 中敏感字段（大小写不敏感，下划线归一化）
 _SENSITIVE_CONFIG_KEYS = {
     "api_key", "key", "token", "secret", "password", "credential",
     "authorization", "access_token", "refresh_token", "api_secret",
 }
+_NORMALIZED_SENSITIVE_KEYS = {k.replace("_", "") for k in _SENSITIVE_CONFIG_KEYS}
 
 
 # probe 结果缓存（service_id → (result, timestamp)）
@@ -54,8 +66,8 @@ def _validate_service_id(service_id: str) -> None:
 
 
 def _sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
-    """过滤 config 中的敏感字段。"""
-    return {k: v for k, v in config.items() if k.lower() not in _SENSITIVE_CONFIG_KEYS}
+    """过滤 config 中的敏感字段。归一化下划线和大小写以覆盖 camelCase 变体。"""
+    return {k: v for k, v in config.items() if k.lower().replace("_", "") not in _NORMALIZED_SENSITIVE_KEYS}
 
 
 def _validate_create(service: ServiceDefinition) -> None:
@@ -95,9 +107,18 @@ class FilesystemServiceRegistry:
             raise NotFoundError(f"服务 '{service_id}' 不存在")
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            return ServiceDefinition.from_dict(data)
+            service = ServiceDefinition.from_dict(data)
         except (json.JSONDecodeError, OSError):
             raise NotFoundError(f"服务 '{service_id}' 数据损坏")
+
+        # 迁移：历史服务 required_secrets 为空时，按 adapter_type 补齐
+        if not service.required_secrets:
+            adapter_required = _ADAPTER_REQUIRED_SECRETS.get(service.adapter_type, [])
+            if adapter_required:
+                service.required_secrets = list(adapter_required)
+                self._save_service(service)
+
+        return service
 
     def _save_service(self, service: ServiceDefinition) -> None:
         path = self._service_path(service.service_id)
@@ -194,6 +215,7 @@ class FilesystemServiceRegistry:
         expected_revision: int | None = None,
     ) -> ServiceDefinition:
         service = self._load_service(service_id)
+        original_capability = service.capability
 
         # revision 冲突检查
         if expected_revision is not None and service.revision != expected_revision:
@@ -208,6 +230,8 @@ class FilesystemServiceRegistry:
             raise DomainError("VALIDATION_ERROR", f"不允许更新字段: {', '.join(sorted(unknown))}")
 
         for key, value in updates.items():
+            if key in {"capability", "adapter_type"} and (not isinstance(value, str) or not value.strip()):
+                raise DomainError("VALIDATION_ERROR", f"{key} 不能为空")
             if key == "enabled":
                 service.enabled = bool(value)
             elif key == "priority":
@@ -228,6 +252,14 @@ class FilesystemServiceRegistry:
                 service.optional_secrets = value
             elif hasattr(service, key):
                 setattr(service, key, value)
+
+        if service.is_default and service.capability != original_capability:
+            for other in self._list_all():
+                if other.service_id != service_id and other.capability == service.capability and other.is_default:
+                    other.is_default = False
+                    other.revision += 1
+                    other.updated_at = utc_now()
+                    self._save_service(other)
 
         service.revision += 1
         service.updated_at = utc_now()
@@ -324,7 +356,7 @@ class FilesystemServiceRegistry:
             if not self._secret_store.get(full_key):
                 return False, "SECRET_NOT_CONFIGURED", f"请配置 {key}"
 
-        if service.adapter_type == "openai_compatible":
+        if service.adapter_type in {"openai_compatible", "anthropic_compatible"}:
             return self._probe_openai(service)
         if service.adapter_type == "indextts":
             return self._probe_tts(service)
@@ -388,7 +420,8 @@ class FilesystemServiceRegistry:
             node = shutil.which("node")
             if not node:
                 return False, "NODE_NOT_FOUND", "请安装 Node.js"
-            renderer_root = self._data_dir.parent / "video_renderer"
+            # Runtime storage is independent from the application checkout.
+            renderer_root = Path(__file__).resolve().parents[3] / "video_renderer"
             align_script = renderer_root / "align.mjs"
             if not align_script.exists():
                 return False, "ALIGN_SCRIPT_NOT_FOUND", "对齐脚本不存在"
@@ -439,6 +472,11 @@ class FilesystemServiceRegistry:
     def set_secret(self, service_id: str, secret_key: str, secret_value: str) -> None:
         service = self._load_service(service_id)
         allowed_keys = set(service.required_secrets + service.optional_secrets)
+        # 也允许 adapter 标准 secret（历史服务 required_secrets 可能尚未迁移）
+        adapter_required = _ADAPTER_REQUIRED_SECRETS.get(service.adapter_type, [])
+        adapter_optional = _ADAPTER_OPTIONAL_SECRETS.get(service.adapter_type, [])
+        allowed_keys.update(adapter_required)
+        allowed_keys.update(adapter_optional)
         if secret_key not in allowed_keys:
             raise DomainError("VALIDATION_ERROR", f"不允许设置未知 secret: {secret_key}")
         full_key = f"{service_id}_{secret_key}"

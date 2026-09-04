@@ -131,6 +131,9 @@ def test_switch_default_affects_resolution(resolver: ServiceResolver):
     """更新默认服务后下一次 Pipeline 使用新服务。"""
     resolver._registry.create_service(_make_service("svc-1", is_default=True))
     resolver._registry.create_service(_make_service("svc-2"))
+    # 配置 api_key 使服务可解析（openai_compatible 自动要求 api_key）
+    resolver._registry.set_secret("svc-1", "api_key", "sk-1")
+    resolver._registry.set_secret("svc-2", "api_key", "sk-2")
     assert resolver.resolve("text_generation").service_id == "svc-1"
 
     resolver._registry.set_default("svc-2")

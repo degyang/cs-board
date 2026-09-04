@@ -77,6 +77,27 @@ def test_update_service(client: TestClient):
     assert resp.json()["display_name"] == "New Name"
 
 
+def test_update_service_provider_shape_and_multi_capability_metadata(client: TestClient):
+    client.post("/api/v1/services", json={
+        "service_id": "provider-service",
+        "display_name": "Provider",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+    })
+    resp = client.patch("/api/v1/services/provider-service", json={
+        "capability": "image_generation",
+        "adapter_type": "anthropic_compatible",
+        "endpoint": "https://provider.example/v1",
+        "model": "model-a, model-b",
+        "config": {"capabilities": ["image_generation", "video_generation"]},
+    })
+    assert resp.status_code == 200
+    assert resp.json()["capability"] == "image_generation"
+    assert resp.json()["adapter_type"] == "anthropic_compatible"
+    assert resp.json()["model"] == "model-a, model-b"
+    assert resp.json()["config"]["capabilities"] == ["image_generation", "video_generation"]
+
+
 def test_delete_service(client: TestClient):
     svc_data = {
         "service_id": "test-svc",
@@ -280,3 +301,65 @@ def test_probe_service(client: TestClient):
     data = resp.json()
     assert "available" in data
     assert "checked_at" in data
+
+
+# ── MODEL-SERVICE-API-KEY-REWORK-018: 历史服务 API Key 设置 ────────────
+
+
+def test_set_secret_legacy_openai_compatible_service(client: TestClient):
+    """历史 openai_compatible 服务 required_secrets=[] 可以通过 API 设置 api_key。"""
+    # 创建一个 required_secrets 为空的服务（模拟历史服务）
+    svc_data = {
+        "service_id": "legacy-openai",
+        "display_name": "Legacy OpenAI",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+        "endpoint": "https://api.openai.com/v1",
+        "model": "gpt-4o",
+        "required_secrets": [],
+    }
+    resp = client.post("/api/v1/services", json=svc_data)
+    assert resp.status_code == 200
+
+    # 设置 api_key 应成功（adapter 标准 secret 白名单）
+    resp = client.post("/api/v1/services/legacy-openai/secrets", json={"key": "api_key", "value": "sk-legacy-123"})
+    assert resp.status_code == 200
+    assert resp.json()["configured"] is True
+
+    # 验证 secret 已配置
+    resp = client.get("/api/v1/services/legacy-openai/secrets")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    api_key_item = next((s for s in items if s["secret_key"] == "api_key"), None)
+    assert api_key_item is not None
+    assert api_key_item["configured"] is True
+
+
+def test_set_secret_legacy_service_unknown_key_rejected(client: TestClient):
+    """历史服务仍然拒绝未知 secret key。"""
+    svc_data = {
+        "service_id": "legacy-openai",
+        "display_name": "Legacy OpenAI",
+        "capability": "text_generation",
+        "adapter_type": "openai_compatible",
+        "required_secrets": [],
+    }
+    client.post("/api/v1/services", json=svc_data)
+
+    resp = client.post("/api/v1/services/legacy-openai/secrets", json={"key": "unknown_key", "value": "val"})
+    assert resp.status_code == 400
+
+
+def test_set_secret_other_adapter_rejects_api_key_via_api(client: TestClient):
+    """other 适配器 required_secrets=[] 拒绝设置 api_key。"""
+    svc_data = {
+        "service_id": "other-svc",
+        "display_name": "Other",
+        "capability": "text_generation",
+        "adapter_type": "other",
+        "required_secrets": [],
+    }
+    client.post("/api/v1/services", json=svc_data)
+
+    resp = client.post("/api/v1/services/other-svc/secrets", json={"key": "api_key", "value": "sk-should-fail"})
+    assert resp.status_code == 400
