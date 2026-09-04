@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { MountainApiError } from '../src/lib/api/http'
@@ -50,12 +50,15 @@ import {
   fetchServices,
   fetchService,
   createService,
+  updateService,
   probeService,
   activateService,
   deactivateService,
   setDefaultService,
   deleteService,
   fetchServiceSecrets,
+  setServiceSecret,
+  deleteServiceSecret,
 } from '../src/lib/api/services'
 import { fetchVoiceAlignmentSettings, fetchToolchainSettings, fetchStorageSettings, fetchDiagnosticsSettings } from '../src/lib/api/settings'
 
@@ -120,12 +123,17 @@ function renderWithRouter(ui: React.ReactElement, initialRoute = '/settings/mode
 describe('SettingsLayout with ModelServicesPage (production Router)', () => {
   beforeEach(() => {
     vi.mocked(fetchServices).mockReset()
+    vi.mocked(createService).mockReset()
+    vi.mocked(updateService).mockReset()
     vi.mocked(probeService).mockReset()
     vi.mocked(activateService).mockReset()
     vi.mocked(deactivateService).mockReset()
     vi.mocked(setDefaultService).mockReset()
     vi.mocked(deleteService).mockReset()
     vi.mocked(fetchServiceSecrets).mockReset()
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(setServiceSecret).mockReset()
+    vi.mocked(deleteServiceSecret).mockReset()
   })
 
   it('renders SettingsLayout with all navigation tabs', async () => {
@@ -148,7 +156,7 @@ describe('SettingsLayout with ModelServicesPage (production Router)', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('OpenAI GPT-4')).toBeInTheDocument()
+      expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2)
     })
   })
 
@@ -159,7 +167,7 @@ describe('SettingsLayout with ModelServicesPage (production Router)', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('默认')).toBeInTheDocument()
+      expect(screen.getAllByText('默认').length).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -189,7 +197,7 @@ describe('SettingsLayout with ModelServicesPage (production Router)', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('暂无服务')).toBeInTheDocument()
+      expect(screen.getAllByText('暂无模型服务').length).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -200,9 +208,298 @@ describe('SettingsLayout with ModelServicesPage (production Router)', () => {
     })
 
     await waitFor(() => {
-      const capabilityLabels = screen.getAllByText('文本生成')
+      const capabilityLabels = screen.getAllByText('文本')
       expect(capabilityLabels.length).toBeGreaterThanOrEqual(1)
-      expect(screen.getByText('OpenAI 兼容')).toBeInTheDocument()
+      expect(screen.getAllByText('OpenAI 兼容').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('removes local runtimes from the model-provider list', async () => {
+    const local = { ...mockService, service_id: 'local-whisper', display_name: '本地 Whisper', adapter_type: 'whisper' }
+    vi.mocked(fetchServices).mockResolvedValue({ items: [local, mockService], next_cursor: null, total: 2 })
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThan(0))
+    expect(screen.queryByText('本地 Whisper')).not.toBeInTheDocument()
+  })
+
+  it('edits model services inline with only the agreed fields', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(updateService).mockResolvedValue({ ...mockService, revision: 2 })
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getByRole('button', { name: '编辑' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: '编辑' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名称')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '能力' })).toBeInTheDocument()
+    expect(screen.getByLabelText('适配器')).toBeInTheDocument()
+    expect(screen.getByLabelText('BaseURL')).toBeInTheDocument()
+    expect(screen.getByLabelText('模型（多个用逗号分隔）')).toBeInTheDocument()
+    expect(screen.getByLabelText('服务 ID（自动生成）')).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText(/优先级|Secret|Config|启用/)).not.toBeInTheDocument()
+
+    await userEvent.clear(screen.getByLabelText('名称'))
+    await userEvent.type(screen.getByLabelText('名称'), '统一模型服务')
+    await userEvent.click(screen.getByLabelText('图片'))
+    await userEvent.selectOptions(screen.getByLabelText('适配器'), 'anthropic_compatible')
+    await userEvent.clear(screen.getByLabelText('模型（多个用逗号分隔）'))
+    await userEvent.type(screen.getByLabelText('模型（多个用逗号分隔）'), 'claude-a, claude-b')
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(updateService).toHaveBeenCalledWith('svc1', expect.objectContaining({
+      display_name: '统一模型服务', adapter_type: 'anthropic_compatible', model: 'claude-a, claude-b',
+      config: expect.objectContaining({ capabilities: ['text_generation', 'image_generation'] }),
+    })))
+  })
+
+  it('creates a service with an automatic ID and no legacy configuration fields', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await userEvent.click(screen.getByRole('button', { name: '+ 新建模型服务' }))
+    const idInput = screen.getByLabelText('服务 ID（自动生成）') as HTMLInputElement
+    expect(idInput.value).toMatch(/^model-service-/)
+    vi.mocked(createService).mockResolvedValue({ ...mockService, service_id: idInput.value, is_default: true })
+    await userEvent.type(screen.getByLabelText('名称'), '新模型服务')
+    await userEvent.click(screen.getByLabelText('多模态'))
+    await userEvent.click(screen.getByRole('button', { name: '创建' }))
+    await waitFor(() => expect(createService).toHaveBeenCalledWith(expect.objectContaining({
+      service_id: idInput.value, display_name: '新模型服务',
+      config: { capabilities: ['text_generation', 'multimodal'] },
+    })))
+  })
+})
+
+describe('ModelServicesPage — API Key security flow', () => {
+  beforeEach(() => {
+    vi.mocked(fetchServices).mockReset()
+    vi.mocked(createService).mockReset()
+    vi.mocked(updateService).mockReset()
+    vi.mocked(setDefaultService).mockReset()
+    vi.mocked(deleteService).mockReset()
+    vi.mocked(fetchServiceSecrets).mockReset()
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(setServiceSecret).mockReset()
+    vi.mocked(deleteServiceSecret).mockReset()
+  })
+
+  it('creates service with required_secrets: ["api_key"] and writes secret via setServiceSecret', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(createService).mockResolvedValue({ ...mockService, service_id: 'new-svc' })
+    vi.mocked(setServiceSecret).mockResolvedValue(undefined as never)
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await userEvent.click(screen.getByRole('button', { name: '+ 新建模型服务' }))
+    await userEvent.type(screen.getByLabelText('名称'), '安全服务')
+    await userEvent.type(screen.getByLabelText('API Key'), 'sk-secret-value')
+    await userEvent.click(screen.getByRole('button', { name: '创建' }))
+    await waitFor(() => {
+      expect(createService).toHaveBeenCalledWith(expect.objectContaining({
+        required_secrets: ['api_key'],
+      }))
+      expect(setServiceSecret).toHaveBeenCalledWith('new-svc', { key: 'api_key', value: 'sk-secret-value' })
+    })
+  })
+
+  it('clears local apiKey state after successful secret write', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(createService).mockResolvedValue({ ...mockService, service_id: 'new-svc' })
+    vi.mocked(setServiceSecret).mockResolvedValue(undefined as never)
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await userEvent.click(screen.getByRole('button', { name: '+ 新建模型服务' }))
+    await userEvent.type(screen.getByLabelText('名称'), '安全服务')
+    await userEvent.type(screen.getByLabelText('API Key'), 'sk-to-be-cleared')
+    await userEvent.click(screen.getByRole('button', { name: '创建' }))
+    await waitFor(() => expect(setServiceSecret).toHaveBeenCalled())
+    // After successful create+secret write, the modal closes, so apiKey is gone
+    expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument()
+  })
+
+  it('does not include apiKey in createService body (only in secret API)', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(createService).mockResolvedValue({ ...mockService, service_id: 'new-svc' })
+    vi.mocked(setServiceSecret).mockResolvedValue(undefined as never)
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await userEvent.click(screen.getByRole('button', { name: '+ 新建模型服务' }))
+    await userEvent.type(screen.getByLabelText('名称'), '安全服务')
+    await userEvent.type(screen.getByLabelText('API Key'), 'sk-not-in-config')
+    await userEvent.click(screen.getByRole('button', { name: '创建' }))
+    await waitFor(() => {
+      const createCall = vi.mocked(createService).mock.calls[0][0]
+      // apiKey must NOT appear in the service config body
+      expect(JSON.stringify(createCall)).not.toContain('sk-not-in-config')
+    })
+  })
+
+  it('shows secret status (masked value) in preview after loading secrets', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({
+      items: [{ secret_key: 'api_key', configured: true, masked_value: 'sk-...abc', updated_at: '2025-01-01T00:00:00Z' }],
+      total: 1,
+    })
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2))
+    await waitFor(() => {
+      expect(screen.getByText(/sk-\.\.\.abc/)).toBeInTheDocument()
+      expect(screen.getByText('清除')).toBeInTheDocument()
+    })
+  })
+
+  it('shows "未配置" when no api_key secret exists', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2))
+    await waitFor(() => {
+      expect(screen.getByText('未配置')).toBeInTheDocument()
+    })
+  })
+
+  it('clears API Key via deleteServiceSecret with confirmation dialog', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({
+      items: [{ secret_key: 'api_key', configured: true, masked_value: 'sk-...abc', updated_at: '2025-01-01T00:00:00Z' }],
+      total: 1,
+    })
+    vi.mocked(deleteServiceSecret).mockResolvedValue(undefined as never)
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getByText('清除')).toBeInTheDocument())
+    await userEvent.click(screen.getByText('清除'))
+    // Confirm dialog appears
+    await waitFor(() => expect(screen.getByText('确定清除该服务的 API Key？清除后需要重新输入才能使用。')).toBeInTheDocument())
+    // Click the confirm button inside the dialog
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: '清除' }))
+    await waitFor(() => {
+      expect(deleteServiceSecret).toHaveBeenCalledWith('svc1', 'api_key')
+    })
+  })
+
+  it('shows error when secret write fails during create', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(createService).mockResolvedValue({ ...mockService, service_id: 'new-svc' })
+    vi.mocked(setServiceSecret).mockRejectedValue(new MountainApiError(400, 'SECRET_WRITE_FAILED', '写入 Secret 失败'))
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await userEvent.click(screen.getByRole('button', { name: '+ 新建模型服务' }))
+    await userEvent.type(screen.getByLabelText('名称'), '安全服务')
+    await userEvent.type(screen.getByLabelText('API Key'), 'sk-will-fail')
+    await userEvent.click(screen.getByRole('button', { name: '创建' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('写入 Secret 失败')
+    })
+  })
+
+  it('shows error when clear API Key fails', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({
+      items: [{ secret_key: 'api_key', configured: true, masked_value: 'sk-...abc', updated_at: '2025-01-01T00:00:00Z' }],
+      total: 1,
+    })
+    vi.mocked(deleteServiceSecret).mockRejectedValue(new MountainApiError(500, 'DELETE_FAILED', '删除 Secret 失败'))
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getByText('清除')).toBeInTheDocument())
+    await userEvent.click(screen.getByText('清除'))
+    await waitFor(() => expect(screen.getByText('确定清除该服务的 API Key？清除后需要重新输入才能使用。')).toBeInTheDocument())
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: '清除' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('删除 Secret 失败')
+    })
+  })
+
+  it('immediately shows "未配置" and hides clear button after successful clear', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({
+      items: [{ secret_key: 'api_key', configured: true, masked_value: 'sk-...abc', updated_at: '2025-01-01T00:00:00Z' }],
+      total: 1,
+    })
+    vi.mocked(deleteServiceSecret).mockResolvedValue(undefined as never)
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    // Before clear: masked value and clear button visible
+    await waitFor(() => expect(screen.getByText('sk-...abc')).toBeInTheDocument())
+    expect(screen.getByText('清除')).toBeInTheDocument()
+    // Perform clear
+    await userEvent.click(screen.getByText('清除'))
+    await waitFor(() => expect(screen.getByText('确定清除该服务的 API Key？清除后需要重新输入才能使用。')).toBeInTheDocument())
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: '清除' }))
+    // Immediately after clear: "未配置" shown, clear button gone
+    await waitFor(() => {
+      expect(screen.getByText('未配置')).toBeInTheDocument()
+      expect(screen.queryByText('清除')).not.toBeInTheDocument()
+      expect(screen.queryByText('sk-...abc')).not.toBeInTheDocument()
+    })
+  })
+
+  it('does not display plaintext API Key in DOM at any point', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [mockService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({
+      items: [{ secret_key: 'api_key', configured: true, masked_value: 'sk-...abc', updated_at: '2025-01-01T00:00:00Z' }],
+      total: 1,
+    })
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2))
+    // The masked value is shown, but the input is empty (no pre-filled plaintext)
+    const apiKeyInputs = document.querySelectorAll('input[type="password"]')
+    apiKeyInputs.forEach(input => {
+      expect((input as HTMLInputElement).value).toBe('')
+    })
+  })
+
+  it('patches required_secrets before writing api_key when editing legacy service with empty declaration', async () => {
+    // Simulates MiMo-TTS: openai_compatible but required_secrets=[]
+    const legacyService = { ...mockService, required_secrets: [], secret_status: { configured: false, required: [], missing: [] } }
+    vi.mocked(fetchServices).mockResolvedValue({ items: [legacyService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(updateService).mockResolvedValue({ ...legacyService, required_secrets: ['api_key'], revision: 2 })
+    vi.mocked(setServiceSecret).mockResolvedValue(undefined as never)
+    const user = userEvent.setup()
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2))
+    // Open edit mode
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    await user.type(screen.getByLabelText('API Key'), 'sk-new-key')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      // Must patch required_secrets to include api_key BEFORE writing the secret
+      expect(updateService).toHaveBeenCalledWith('svc1', expect.objectContaining({
+        required_secrets: ['api_key'],
+      }))
+      expect(setServiceSecret).toHaveBeenCalledWith('svc1', { key: 'api_key', value: 'sk-new-key' })
+    })
+  })
+
+  it('does not include api_key in required_secrets when creating other-adapter service', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(createService).mockResolvedValue({ ...mockService, service_id: 'new-other', adapter_type: 'other', required_secrets: [] })
+    const user = userEvent.setup()
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await user.click(screen.getByRole('button', { name: '+ 新建模型服务' }))
+    await user.type(screen.getByLabelText('名称'), '自定义服务')
+    // Select 'other' adapter
+    await user.selectOptions(screen.getByLabelText('适配器'), 'other')
+    await user.click(screen.getByRole('button', { name: '创建' }))
+    await waitFor(() => {
+      expect(createService).toHaveBeenCalledWith(expect.objectContaining({
+        adapter_type: 'other',
+        required_secrets: [],
+      }))
+    })
+  })
+
+  it('does not patch required_secrets when editing other-adapter service without api_key', async () => {
+    const otherService = { ...mockService, adapter_type: 'other', required_secrets: [] }
+    vi.mocked(fetchServices).mockResolvedValue({ items: [otherService], next_cursor: null, total: 1 })
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(updateService).mockResolvedValue({ ...otherService, revision: 2 })
+    const user = userEvent.setup()
+    await act(async () => { renderWithRouter(<ModelServicesPage />) })
+    await waitFor(() => expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2))
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      // Should NOT inject api_key for other adapter
+      expect(updateService).toHaveBeenCalledWith('svc1', expect.not.objectContaining({
+        required_secrets: expect.arrayContaining(['api_key']),
+      }))
     })
   })
 })
@@ -630,6 +927,7 @@ describe('Production route tree verification', () => {
     vi.mocked(fetchServices).mockReset()
     vi.mocked(fetchService).mockReset()
     vi.mocked(fetchServiceSecrets).mockReset()
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
     vi.mocked(fetchVoiceAlignmentSettings).mockReset()
     vi.mocked(fetchToolchainSettings).mockReset()
     vi.mocked(fetchStorageSettings).mockReset()
@@ -642,7 +940,7 @@ describe('Production route tree verification', () => {
       renderWithRouter(<ModelServicesPage />, '/settings/models')
     })
     await waitFor(() => {
-      expect(screen.getByText('OpenAI GPT-4')).toBeInTheDocument()
+      expect(screen.getAllByText('OpenAI GPT-4').length).toBeGreaterThanOrEqual(2)
     })
   })
 

@@ -8,8 +8,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BackButton } from '../components/ui/BackButton'
 import { MountainApiError } from '../lib/api/http'
-import { createService, fetchService, updateService, setServiceSecret } from '../lib/api/services'
+import { createService, fetchService, updateService, setServiceSecret, fetchServiceSecrets, deleteServiceSecret } from '../lib/api/services'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { KNOWN_CAPABILITIES, KNOWN_ADAPTERS } from '../lib/api/types'
+import type { ServiceSecret } from '../lib/api/types'
 
 export function ServiceFormPage() {
   const { serviceId } = useParams<{ serviceId: string }>()
@@ -29,6 +31,9 @@ export function ServiceFormPage() {
   const [optionalSecrets, setOptionalSecrets] = useState('')
   const [configJson, setConfigJson] = useState('{}')
   const [apiKey, setApiKey] = useState('')
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [apiKeySecret, setApiKeySecret] = useState<ServiceSecret | null>(null)
+  const [clearTarget, setClearTarget] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +59,13 @@ export function ServiceFormPage() {
         setError(err instanceof MountainApiError ? err.message : '加载失败')
       })
       .finally(() => setIsLoading(false))
+    // Load secret status for API Key
+    fetchServiceSecrets(serviceId)
+      .then(res => {
+        const key = res.items.find(s => s.secret_key === 'api_key') ?? null
+        setApiKeySecret(key)
+      })
+      .catch(() => setApiKeySecret(null))
   }, [isEdit, serviceId])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +83,7 @@ export function ServiceFormPage() {
     const parsedRequiredSecrets = requiredSecrets
       ? requiredSecrets.split(',').map(s => s.trim()).filter(Boolean)
       : []
+    const needsApiKey = adapterType === 'openai_compatible' || adapterType === 'anthropic_compatible'
     const parsedOptionalSecrets = optionalSecrets
       ? optionalSecrets.split(',').map(s => s.trim()).filter(Boolean)
       : []
@@ -78,6 +91,10 @@ export function ServiceFormPage() {
     setIsSaving(true)
     try {
       if (isEdit && serviceId) {
+        // Ensure api_key is declared for adapter types that require it
+        const effectiveRequired = needsApiKey && !parsedRequiredSecrets.includes('api_key')
+          ? Array.from(new Set([...parsedRequiredSecrets, 'api_key']))
+          : parsedRequiredSecrets
         await updateService(serviceId, {
           display_name: displayName,
           capability,
@@ -86,12 +103,17 @@ export function ServiceFormPage() {
           model: model || undefined,
           priority: Number(priority),
           enabled,
-          required_secrets: parsedRequiredSecrets.length > 0 ? parsedRequiredSecrets : undefined,
+          required_secrets: effectiveRequired.length > 0 ? effectiveRequired : undefined,
           optional_secrets: parsedOptionalSecrets.length > 0 ? parsedOptionalSecrets : undefined,
           config,
         })
+        // Write API Key via Secret API if provided (replace existing)
+        if (apiKey) {
+          await setServiceSecret(serviceId, { key: 'api_key', value: apiKey })
+          setApiKey('')
+        }
       } else {
-        const effectiveRequiredSecrets = adapterType === 'openai_compatible'
+        const effectiveRequiredSecrets = needsApiKey
           ? Array.from(new Set([...parsedRequiredSecrets, 'api_key']))
           : parsedRequiredSecrets
         const created = await createService({
@@ -117,6 +139,18 @@ export function ServiceFormPage() {
       setError(err instanceof MountainApiError ? err.message : '保存失败')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleClearApiKey = async () => {
+    if (!serviceId) return
+    try {
+      await deleteServiceSecret(serviceId, 'api_key')
+      setApiKeySecret(null)
+      setClearTarget(false)
+    } catch (err) {
+      setError(err instanceof MountainApiError ? err.message : '清除 API Key 失败')
+      setClearTarget(false)
     }
   }
 
@@ -212,21 +246,28 @@ export function ServiceFormPage() {
           <input id="svc-model" type="text" className="input" placeholder="例如 gpt-4o-mini" value={model} onChange={e => setModel(e.target.value)} />
         </div>
 
-        {!isEdit && adapterType === 'openai_compatible' && (
-          <div className="form-field">
-            <label className="form-label" htmlFor="svc-api-key">API Key</label>
+        <div className="form-field">
+          <label className="form-label" htmlFor="svc-api-key">API Key</label>
+          {isEdit && apiKeySecret?.configured && !apiKey && (
+            <div className="form-help" style={{ marginBottom: 4 }}>已配置：{apiKeySecret.masked_value ?? '****'} · 留空保留原密钥，输入新值替换</div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input
               id="svc-api-key"
-              type="password"
+              type={showApiKey ? 'text' : 'password'}
               className="input"
               autoComplete="new-password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="只写入加密 SecretStore"
+              placeholder={isEdit && apiKeySecret?.configured ? '留空保留原密钥' : '只写入加密 SecretStore'}
             />
-            <div className="form-help">密钥不会写入服务 JSON、日志或 API 响应。</div>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowApiKey(v => !v)} aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}>{showApiKey ? '🙈 隐藏' : '👁 显示'}</button>
+            {isEdit && apiKeySecret?.configured && (
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => setClearTarget(true)}>清除</button>
+            )}
           </div>
-        )}
+          <div className="form-help">密钥不会写入服务 JSON、日志或 API 响应。</div>
+        </div>
 
         <div className="form-field">
           <label className="form-label" htmlFor="svc-priority">优先级</label>
@@ -279,6 +320,7 @@ export function ServiceFormPage() {
           </button>
         </div>
       </form>
+      <ConfirmDialog open={clearTarget} title="清除 API Key" message="确定清除该服务的 API Key？清除后需要重新输入才能使用。" confirmLabel="清除" danger onConfirm={handleClearApiKey} onCancel={() => setClearTarget(false)} />
     </div>
   )
 }
