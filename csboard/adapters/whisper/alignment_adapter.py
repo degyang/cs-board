@@ -9,8 +9,10 @@ Supports two modes:
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from csboard.domain.provider_types import AlignmentRequest, AlignmentResult
@@ -87,7 +89,9 @@ class WhisperAlignmentAdapter:
     def _parse_alignment_output(self, path: Path, text: str) -> AlignmentResult:
         """Parse the JSON output from align.mjs into AlignmentResult."""
         data = json.loads(path.read_text(encoding="utf-8"))
-        segments = data.get("speechSegments", [])
+        # align.mjs schema v2 puts recognised text and timestamps in
+        # `captions`; speechSegments contains silence boundaries only.
+        segments = data.get("captions") or data.get("speechSegments", [])
         if not segments:
             return AlignmentResult(
                 starts_ms={},
@@ -100,25 +104,37 @@ class WhisperAlignmentAdapter:
         # Build character-offset timestamps.  A character value is ambiguous
         # for repeated characters, whereas offsets can be mapped deterministically
         # to each VisualItem source range by the domain timing service.
-        starts_ms: dict[str, int] = {}
-        char_index = 0
+        recognised_chars: list[str] = []
+        recognised_times: list[int] = []
+        confidences: list[float] = []
         for seg in segments:
             seg_text = str(seg.get("text", "")).strip()
-            start_ms = int(float(seg.get("startMs", seg.get("start", 0)) * 1000))
-            end_ms = int(float(seg.get("endMs", seg.get("end", start_ms / 1000)) * 1000))
-            for offset, _ in enumerate(seg_text):
-                if char_index < len(text):
-                    starts_ms[f"char:{char_index}"] = start_ms + ((end_ms - start_ms) * offset // max(len(seg_text), 1))
-                    char_index += 1
+            start_ms = int(seg["startMs"]) if "startMs" in seg else int(float(seg.get("start", 0)) * 1000)
+            end_ms = int(seg["endMs"]) if "endMs" in seg else int(float(seg.get("end", start_ms / 1000)) * 1000)
+            clean = [char.lower() for char in seg_text if re.match(r"[\w\u3400-\u9fff]", char)]
+            for offset, char in enumerate(clean):
+                recognised_chars.append(char)
+                recognised_times.append(start_ms + ((end_ms - start_ms) * offset // max(len(clean), 1)))
+            if "confidence" in seg:
+                confidences.append(float(seg["confidence"]))
 
-        total_chars = len(text.strip())
-        matched = min(char_index, total_chars)
-        coverage = matched / max(total_chars, 1)
+        source = [(char.lower(), index) for index, char in enumerate(text)
+                  if re.match(r"[\w\u3400-\u9fff]", char)]
+        matcher = SequenceMatcher(None, [item[0] for item in source], recognised_chars, autojunk=False)
+        starts_ms: dict[str, int] = {}
+        matched = 0
+        for block in matcher.get_matching_blocks():
+            matched += block.size
+            for offset in range(block.size):
+                raw_index = source[block.a + offset][1]
+                starts_ms[f"char:{raw_index}"] = recognised_times[block.b + offset]
+        coverage = matched / max(len(source), 1)
+        confidence = sum(confidences) / len(confidences) if confidences else 0.9
 
         return AlignmentResult(
             starts_ms=starts_ms,
             coverage=coverage,
-            confidence=0.9,
+            confidence=confidence,
             engine="whisper-node",
         )
 

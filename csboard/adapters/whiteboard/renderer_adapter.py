@@ -120,7 +120,9 @@ class WhiteboardRendererAdapter:
             raise RuntimeError("Whiteboard rendering produced no clips")
 
         return RenderResult(
-            output_path=request.output_dir / clips[0]["clip_path"],
+            # clip_path is run-relative in the manifest; return the actual
+            # first clip path rather than accidentally prefixing render/ twice.
+            output_path=run_dir / clips[0]["clip_path"],
             duration_ms=total_duration_ms,
             frames=total_frames,
             request_id=request.request_id,

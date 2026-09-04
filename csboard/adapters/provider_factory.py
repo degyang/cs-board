@@ -529,7 +529,7 @@ class ProviderFactory:
 
         elif adapter_type == "whisper":
             from csboard.adapters.whisper.alignment_adapter import WhisperAlignmentAdapter
-            renderer_root = self._data_dir.parent / "video_renderer"
+            renderer_root = Path(__file__).resolve().parents[2] / "video_renderer"
             return WhisperAlignmentAdapter(
                 mode=config.get("mode", "node"),
                 renderer_root=renderer_root if renderer_root.exists() else None,

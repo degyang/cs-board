@@ -144,6 +144,8 @@ class TestWhiteboardRendererAdapterRender(unittest.TestCase):
             self.assertEqual(result.duration_ms, 5000)
             self.assertGreater(result.frames, 0)
             self.assertEqual(result.request_id, "test-render")
+            self.assertEqual(result.output_path, output_dir / "clips" / "vis-1.mp4")
+            self.assertTrue(result.output_path.is_file())
             self.assertIn("clips", result.provider_metadata)
             self.assertEqual(len(result.provider_metadata["clips"]), 1)
 

@@ -72,6 +72,8 @@ def test_create_alignment_adapter(factory: ProviderFactory):
     svc = _make_service("align-1", "whisper", "speech_alignment")
     adapter = factory.create_adapter(svc)
     assert adapter is not None
+    assert adapter._renderer_root.name == "video_renderer"
+    assert (adapter._renderer_root / "align.mjs").is_file()
 
 
 def test_create_media_adapter(factory: ProviderFactory):

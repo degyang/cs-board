@@ -53,6 +53,17 @@ class OpenAIImageAdapterTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.adapter.generate(ImageGenerationRequest(prompt="a cat"))
 
+    @patch("csboard.adapters.openai_compatible.image_adapter.httpx.Client")
+    def test_multiple_reference_images_use_ordered_edit_parts(self, mock_client_cls: MagicMock) -> None:
+        mock_resp = MagicMock()
+        mock_resp.is_error = False
+        mock_resp.json.return_value = {"data": [{"b64_json": base64.b64encode(b"\x89PNG result").decode()}]}
+        _mock_client(mock_client_cls, mock_resp)
+        self.adapter.generate(ImageGenerationRequest(prompt="route", reference_images=(b"first", b"second")))
+        files = mock_client_cls.return_value.__enter__.return_value.post.call_args.kwargs["files"]
+        self.assertEqual([field for field, _ in files], ["image[]", "image[]"])
+        self.assertEqual([part[1] for _, part in files], [b"first", b"second"])
+
     def test_capabilities(self) -> None:
         caps = self.adapter.capabilities()
         self.assertTrue(caps.reference_image)

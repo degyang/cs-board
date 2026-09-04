@@ -36,7 +36,7 @@ class OpenAIImageAdapter:
     # ── ImageModelPort ───────────────────────────────────────────────
 
     def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult:
-        if request.reference_image is not None:
+        if request.reference_image is not None or request.reference_images:
             return self._generate_with_reference(request)
         return self._generate_standard(request)
 
@@ -86,7 +86,8 @@ class OpenAIImageAdapter:
             "size": f"{request.width}x{request.height}",
             "response_format": request.response_format,
         }
-        files = {"image": ("reference.png", request.reference_image, "image/png")}
+        raw_images = request.reference_images or ((request.reference_image,) if request.reference_image is not None else ())
+        files = [("image[]" if len(raw_images) > 1 else "image", (f"reference-{index + 1}.png", content, "image/png")) for index, content in enumerate(raw_images)]
 
         last_exc: Exception | None = None
         for attempt in range(self._max_retries):
