@@ -1,11 +1,11 @@
 """StyleTemplate — 风格模板领域模型。
 
-preset 只读，只允许查看和复制为 custom。
-删除只允许停用（status=inactive），不做不可恢复的物理删除。
+preset 与 custom 都是可版本化管理资产；删除只停用，不物理删除。
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -28,6 +28,8 @@ class StyleTemplate:
     created_at: str = ""
     updated_at: str = ""
     config: dict[str, Any] = field(default_factory=dict)
+    # Characters are revision-owned data, never independently addressable assets.
+    characters: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -49,6 +51,7 @@ class StyleTemplate:
             created_at=str(value.get("created_at", "")),
             updated_at=str(value.get("updated_at", "")),
             config=dict(value.get("config") or {}),
+            characters=deepcopy(value.get("characters") or []),
         )
 
     def copy_to_custom(self, new_id: str, now: str) -> StyleTemplate:
@@ -68,4 +71,5 @@ class StyleTemplate:
             created_at=now,
             updated_at=now,
             config=dict(self.config),
+            characters=deepcopy(self.characters),
         )

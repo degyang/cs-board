@@ -26,6 +26,18 @@ class VoiceAsset:
     tags: list[str] = field(default_factory=list)
     revision: int = 1
     updated_at: str = ""
+    language: str = "und"
+    emotion_mode: str = "speaker"
+    example_text: str = ""
+    availability_status: str = "available"
+    status_note: str = ""
+    engine: str = "unknown"
+    emotion_weight: float | None = None
+    emotion_reference_asset_id: str = ""
+    source: str = ""
+    compatibility: dict[str, Any] = field(default_factory=lambda: {
+        "engines": ["unknown"], "emotion_modes": ["speaker"], "limitations": [],
+    })
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -46,4 +58,16 @@ class VoiceAsset:
             tags=list(value.get("tags", [])),
             revision=int(value.get("revision", 1)),
             updated_at=str(value.get("updated_at", "")),
+            language=str(value.get("language", "und")),
+            emotion_mode=str(value.get("emotion_mode", "speaker")),
+            example_text=str(value.get("example_text", "")),
+            availability_status=str(value.get("availability_status", "available")),
+            status_note=str(value.get("status_note", "")),
+            engine=str(value.get("engine", "unknown")),
+            emotion_weight=(float(value["emotion_weight"]) if value.get("emotion_weight") is not None else None),
+            emotion_reference_asset_id=str(value.get("emotion_reference_asset_id", "")),
+            source=str(value.get("source", "")),
+            compatibility=dict(value.get("compatibility") or {
+                "engines": ["unknown"], "emotion_modes": ["speaker"], "limitations": [],
+            }),
         )

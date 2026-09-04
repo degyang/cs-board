@@ -88,12 +88,14 @@ class TestMaxCharsEffect:
         # At least verify the algorithm produces multiple units with small max_chars
         assert len(result["voice_units"]) > 1
 
-    def test_single_sentence_exceeding_max_becomes_own_unit(self):
+    def test_single_sentence_exceeding_max_uses_safe_fallback(self):
         long_sentence = "很长" * 80 + "。"  # 160+ chars
         text = long_sentence + "短句。"
         result = prepare_script(text, target_chars=50, min_chars=20, max_chars=100)
-        # The long sentence exceeds max_chars, so it becomes its own unit
-        assert result["voice_units"][0]["text"] == long_sentence
+        # The hard maximum, rather than the soft target, triggers splitting.
+        assert "".join(unit["text"] for unit in result["voice_units"]) == text
+        assert all(len(unit["text"]) <= 100 for unit in result["voice_units"])
+        assert result["voice_units"][0]["boundary_reason"] == "grapheme-fallback"
 
 
 # ── Coverage ─────────────────────────────────────────────────────────────────
@@ -186,3 +188,80 @@ class TestChinesePunctuation:
         result = prepare_script(text)
         assert len(result["voice_units"]) == 1
         assert result["voice_units"][0]["text"] == text
+
+
+class TestParagraphFirstAuthority:
+    def test_inter_sentence_space_is_preserved_with_continuous_mapping(self):
+        text = "Hello world. Next sentence."
+        result = prepare_script(text, target_chars=70, min_chars=10, max_chars=140)
+        units = result["voice_units"]
+        assert [unit["text"] for unit in units] == [text]
+        assert units[0]["source_range"] == {"start": 0, "end": len(text)}
+        assert units[0]["normalized_range"] == {"start": 0, "end": len(text)}
+        assert result["normalized_processing_text"] == text
+
+    def test_hard_max_wins_over_minimum_without_reordering(self):
+        # The first sentence is below min; the next atom is exactly max.  The
+        # previous packer joined them and silently exceeded the hard limit.
+        text = "短。" + "长" * 9 + "。"
+        result = prepare_script(text, target_chars=8, min_chars=5, max_chars=10)
+        units = result["voice_units"]
+        assert [unit["text"] for unit in units] == ["短。", "长" * 9 + "。"]
+        assert all(len(unit["text"]) <= 10 for unit in units)
+        assert "".join(unit["text"] for unit in units) == text
+        assert units[0]["undersize_reason"] == "hard-max"
+
+    def test_normalizes_layout_but_preserves_raw_mapping(self):
+        raw = " \r\n第一句。\r\r\n \t \n第二句。 \n"
+        result = prepare_script(raw, target_chars=70, min_chars=42, max_chars=140)
+        assert result["raw_script"] == raw
+        assert result["normalized_processing_text"] == "第一句。\n第二句。"
+        assert all(unit["text"] == unit["text"].strip() and "\n" not in unit["text"] and "\r" not in unit["text"] for unit in result["voice_units"])
+        assert result["source_mapping"]["range_semantics"] == "zero-based, end-exclusive"
+        assert {item["reason"] for item in result["source_mapping"]["ignored_raw_ranges"]} >= {"paragraph-boundary", "layout-whitespace"}
+
+    def test_context_sensitive_punctuation_stays_intact(self):
+        text = "医学2.0 和医学3.0；IP 127.0.0.1，访问 example.com/a?x=1，邮件 a@b.com，文件 v1.2.txt，Dr. Wang 说 U.S. e.g. 可以。"
+        result = prepare_script(text, target_chars=70, min_chars=42, max_chars=140)
+        assert "".join(unit["text"] for unit in result["voice_units"]) == text
+        assert all(token in "".join(unit["text"] for unit in result["voice_units"]) for token in ("医学2.0", "医学3.0", "127.0.0.1", "example.com", "a@b.com", "v1.2.txt", "Dr.", "U.S."))
+
+    def test_short_tail_rebalances_but_short_paragraph_is_explicit(self):
+        inline = "甲" * 45 + "。" + "乙" * 40 + "。" + "丙" * 8 + "。"
+        packed = prepare_script(inline, target_chars=70, min_chars=42, max_chars=140)["voice_units"]
+        assert all(not (len(unit["text"]) < 42 and unit["undersize_reason"] is None) for unit in packed)
+        explicit = prepare_script("这是完整的第一段文字。\n\n这是什么意思呢？", target_chars=70, min_chars=42, max_chars=140)["voice_units"]
+        assert explicit[-1]["text"] == "这是什么意思呢？"
+        assert explicit[-1]["undersize_reason"] == "paragraph-boundary"
+
+    def test_over_hard_max_uses_graphemes_not_soft_target_slicing(self):
+        text = "长" * 145 + "。"
+        units = prepare_script(text, target_chars=70, min_chars=42, max_chars=140)["voice_units"]
+        assert "".join(unit["text"] for unit in units) == text
+        assert len(units) == 2
+        assert units[0]["boundary_reason"] == "grapheme-fallback"
+
+    def test_deterministic_idempotent_and_manual_examples(self):
+        from pathlib import Path
+        source = Path("docs/workmates/evidence/manual-001-script.txt").read_text(encoding="utf-8")
+        first = prepare_script(source, target_chars=70, min_chars=42, max_chars=140)
+        second = prepare_script(source, target_chars=70, min_chars=42, max_chars=140)
+        assert first == second
+        assert all(unit["text"] != "这是什么意思呢？" for unit in first["voice_units"])
+        assert all("\n" not in unit["text"] for unit in first["voice_units"])
+
+    def test_manual_004_original_script_has_safe_paragraph_and_token_boundaries(self):
+        from pathlib import Path
+        source = Path("docs/workmates/evidence/manual-001-script.txt").read_text(encoding="utf-8")
+        result = prepare_script(source, target_chars=70, min_chars=42, max_chars=140)
+        units = result["voice_units"]
+        paragraphs = [paragraph.strip() for paragraph in source.split("\n\n")]
+        assert len(result["source_mapping"]["paragraphs"]) == len(paragraphs)
+        assert all("\n" not in unit["text"] and "\r" not in unit["text"] for unit in units)
+        assert all(len(unit["text"]) <= 140 for unit in units)
+        assert [unit["paragraph_index"] for unit in units] == sorted(unit["paragraph_index"] for unit in units)
+        # Reported live failures must stay whole and never become unit seams.
+        combined = "".join(unit["text"] for unit in units)
+        for token in ("算是人类健康的天花板", "半截身子都已经入土了", "医学2.0", "整整20年", "这四个恶魔", "去爬个小山"):
+            assert token in combined
+        assert all(not unit["text"].endswith(suffix) for unit in units for suffix in ("算", "半", "2.", "恶", "去"))

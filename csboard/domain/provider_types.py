@@ -58,6 +58,7 @@ class ImageGenerationRequest:
     n: int = 1
     response_format: str = "b64_json"
     reference_image: bytes | None = None
+    reference_images: tuple[bytes, ...] = ()
     timeout_seconds: float = 120.0
     request_id: str = ""
 
@@ -85,6 +86,7 @@ class ImageModelCapabilities:
 class TTSRequest:
     text: str
     voice_id: str = ""
+    voice_config: dict[str, Any] = field(default_factory=dict)
     reference_audio: Path | None = None
     language: str = "zh"
     sample_rate: int = 24000

@@ -131,6 +131,12 @@ class TestStoryboardService(unittest.TestCase):
         self.assertIn("bible", result)
         self.assertIn("style", result["bible"])
 
+    def test_missing_optional_text_model_uses_saved_style_context(self) -> None:
+        service = StoryboardService(None, self.repo, {"style": "粗线条科学白板风"})
+        result = service.run(self.task_id, self.run_id)
+        self.assertEqual(result["bible"]["style"], "粗线条科学白板风")
+        self.assertTrue(all("粗线条科学白板风" in item["prompt"] for item in result["storyboard"]["visuals"]))
+
     def test_artifact_committed(self) -> None:
         service = StoryboardService(self.text_model, self.repo)
         result = service.run(self.task_id, self.run_id)
