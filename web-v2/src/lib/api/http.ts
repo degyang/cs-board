@@ -15,7 +15,9 @@
    Also compatible with FastAPI detail format.
    ========================================================================== */
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1'
+// Keep every API module on the same-origin /api route by default. Vite proxies
+// it in development; production may override it with VITE_API_BASE_URL.
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 export class MountainApiError extends Error {
   public status: number

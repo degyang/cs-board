@@ -107,6 +107,16 @@ export interface CreateOptionsResponse {
   }
 }
 
+export interface DirectoryEntry {
+  name: string
+  path: string
+}
+
+export interface DirectoryBrowseResponse {
+  path: string
+  directories: DirectoryEntry[]
+}
+
 // ── Tasks ───────────────────────────────────────────────────────────────
 
 export interface Task {
@@ -148,6 +158,7 @@ export interface CreateTaskRequest {
   engine?: string
   pipeline_id?: string
   submission_id?: string
+  output_root?: string
 }
 
 export interface CreateTaskResponse {
@@ -158,6 +169,9 @@ export interface CreateTaskResponse {
   trace_id: string
   command_id: string
   event_sequence: number
+  output_root?: string
+  package_path?: string
+  package_dir?: string
 }
 
 // ── Run ─────────────────────────────────────────────────────────────────
@@ -297,14 +311,32 @@ export interface VoiceUnitDTO {
   unit_id: string
   order: number
   source_range: { start: number; end: number }
+  normalized_range: { start: number; end: number }
   text: string
+  paragraph_index: number
+  boundary_reason: 'paragraph' | 'strong-sentence' | 'weak-boundary' | 'grapheme-fallback' | 'unbreakable-token-over-max'
+  undersize_reason: 'paragraph-boundary' | null
 }
 
 export interface ScriptPreparation {
   algorithm_version: string
   rules: { target_chars: number; min_chars: number; max_chars: number }
+  raw_script: string
+  normalized_processing_text: string
+  source_mapping: {
+    index_unit: 'unicode-code-point'
+    range_semantics: 'zero-based, end-exclusive'
+    raw_length: number
+    normalized_length: number
+    paragraphs: Array<{ raw_range: { start: number; end: number }; paragraph_index: number; normalized_range: { start: number; end: number } }>
+    raw_to_normalized: Array<{ raw_range: { start: number; end: number }; normalized_range: { start: number; end: number } }>
+    normalized_to_raw: Array<{ normalized_range: { start: number; end: number }; raw_range: { start: number; end: number } }>
+    ignored_raw_ranges: Array<{ start: number; end: number; reason: string }>
+  }
   voice_units: VoiceUnitDTO[]
 }
+
+export type ScriptPreviewResponse = ScriptPreparation
 
 export interface InputsRules {
   target_chars: number
@@ -337,6 +369,7 @@ export interface InputsReadback {
     size_bytes: number | null
   }
   rules: InputsRules | null
+  raw_script?: string | null
   script_preparation: ScriptPreparation | null
   visual_anchor_enabled: boolean
   execution_plan: ExecutionPlan
@@ -369,8 +402,10 @@ export type AdapterType = string
 /** Known capabilities with display names */
 export const KNOWN_CAPABILITIES: Record<string, string> = {
   text_generation: '文本生成',
+  multimodal: '多模态',
   image_generation: '图像生成',
   video_generation: '视频生成',
+  audio_generation: '音频生成',
   speech_synthesis: '语音合成',
   speech_alignment: '语音对齐',
   rendering: '渲染',
@@ -381,6 +416,8 @@ export const KNOWN_CAPABILITIES: Record<string, string> = {
 /** Known adapters with display names */
 export const KNOWN_ADAPTERS: Record<string, string> = {
   openai_compatible: 'OpenAI 兼容',
+  anthropic_compatible: 'Anthropic 兼容',
+  other: '其他',
   indextts: 'IndexTTS',
   whisper: 'Whisper',
   codex_skill: 'Codex 技能',
@@ -485,9 +522,37 @@ export interface StyleTemplate {
   prompt_text: string | null
   negative_prompt: string | null
   preview_asset_id: string | null
-  config: Record<string, unknown>
+  /** Characters are embedded in, and versioned with, a custom Style revision. */
+  characters?: StyleCharacter[]
+  config: StyleTemplateConfig
   created_at: string
   updated_at: string
+}
+
+export interface StyleTemplateConfig {
+  [key: string]: unknown
+  reference_routing?: StyleReferenceRouting
+}
+
+export interface StyleReferenceRoute {
+  rule_id: string
+  name: string
+  keywords: string[]
+  reference_asset_ids: string[]
+  order: number
+}
+
+export interface StyleReferenceRouting {
+  enabled: boolean
+  match_mode: 'first'
+  rules: StyleReferenceRoute[]
+}
+
+export interface StyleCharacter {
+  character_id: string
+  name: string
+  description: string
+  reference_asset_ids: string[]
 }
 
 export interface StyleListResponse {
@@ -513,6 +578,7 @@ export interface CreateStyleRequest {
   negative_prompt?: string
   tags?: string[]
   preview_asset_id?: string
+  characters?: StyleCharacter[]
   reference_images?: File[]
 }
 
@@ -524,6 +590,33 @@ export interface UpdateStyleRequest {
   negative_prompt?: string
   tags?: string[]
   preview_asset_id?: string
+  characters?: StyleCharacter[]
+  config?: StyleTemplate['config']
+  expected_revision?: number
+}
+
+// ── Assets: read-only preconditions ────────────────────────────────────
+
+export type PreconditionKind = 'visual-explainer' | 'renderer-hand'
+
+export interface Precondition {
+  precondition_id: string
+  revision: number
+  name: string
+  kind: PreconditionKind
+  applies_to: string[]
+  status: 'active' | 'inactive'
+  enabled: boolean
+  engine_compatibility: string[]
+  preview_asset_id: string | null
+  description: string
+  condition_text: string
+}
+
+export interface PreconditionListResponse {
+  items: Precondition[]
+  next_cursor: string | null
+  total: number
 }
 
 // ── Assets: Voices ──────────────────────────────────────────────────────
@@ -539,9 +632,24 @@ export interface VoiceDefinition {
   format: string | null
   enabled: boolean
   status: 'active' | 'inactive'
+  /** Raw Mountain voice DTO compatibility; API client normalizes this to status/enabled. */
+  is_active?: boolean
   content_url?: string | null
+  language?: string
+  emotion_mode?: string
+  example_text?: string
+  availability_status?: 'available' | 'verified' | 'limited'
+  status_note?: string
+  engine?: string
+  compatibility?: VoiceCompatibility
   created_at: string
   updated_at: string
+}
+
+export interface VoiceCompatibility {
+  engines: string[]
+  emotion_modes: string[]
+  limitations: string[]
 }
 
 /** Unified voice DTO name — alias for VoiceDefinition */
@@ -564,11 +672,25 @@ export interface CreateVoiceRequest {
   name: string
   tags?: string[]
   audio_file: File
+  language?: string
+  emotion_mode?: string
+  example_text?: string
+  availability_status?: 'available' | 'verified' | 'limited'
+  status_note?: string
+  engine?: string
+  compatibility?: VoiceDefinition['compatibility']
 }
 
 export interface UpdateVoiceRequest {
   name?: string
   tags?: string[]
+  language?: string
+  emotion_mode?: string
+  example_text?: string
+  availability_status?: 'available' | 'verified' | 'limited'
+  status_note?: string
+  engine?: string
+  compatibility?: VoiceDefinition['compatibility']
 }
 
 // ── Settings ────────────────────────────────────────────────────────────

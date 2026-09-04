@@ -5,6 +5,7 @@ import { CreateTaskPage } from '../pages/CreateTaskPage'
 import { TaskWorkbenchPage } from '../pages/TaskWorkbenchPage'
 import { RunDiagnosticsPage } from '../pages/RunDiagnosticsPage'
 import { AssetManagementPage } from '../pages/AssetManagementPage'
+import { VoiceManagementPage } from '../pages/VoiceManagementPage'
 import { SettingsLayout } from '../pages/SettingsLayout'
 import { ModelServicesPage } from '../pages/ModelServicesPage'
 import { ServiceDetailPage } from '../pages/ServiceDetailPage'
@@ -44,7 +45,9 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       ...TASK_ROUTES,
-      { path: 'assets', element: <AssetManagementPage /> },
+      { path: 'assets', element: <Navigate to="/assets/styles" replace /> },
+      { path: 'assets/styles', element: <AssetManagementPage /> },
+      { path: 'assets/voices', element: <VoiceManagementPage /> },
       { path: 'settings', element: <Navigate to="/settings/models" replace /> },
       SETTINGS_ROUTES,
       { path: 'help', element: <HelpPage /> },

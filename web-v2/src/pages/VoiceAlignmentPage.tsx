@@ -99,7 +99,7 @@ function ServiceCard({
     <div className="va-service-card">
       <div className="va-service-header">
         <h2 className="va-service-title">{title}</h2>
-        <Link to={`/settings/models/${service.service_id}`} className="va-service-link">
+        <Link to="/settings/models" className="va-service-link">
           {service.display_name}
         </Link>
       </div>

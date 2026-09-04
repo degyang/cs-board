@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MountainApiError, request, getVoiceContentUrl } from '../src/lib/api/http'
-import { fetchStyles, createStyle, updateStyle, activateStyle, deactivateStyle, copyStyle, fetchVoices, createVoice, activateVoice, deactivateVoice, uploadAsset } from '../src/lib/api/assets'
+import * as assetsApi from '../src/lib/api/assets'
+import { fetchStyles, createStyle, updateStyle, activateStyle, deactivateStyle, fetchVoices, createVoice, activateVoice, deactivateVoice, uploadAsset } from '../src/lib/api/assets'
 import { fetchServices, createService, updateService, deleteService, activateService, deactivateService, probeService, setDefaultService, fetchServiceSecrets, setServiceSecret, deleteServiceSecret } from '../src/lib/api/services'
 import { fetchRuntimeSettings, fetchVoiceAlignmentSettings, fetchToolchainSettings, fetchStorageSettings, fetchDiagnosticsSettings } from '../src/lib/api/settings'
 
@@ -71,14 +72,8 @@ describe('Assets HTTP contract', () => {
     expect(init.method).toBe('POST')
   })
 
-  it('copyStyle uses POST /assets/styles/{id}/copy', async () => {
-    const mockFetch = vi.fn().mockImplementation(() => jsonResponse({ style_id: 's2', name: 'Copy' }))
-    vi.stubGlobal('fetch', mockFetch)
-
-    await copyStyle('s1')
-    const [url, init] = mockFetch.mock.calls[0]
-    expect(url).toContain('/assets/styles/s1/copy')
-    expect(init.method).toBe('POST')
+  it('does not expose the removed copy-as-custom client action', () => {
+    expect(assetsApi).not.toHaveProperty('copyStyle')
   })
 
   it('fetchVoices uses GET /assets/voices', async () => {
@@ -88,6 +83,25 @@ describe('Assets HTTP contract', () => {
     await fetchVoices()
     const [url] = mockFetch.mock.calls[0]
     expect(url).toContain('/assets/voices')
+  })
+
+  it('normalizes the live is_active voice DTO for Asset and CreateTask consumers', async () => {
+    const base = {
+      name: '基准音色', tags: [], duration_ms: 1200, sample_rate: 44100,
+      channels: 1, format: 'wav', created_at: '2026-09-04T00:00:00Z', updated_at: '2026-09-04T00:00:00Z',
+    }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => jsonResponse({
+      items: [
+        { ...base, voice_id: 'voice-active', is_active: true },
+        { ...base, voice_id: 'voice-inactive', is_active: false },
+      ],
+      next_cursor: null,
+      total: 2,
+    })))
+
+    const result = await fetchVoices()
+    expect(result.items[0]).toMatchObject({ voice_id: 'voice-active', is_active: true, enabled: true, status: 'active' })
+    expect(result.items[1]).toMatchObject({ voice_id: 'voice-inactive', is_active: false, enabled: false, status: 'inactive' })
   })
 
   it('createVoice uses POST /assets/voices with FormData', async () => {

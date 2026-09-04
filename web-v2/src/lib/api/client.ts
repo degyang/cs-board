@@ -21,9 +21,14 @@ import type {
   InputsReadback,
   ApiError,
   CreateOptionsResponse,
+  ScriptPreviewResponse,
+  DirectoryBrowseResponse,
 } from './types'
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1'
+// Default to the same-origin path so the development server's /api proxy and
+// production reverse proxy handle JSON POSTs without a cross-origin preflight.
+// Deployments that need a distinct origin can still opt in explicitly.
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 export class MountainApiError extends Error {
   constructor(
@@ -151,6 +156,16 @@ export function fetchCapabilities(): Promise<CapabilitiesResponse> {
 
 export function fetchCreateOptions(): Promise<CreateOptionsResponse> {
   return get<CreateOptionsResponse>('/tasks/create-options')
+}
+
+export function fetchDirectories(path?: string): Promise<DirectoryBrowseResponse> {
+  const query = path && path !== '.' ? `?path=${encodeURIComponent(path)}` : ''
+  return get<DirectoryBrowseResponse>(`/directories${query}`)
+}
+
+/** Read-only paragraph-first-v2 preview. It neither creates nor modifies a Task. */
+export function previewScript(req: { script: string; target_chars: number }): Promise<ScriptPreviewResponse> {
+  return post<ScriptPreviewResponse>('/scripts/prepare', req)
 }
 
 // ── Tasks ────────────────────────────────────────────────────────────

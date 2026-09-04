@@ -43,7 +43,9 @@ function renderShell(path = '/tasks') {
           <Route index element={<div>主页</div>} />
           <Route path="tasks" element={<div>任务页面</div>} />
           <Route path="tasks/new" element={<div>创建任务</div>} />
-          <Route path="assets" element={<div>素材</div>} />
+          <Route path="assets" element={<div>资产</div>} />
+          <Route path="assets/styles" element={<div>图风管理</div>} />
+          <Route path="assets/voices" element={<div>音色管理</div>} />
           <Route path="settings" element={<div>设置</div>} />
           <Route path="help" element={<div>帮助</div>} />
         </Route>

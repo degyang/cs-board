@@ -134,15 +134,24 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
           <span className="lbl">新建任务</span>
         </NavLink>
 
-        <p className="nav-group-label">素材</p>
-        <NavLink to="/assets" title="素材管理" aria-label="素材管理">
+        <p className="nav-group-label">资产</p>
+        <NavLink to="/assets/styles" title="图风管理" aria-label="图风管理">
           <span className="nav-ico">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
               <path d="M3 12l3-3 2 2 4-4 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <span className="lbl">素材管理</span>
+          <span className="lbl">图风管理</span>
+        </NavLink>
+        <NavLink to="/assets/voices" title="音色管理" aria-label="音色管理">
+          <span className="nav-ico">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M9 2a4 4 0 014 4v3a4 4 0 01-8 0V6a4 4 0 014-4z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M4 11a6 6 0 0010 0M9 15v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="lbl">音色管理</span>
         </NavLink>
 
         <p className="nav-group-label">系统</p>

@@ -1,6 +1,6 @@
 /* ==========================================================================
    Mountain Assets API
-   Styles (preset + custom) and voices.
+   Styles (preset + custom), read-only preconditions, and voices.
    ========================================================================== */
 
 import { get, post, patch, del, postForm, getVoiceContentUrl, getAssetBlobUrl } from './http'
@@ -11,6 +11,8 @@ import type {
   VoiceDefinition,
   VoiceListResponse,
   VoiceListParams,
+  PreconditionListResponse,
+  Precondition,
 } from './types'
 
 export { getVoiceContentUrl, getAssetBlobUrl }
@@ -54,6 +56,7 @@ export function fetchStyle(styleId: string): Promise<StyleTemplate> {
 }
 
 export function createStyle(body: {
+  kind?: 'preset' | 'custom'
   name: string
   description?: string
   engine?: string
@@ -61,6 +64,7 @@ export function createStyle(body: {
   negative_prompt?: string
   tags?: string[]
   preview_asset_id?: string
+  characters?: import('./types').StyleCharacter[]
 }): Promise<StyleTemplate> {
   return post('/assets/styles', body)
 }
@@ -75,6 +79,9 @@ export function updateStyle(
     negative_prompt?: string
     tags?: string[]
     preview_asset_id?: string
+    characters?: import('./types').StyleCharacter[]
+    config?: import('./types').StyleTemplate['config']
+    expected_revision?: number
   },
 ): Promise<StyleTemplate> {
   return patch(`/assets/styles/${encodeURIComponent(styleId)}`, body)
@@ -92,47 +99,77 @@ export function deactivateStyle(styleId: string): Promise<StyleTemplate> {
   return post(`/assets/styles/${encodeURIComponent(styleId)}/deactivate`)
 }
 
-export function copyStyle(styleId: string): Promise<StyleTemplate> {
-  return post(`/assets/styles/${encodeURIComponent(styleId)}/copy`)
+// ---------------------------------------------------------------------------
+// Preconditions (read-only catalog; no Task selection or mutation contract)
+// ---------------------------------------------------------------------------
+
+export function fetchPreconditions(): Promise<PreconditionListResponse> {
+  return get('/assets/preconditions')
+}
+
+export function fetchPrecondition(preconditionId: string): Promise<Precondition> {
+  return get(`/assets/preconditions/${encodeURIComponent(preconditionId)}`)
 }
 
 // ---------------------------------------------------------------------------
 // Voices
 // ---------------------------------------------------------------------------
 
-export function fetchVoices(params: VoiceListParams = {}): Promise<VoiceListResponse> {
+type VoiceApiDto = Omit<VoiceDefinition, 'enabled' | 'status'> & {
+  enabled?: boolean
+  status?: 'active' | 'inactive'
+  is_active?: boolean
+}
+
+/** Normalize the live Mountain DTO (`is_active`) for all UI consumers. */
+function normalizeVoice(voice: VoiceApiDto): VoiceDefinition {
+  const active = typeof voice.is_active === 'boolean'
+    ? voice.is_active
+    : voice.status
+      ? voice.status === 'active'
+      : voice.enabled === true
+  return { ...voice, is_active: active, enabled: active, status: active ? 'active' : 'inactive' }
+}
+
+export async function fetchVoices(params: VoiceListParams = {}): Promise<VoiceListResponse> {
   const qs = new URLSearchParams()
   if (params.status) qs.set('status', params.status)
   if (params.q) qs.set('q', params.q)
   if (params.cursor) qs.set('cursor', params.cursor)
   if (params.limit) qs.set('limit', String(params.limit))
   const query = qs.toString()
-  return get(`/assets/voices${query ? `?${query}` : ''}`)
+  const response = await get<VoiceListResponse & { items: VoiceApiDto[] }>(`/assets/voices${query ? `?${query}` : ''}`)
+  return { ...response, items: response.items.map(normalizeVoice) }
 }
 
-export function fetchVoice(voiceId: string): Promise<VoiceDefinition> {
-  return get(`/assets/voices/${encodeURIComponent(voiceId)}`)
+export async function fetchVoice(voiceId: string): Promise<VoiceDefinition> {
+  return normalizeVoice(await get<VoiceApiDto>(`/assets/voices/${encodeURIComponent(voiceId)}`))
 }
 
 export async function createVoice(form: FormData): Promise<VoiceDefinition> {
-  return postForm('/assets/voices', form)
+  return normalizeVoice(await postForm<VoiceApiDto>('/assets/voices', form))
 }
 
-export function updateVoice(
+export async function updateVoice(
   voiceId: string,
-  body: { name?: string; tags?: string[] },
+  body: {
+    name?: string; tags?: string[]; language?: string; emotion_mode?: string
+    example_text?: string; availability_status?: 'available' | 'verified' | 'limited'
+    status_note?: string; engine?: string
+    compatibility?: VoiceDefinition['compatibility']
+  },
 ): Promise<VoiceDefinition> {
-  return patch(`/assets/voices/${encodeURIComponent(voiceId)}`, body)
+  return normalizeVoice(await patch<VoiceApiDto>(`/assets/voices/${encodeURIComponent(voiceId)}`, body))
 }
 
 export function deleteVoice(voiceId: string): Promise<void> {
   return del(`/assets/voices/${encodeURIComponent(voiceId)}`)
 }
 
-export function activateVoice(voiceId: string): Promise<VoiceDefinition> {
-  return post(`/assets/voices/${encodeURIComponent(voiceId)}/activate`)
+export async function activateVoice(voiceId: string): Promise<VoiceDefinition> {
+  return normalizeVoice(await post<VoiceApiDto>(`/assets/voices/${encodeURIComponent(voiceId)}/activate`))
 }
 
-export function deactivateVoice(voiceId: string): Promise<VoiceDefinition> {
-  return post(`/assets/voices/${encodeURIComponent(voiceId)}/deactivate`)
+export async function deactivateVoice(voiceId: string): Promise<VoiceDefinition> {
+  return normalizeVoice(await post<VoiceApiDto>(`/assets/voices/${encodeURIComponent(voiceId)}/deactivate`))
 }
