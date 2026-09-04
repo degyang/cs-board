@@ -45,4 +45,4 @@ def test_unapproved_upstream_blocks_before_execution_side_effects(tmp_path: Path
     with pytest.raises(DomainError) as error:
         commands.stage_run(task_id, run_id, "clone-voice", CommandContext(entrypoint=Entrypoint.CLI))
     assert error.value.code == "STAGE_GATE_REQUIRED"
-    assert not (tmp_path / "tasks" / task_id / "runs" / run_id / "gates.json").exists()
+    assert not (commands.repository.run_dir(task_id, run_id) / "gates.json").exists()

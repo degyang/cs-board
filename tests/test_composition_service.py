@@ -24,7 +24,7 @@ class TestCompositionServiceUnit(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
         self.repo = FilesystemTaskRepository(self.tmpdir)
-        self.media = FakeMedia()
+        self.media = FakeMedia(duration_ms=10000)
 
         # Create project and run
         self.task = Task(
@@ -208,6 +208,7 @@ class TestCompositionServiceUnit(unittest.TestCase):
         self.assertIn("clips", manifest)
         self.assertIn("audio_units", manifest)
         self.assertIn("quality", manifest)
+        self.assertTrue(manifest["validation"]["passed"])
 
         # Check quality section
         quality = manifest["quality"]

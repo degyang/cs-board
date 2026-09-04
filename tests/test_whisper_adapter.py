@@ -99,6 +99,21 @@ class TestWhisperNodeMode(unittest.TestCase):
         self.assertEqual(result.coverage, 0.0)
         self.assertEqual(result.reason_code, "NO_SEGMENTS")
 
+    def test_schema_v2_captions_use_milliseconds_and_ignore_punctuation(self) -> None:
+        result = self._run_node_adapter(
+            output_data={
+                "speechSegments": [{"startMs": 0, "endMs": 2600}],
+                "captions": [
+                    {"text": "医学2.0向医学3.0", "startMs": 120, "endMs": 2520, "confidence": 0.98}
+                ],
+            },
+            text="医学2.0，向医学3.0。",
+        )
+        self.assertGreaterEqual(result.coverage, 0.95)
+        self.assertEqual(result.starts_ms["char:0"], 120)
+        self.assertLess(max(result.starts_ms.values()), 3000)
+        self.assertAlmostEqual(result.confidence, 0.98)
+
 
 # ── HTTP mode tests ──────────────────────────────────────────────────
 

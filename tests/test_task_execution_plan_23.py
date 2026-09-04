@@ -117,8 +117,9 @@ def test_execution_plan_same_source_api_repository_and_cli_subprocess(tmp_path: 
     assert api_read["execution_plan"] == expected
     assert rebuilt["execution_plan"] == expected
     assert json.loads(completed.stdout)["execution_plan"] == expected
-    expected_preparation = (FilesystemTaskRepository(tmp_path).read_json(
-        tmp_path / "tasks" / task_id / "task.json")["script_preparation"])
+    repository = FilesystemTaskRepository(tmp_path)
+    expected_preparation = repository.read_json(
+        repository.task_dir(task_id) / "task.json")["script_preparation"]
     assert api_read["script_preparation"] == expected_preparation
     assert rebuilt["script_preparation"] == expected_preparation
     assert api_read["visual_anchor_enabled"] is False
@@ -328,7 +329,7 @@ def test_domain_error_response_details_precedence_and_fallback() -> None:
 
 def _service(service_id: str, **kwargs: object) -> ServiceDefinition:
     values: dict[str, object] = {"service_id": service_id, "display_name": service_id,
-        "capability": "text_generation", "adapter_type": "openai_compatible", "endpoint": "https://example.invalid",
+        "capability": "text_generation", "adapter_type": "other", "endpoint": "https://example.invalid",
         "model": "test", "enabled": True, "priority": 100, "is_default": False, "config": {},
         "required_secrets": [], "optional_secrets": []}
     values.update(kwargs)

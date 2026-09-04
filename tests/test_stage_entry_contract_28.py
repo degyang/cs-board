@@ -6,6 +6,7 @@ import pytest
 from starlette.testclient import TestClient
 from webapp.mountain_server import create_app
 from csboard.adapters.filesystem import FilesystemArtifactStore
+from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.domain.execution_plan import CANONICAL_STAGES
 from tests.test_stage_gates_24 import _commands
 
@@ -18,7 +19,7 @@ def test_start_rejects_missing_reference_and_unsafe_reference(tmp_path: Path) ->
     assert client.post(f"/api/v1/tasks/{task_id}/inputs", data={"script": "这是足够长的输入文案但没有参考音频。"}).status_code == 200
     response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     assert response.status_code == 400 and "reference_audio" in response.json()["error"]["details"]["invalid_fields"]
-    path = tmp_path / "tasks" / task_id / "request.json"
+    path = FilesystemTaskRepository(tmp_path).task_dir(task_id) / "request.json"
     import json
     data = json.loads(path.read_text()); data["reference_audio"] = "../../secret.wav"; path.write_text(json.dumps(data))
     assert client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start").status_code == 400
@@ -26,8 +27,9 @@ def test_start_rejects_missing_reference_and_unsafe_reference(tmp_path: Path) ->
 def test_start_rejects_zero_byte_reference_without_side_effects(tmp_path: Path) -> None:
     client = TestClient(create_app(tmp_path)); task_id, run_id = _created(client)
     assert client.post(f"/api/v1/tasks/{task_id}/inputs", data={"script": "这是足够长的输入文案但参考音频为空。"}, files={"reference": ("voice.wav", b"RIFF-audio", "audio/wav")}).status_code == 200
-    (tmp_path / "tasks" / task_id / "inputs" / "reference.wav").write_bytes(b"")
-    root = tmp_path / "tasks" / task_id; before = _snapshot(root)
+    root = FilesystemTaskRepository(tmp_path).task_dir(task_id)
+    (root / "inputs" / "reference.wav").write_bytes(b"")
+    before = _snapshot(root)
     response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     assert response.status_code == 400 and response.json()["error"]["details"]["invalid_fields"] == ["reference_audio"] and _snapshot(root) == before
 
@@ -43,7 +45,7 @@ def _snapshot(root: Path) -> dict[str, str]:
 def test_start_input_matrix_has_no_task_tree_side_effects(tmp_path: Path, mutate, field: str) -> None:
     client = TestClient(create_app(tmp_path)); task_id, run_id = _created(client)
     assert client.post(f"/api/v1/tasks/{task_id}/inputs", data={"script": "这是足够长的输入文案并保存真实参考音频。"}, files={"reference": ("voice.wav", b"RIFF-audio", "audio/wav")}).status_code == 200
-    root = tmp_path / "tasks" / task_id; request = root / "request.json"; value = json.loads(request.read_text()); mutate(value); request.write_text(json.dumps(value))
+    root = FilesystemTaskRepository(tmp_path).task_dir(task_id); request = root / "request.json"; value = json.loads(request.read_text()); mutate(value); request.write_text(json.dumps(value))
     before = _snapshot(root); response = client.post(f"/api/v1/tasks/{task_id}/runs/{run_id}/start")
     assert response.status_code == 400 and response.json()["error"]["details"]["invalid_fields"] == [field]
     assert _snapshot(root) == before and str(tmp_path) not in response.text

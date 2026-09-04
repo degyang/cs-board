@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
+from PIL import Image
 from starlette.testclient import TestClient
 
 from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
@@ -55,9 +56,9 @@ def test_every_stage_has_stable_schema_valid_persisted_work_order(tmp_path: Path
         assert document["input_fingerprint"] == second.json()["input_fingerprint"]
         assert document["identity"]["skill"] == STAGE_SKILLS[stage]
         assert {item["artifact_key"] for item in document["expected_outputs"]} == EXPECTED_OUTPUTS[stage]
-        assert document["status"] == "ready"
+        assert document["status"] == ("waiting-external-output" if stage == "generate-illustrations" else "ready")
         assert not list(validator.iter_errors(document))
-        path = tmp_path / "tasks" / task_id / "runs" / run_id / "work-orders" / stage / "work-order.json"
+        path = FilesystemTaskRepository(tmp_path).run_dir(task_id, run_id) / "work-orders" / stage / "work-order.json"
         assert path.is_file()
     invalid = {**document, "parameters_path": "/absolute/path.json"}
     assert list(validator.iter_errors(invalid))
@@ -72,7 +73,7 @@ def test_missing_dependencies_are_not_persisted_and_api_cli_agree(tmp_path: Path
     assert api.status_code == 400
     assert api.json()["error"]["code"] == "DEPENDENCY_NOT_READY"
     assert api.json()["error"]["details"]["missing_artifact_keys"] == ["planning.av-plan"]
-    path = tmp_path / "tasks" / task_id / "runs" / run_id / "work-orders" / "clone-voice"
+    path = FilesystemTaskRepository(tmp_path).run_dir(task_id, run_id) / "work-orders" / "clone-voice"
     assert not path.exists()
     completed = subprocess.run(
         [sys.executable, "-m", "cli.csboard", "--data-dir", str(tmp_path), "work-order", "show",
@@ -92,7 +93,7 @@ def test_upstream_artifact_change_creates_new_revision_and_stales_old_audit(tmp_
     second = client.get(endpoint).json()
     assert second["revision"] == 2
     assert second["work_order_id"] != first["work_order_id"]
-    old = json.loads((tmp_path / "tasks" / task_id / "runs" / run_id / "work-orders" / "clone-voice" / "revisions" / "1" / "work-order.json").read_text())
+    old = json.loads((FilesystemTaskRepository(tmp_path).run_dir(task_id, run_id) / "work-orders" / "clone-voice" / "revisions" / "1" / "work-order.json").read_text())
     assert old["status"] == "stale"
     assert second["input_artifacts"][0]["artifact_key"] == "planning.av-plan"
 
@@ -103,7 +104,7 @@ def test_same_hash_dependency_restore_replaces_stale_work_order_identity(tmp_pat
     store = FilesystemArtifactStore(FilesystemTaskRepository(tmp_path))
     store.commit_bytes(task_id, run_id, "planning.av-plan", "planning/av-plan.json", b"same", "generate-visual-anchors")
     first = client.get(endpoint).json()
-    index_path = tmp_path / "tasks" / task_id / "runs" / run_id / "artifacts" / "index.json"
+    index_path = FilesystemTaskRepository(tmp_path).run_dir(task_id, run_id) / "artifacts" / "index.json"
     index = json.loads(index_path.read_text())
     index["artifacts"]["planning.av-plan"]["status"] = "stale"
     index_path.write_text(json.dumps(index), encoding="utf-8")
@@ -147,7 +148,50 @@ def test_stage_specific_run_and_illustration_candidate_directory_match_id(tmp_pa
     illustrations = client.get(f"/api/v1/tasks/{task_id}/runs/{run_id}/work-orders/generate-illustrations").json()
     assert illustrations["output_directory"] == f"manual/illustrations/candidates/{illustrations['work_order_id']}"
     assert illustrations["commands"]["run"] == []
-    assert illustrations["next_action"]["code"] == "CAPABILITY_NOT_AVAILABLE"
+    assert illustrations["commands"]["import"][0]["argv"][0:2] == ["work-order", "import"]
+    assert illustrations["next_action"]["code"] == "EXTERNAL_OUTPUT_REQUIRED"
+
+
+def test_external_illustration_candidate_import_validate_accept(tmp_path: Path) -> None:
+    client, task_id, run_id = _created(tmp_path)
+    store = FilesystemArtifactStore(FilesystemTaskRepository(tmp_path))
+    storyboard = {
+        "visuals": [
+            {"visual_id": "visual-001-01", "unit_id": "unit-001", "prompt": "first"},
+            {"visual_id": "visual-002-01", "unit_id": "unit-002", "prompt": "second"},
+        ]
+    }
+    store.commit_bytes(task_id, run_id, "planning.storyboard", "planning/storyboard.json",
+                       json.dumps(storyboard).encode(), "plan-storyboard")
+    base = f"/api/v1/tasks/{task_id}/runs/{run_id}"
+    order = client.get(f"{base}/work-orders/generate-illustrations").json()
+    run_dir = FilesystemTaskRepository(tmp_path).run_dir(task_id, run_id)
+    output = run_dir / order["output_directory"]
+    output.mkdir(parents=True)
+    items = []
+    for index, (visual_id, unit_id) in enumerate((("visual-001-01", "unit-001"), ("visual-002-01", "unit-002")), 1):
+        image_path = output / f"{visual_id}.png"
+        Image.new("RGB", (1024, 1024), (index * 30, 40, 50)).save(image_path)
+        items.append({"visual_id": visual_id, "unit_id": unit_id,
+                      "path": str(image_path.relative_to(run_dir))})
+    manifest = output / "candidate.json"
+    manifest.write_text(json.dumps({"schema_version": "1.0", "work_order_id": order["work_order_id"],
+                                    "candidate_id": "candidate-1", "items": items}), encoding="utf-8")
+    identity = {"work_order_id": order["work_order_id"]}
+    imported = client.post(f"{base}/work-orders/illustrations/import",
+                           json={**identity, "manifest": str(manifest.relative_to(run_dir))})
+    assert imported.status_code == 200
+    validated = subprocess.run(
+        [sys.executable, "-m", "cli.csboard", "--data-dir", str(tmp_path), "work-order", "validate",
+         "--task", task_id, "--run", run_id, "--work-order-id", order["work_order_id"], "--json"],
+        cwd=Path(__file__).parents[1], text=True, capture_output=True, timeout=30,
+    )
+    assert validated.returncode == 0, validated.stderr
+    assert json.loads(validated.stdout)["status"] == "waiting-acceptance"
+    accepted = client.post(f"{base}/work-orders/illustrations/accept", json=identity)
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["next_action"]["code"] == "GATE_REVIEW_REQUIRED"
+    assert store.get(task_id, run_id, "illustrations.manifest")["status"] == "succeeded"
 
 
 def test_domain_rejects_escape_paths_and_invalid_state_transitions() -> None:

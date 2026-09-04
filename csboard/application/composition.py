@@ -153,6 +153,34 @@ class CompositionService:
         if probe.duration_ms <= 0 or not probe.codec:
             raise RuntimeError("最终视频校验失败：未检测到有效视频流")
 
+        expected_ms = sum(
+            int(item.get("duration_ms") or (int(item.get("end_ms", 0)) - int(item.get("start_ms", 0))))
+            for item in units
+        )
+        rendered_ms = sum(int(item.get("duration_ms", 0)) for item in clips)
+        voiced_ms = sum(int(item.get("duration_ms", 0)) for item in voice_units)
+        tolerance_ms = max(250, int(expected_ms * 0.02))
+        validation = {
+            "passed": (
+                expected_ms > 0
+                and expected_ms == rendered_ms == voiced_ms
+                and abs(probe.duration_ms - expected_ms) <= tolerance_ms
+                and bool(probe.codec)
+                and probe.sample_rate > 0
+                and probe.channels > 0
+            ),
+            "expected_ms": expected_ms,
+            "rendered_ms": rendered_ms,
+            "voiced_ms": voiced_ms,
+            "actual_ms": probe.duration_ms,
+            "tolerance_ms": tolerance_ms,
+            "video_codec": probe.codec,
+            "audio_sample_rate": probe.sample_rate,
+            "audio_channels": probe.channels,
+        }
+        if not validation["passed"]:
+            raise RuntimeError("最终视频校验失败：音画流或时长不符合契约")
+
         # Build final manifest
         final_manifest = self._build_final_manifest(
             task_id=task_id,
@@ -162,6 +190,7 @@ class CompositionService:
             total_duration_ms=total_duration_ms,
             final_path=str(final_path.relative_to(self.repository.root)),
             subtitle_path=str(subtitle_path.relative_to(self.repository.root)) if subtitle_path.exists() else None,
+            validation=validation,
         )
 
         manifest_ref = artifacts.commit_bytes(
@@ -224,6 +253,7 @@ class CompositionService:
         total_duration_ms: int,
         final_path: str,
         subtitle_path: str | None,
+        validation: dict[str, Any],
     ) -> dict[str, Any]:
         """Build the final output manifest."""
         return {
@@ -251,6 +281,7 @@ class CompositionService:
                 "total_duration_ms": total_duration_ms,
                 "has_subtitles": subtitle_path is not None,
             },
+            "validation": validation,
         }
 
     def _read_artifact(

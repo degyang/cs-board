@@ -60,8 +60,8 @@ class WorkOrderService:
                 f"{task_id}:{run_id}:{stage}:{payload['input_fingerprint']}:{revision}".encode()).hexdigest()[:24]
             work_order = StageWorkOrder(**self._envelope(payload, revision, work_order_id))
             instructions = (
-                f"# {stage}\n\nRead parameters from `{work_order.parameters_path}`. "
-                "Use only structured commands from this work order. External candidate commands are not implemented.\n"
+                f"# {stage}\n\nRead parameters from `{work_order.parameters_path}` and execute only "
+                "the structured commands in `work-order.json`.\n"
             )
             self.repository.save(work_order, parameters, instructions)
             return work_order.to_dict()
@@ -106,7 +106,24 @@ class WorkOrderService:
         commands = {action: [] for action in ("run", "import", "validate", "accept", "reject", "retry")}
         if stage == "generate-illustrations":
             output = f"manual/illustrations/candidates/{work_order_id}"
-            next_action = {"code": "CAPABILITY_NOT_AVAILABLE", "message": "外部插画 candidate Gate 尚未实现"}
+            candidate_manifest = f"{output}/candidate.json"
+            common = ["--task", payload["identity"]["task_id"], "--run", payload["identity"]["run_id"],
+                      "--work-order-id", work_order_id]
+            commands["import"] = [{"command_id": f"{work_order_id}-import",
+                "argv": ["work-order", "import", *common, "--manifest", candidate_manifest],
+                "idempotency_key": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{work_order_id}:import")),
+                "preconditions": [f"work-order:{work_order_id}:revision:{revision}", "candidate-manifest:exists"]}]
+            for action in ("validate", "accept"):
+                commands[action] = [{"command_id": f"{work_order_id}-{action}",
+                    "argv": ["work-order", action, *common],
+                    "idempotency_key": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{work_order_id}:{action}")),
+                    "preconditions": [f"work-order:{work_order_id}:revision:{revision}"]}]
+            commands["reject"] = [{"command_id": f"{work_order_id}-reject",
+                "argv": ["work-order", "reject", *common, "--reason", "candidate-rejected"],
+                "idempotency_key": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{work_order_id}:reject")),
+                "preconditions": [f"work-order:{work_order_id}:revision:{revision}"]}]
+            commands["retry"] = commands["import"]
+            next_action = {"code": "EXTERNAL_OUTPUT_REQUIRED", "message": "生成图片后导入候选 manifest"}
         else:
             output = f"work-orders/{stage}/output"
             commands["run"] = [{
@@ -119,7 +136,8 @@ class WorkOrderService:
             next_action = ({"code": "MANUAL_TRIGGER_REQUIRED", "message": "此 Stage 等待显式 trigger"}
                            if payload["status"] == "waiting-manual-trigger"
                            else {"code": "RUN_AVAILABLE", "message": "可使用 run command 执行"})
-        return {**payload, "revision": revision, "work_order_id": work_order_id,
+        return {**payload, "status": "waiting-external-output" if stage == "generate-illustrations" else payload["status"],
+                "revision": revision, "work_order_id": work_order_id,
                 "output_directory": output,
                 "expected_outputs": [{"artifact_key": key, "status": "succeeded"} for key in STAGE_OUTPUTS[stage]],
                 "commands": commands, "next_action": next_action}

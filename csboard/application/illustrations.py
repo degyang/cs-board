@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
+from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import json_bytes, illustration_manifest_document
+from csboard.application.style_routing import select_reference_route
 from csboard.domain.enums import Engine, StageStatus
 from csboard.domain.models import StageState
 from csboard.domain.provider_types import ImageGenerationRequest
@@ -83,9 +85,13 @@ class IllustrationService:
         images_dir.mkdir(parents=True, exist_ok=True)
 
         illustrations: list[dict[str, Any]] = []
+        request_data = self.repository.get_request(task_id) or {}
+        snapshot = request_data.get("style_snapshot") if isinstance(request_data.get("style_snapshot"), dict) else {}
+        style_config = snapshot.get("config") if isinstance(snapshot.get("config"), dict) else {}
+        visual_source = request_data.get("visual_source", "preset")
         for visual in visuals:
             illustration = self._generate_single(
-                task_id, run_id, visual, images_dir, engine
+                task_id, run_id, visual, images_dir, engine, style_config, visual_source
             )
             illustrations.append(illustration)
 
@@ -114,17 +120,30 @@ class IllustrationService:
         visual: dict[str, Any],
         images_dir: Path,
         engine: Engine,
+        style_config: dict[str, Any],
+        visual_source: str,
     ) -> dict[str, Any]:
         """Generate a single illustration."""
         visual_id = visual["visual_id"]
         prompt = visual.get("prompt", "")
         negative_prompt = visual.get("negative_prompt", "")
+        route = select_reference_route(style_config, " ".join(str(visual.get(key, "")) for key in ("text", "prompt", "composition", "style_profile")))
+        if visual_source == "custom-reference" and not route:
+            raise RuntimeError("自定义风格未配置可执行的参考资产路由")
+        reference_images: tuple[bytes, ...] = ()
+        if route:
+            capabilities = self.image_model.capabilities()
+            if not capabilities.reference_image:
+                raise RuntimeError("当前图片服务不支持参考图，无法执行命中的风格路由")
+            asset_repository = FilesystemAssetRepository(self.repository.root)
+            reference_images = tuple(asset_repository.read_asset_bytes(asset_id) for asset_id in route["reference_asset_ids"])
 
         request = ImageGenerationRequest(
             prompt=prompt,
             negative_prompt=negative_prompt,
             width=1920 if engine == Engine.WHITEBOARD else 1024,
             height=1080 if engine == Engine.WHITEBOARD else 1024,
+            reference_images=reference_images,
         )
 
         result = self.image_model.generate(request)
@@ -152,6 +171,7 @@ class IllustrationService:
             "model": result.model or "unknown",
             "attempt": 1,
             "source_prompt": prompt[:200],  # Truncated for safety
+            "reference_route": route,
         }
 
     def _read_artifact(self, task_id: str, run_id: str, key: str) -> dict[str, Any] | None:

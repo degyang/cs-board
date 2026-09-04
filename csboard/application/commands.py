@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import hashlib
 import re
 import os
@@ -16,6 +17,7 @@ from csboard.application.av_artifacts import av_plan_document, json_bytes
 from csboard.application.composition import CompositionService
 from csboard.application.context import CommandContext, new_id, utc_now
 from csboard.application.illustrations import IllustrationService
+from csboard.application.illustration_candidates import IllustrationCandidateService
 from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 from csboard.application.pipeline import PipelineOrchestrator
 from csboard.application.storyboard import StoryboardService
@@ -129,6 +131,11 @@ class MountainCommands:
         if submission_id is not None and not _is_high_entropy_token(submission_id):
             raise ValueError("submission_id 必须是高熵客户端标识")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        output_root = None if request is None else request.get("output_root")
+        # The root is a placement instruction, not task-package content: an
+        # absolute machine path must never leak into a portable package.
+        persisted_request = None if request is None else {key: value for key, value in request.items() if key != "output_root"}
+        resolved_output_root = self.repository.resolve_output_root(output_root)
         task_id = new_id("task")
         run_id = new_id("run")
         trace_id = new_id("trace")
@@ -160,35 +167,36 @@ class MountainCommands:
                 "summary": task.summary,
                 "pipeline_id": pipeline_id,
                 "engine": engine.value,
+                "output_root": str(resolved_output_root),
             }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             created = self.repository.create_task_submission(
                 submission_id, task, run, signature, created_at=task.created_at,
+                output_root=output_root,
             )
             if created["task_id"] != task_id:
                 task = self.repository.get_task(created["task_id"])
                 run = self.repository.get_run(task.task_id, created["run_id"])
                 return self._ok("task.create", task, run, context)
         else:
-            self.repository.create_task(task)
+            self.repository.create_task(task, output_root=output_root)
             self.repository.create_run(run)
         # Store task request for pipeline orchestration
-        if request:
-            request_path = self.repository.task_dir(task_id) / "request.json"
-            request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+        if persisted_request:
+            self.repository.write_json(self.repository.task_dir(task_id) / "request.json", persisted_request)
             # 文案整理：auto-prepare script if present
-            script_text = request.get("script", "").strip()
-            if script_text:
+            script_text = persisted_request.get("script", "")
+            if script_text.strip():
                 preparation = prepare_script(
                     script_text,
-                    target_chars=request.get("target_chars", 80),
-                    min_chars=request.get("min_chars", 35),
-                    max_chars=request.get("max_chars", 140),
+                    target_chars=persisted_request.get("target_chars", 80),
+                    min_chars=persisted_request.get("min_chars", 35),
+                    max_chars=persisted_request.get("max_chars", 140),
                 )
                 task_json_path = self.repository.task_dir(task_id) / "task.json"
                 task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
                 task_data["script_preparation"] = preparation
-                task_data["visual_anchor_enabled"] = request.get("visual_anchor_enabled", True)
-                task_json_path.write_text(json.dumps(task_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                task_data["visual_anchor_enabled"] = persisted_request.get("visual_anchor_enabled", True)
+                self.repository.write_json(task_json_path, task_data)
         event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "TaskCreated",
             "command": "task.create",
@@ -208,22 +216,37 @@ class MountainCommands:
             "engines": [{"id": "whiteboard", "label": "白板动画", "available": True}],
             "visual_sources": [
                 {"id": "preset", "label": "预设风格", "available": True},
-                {"id": "custom-reference", "label": "自定义参考", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"},
+                {"id": "custom-reference", "label": "自定义参考", "available": True},
             ],
             "voice_sources": [
-                {"id": "voice-asset", "label": "音色资产", "available": False, "reason": "CAPABILITY_NOT_AVAILABLE"},
+                {"id": "voice-asset", "label": "音色资产", "available": True},
                 {"id": "uploaded-reference", "label": "上传参考音频", "available": True},
             ],
             "limits": {"script_min_chars": 10, "target_chars_min": 5, "target_chars_max": 500, "brand_text_max_chars": 12},
             "defaults": {"engine": "whiteboard", "visual_source": "preset", **STYLE_DEFAULTS},
         }
 
+    def preview_script(self, script: str, target_chars: int = STYLE_DEFAULTS["target_chars"]) -> dict[str, Any]:
+        """Compute the read-only authoritative preview; no task is created."""
+        if not 5 <= target_chars <= 500:
+            raise DomainError("VALIDATION_ERROR", "target_chars 必须为 5–500")
+        min_chars, max_chars = _derive_script_rules(target_chars)
+        try:
+            return prepare_script(script, target_chars=target_chars, min_chars=min_chars, max_chars=max_chars)
+        except ValueError as exc:
+            raise DomainError("VALIDATION_ERROR", str(exc)) from exc
+
     def show_task(self, task_id: str) -> dict[str, Any]:
         task = self.repository.get_task(task_id)
         run = self.repository.get_run(task_id, task.active_run_id) if task.active_run_id else None
         request = self.repository.get_request(task_id) or {}
         plan = ExecutionPlan.from_dict(request.get("execution_plan", {}))
-        return {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None, "execution_plan": plan.to_dict()}
+        result = {"ok": True, "task": task.to_dict(), "active_run": run.to_dict() if run else None, "execution_plan": plan.to_dict()}
+        recovery = self.repository.recovery_metadata(task_id)
+        if recovery:
+            result["recovery_status"] = "partial"
+            result["recovery"] = recovery
+        return result
 
     def list_tasks(
         self,
@@ -233,15 +256,11 @@ class MountainCommands:
         q: str | None = None,
     ) -> dict[str, Any]:
         """列出任务：filter → sort → cursor → limit。"""
-        tasks_dir = self.repository.root / "tasks"
-        if not tasks_dir.exists():
-            return {"items": [], "next_cursor": None}
-
         # 1. 读取所有 task
         all_tasks = []
-        for task_path in sorted(tasks_dir.glob("*/task.json"), reverse=True):
+        for task_id in self.repository.list_task_ids():
             try:
-                task = self.repository.get_task(task_path.parent.name)
+                task = self.repository.get_task(task_id)
                 all_tasks.append(task)
             except (NotFoundError, Exception):
                 continue
@@ -319,6 +338,10 @@ class MountainCommands:
             td.pop("script_preparation", None)
             td.pop("visual_anchor_enabled", None)
             td["active_run"] = active_run
+            recovery = self.repository.recovery_metadata(task.task_id)
+            if recovery:
+                td["recovery_status"] = "partial"
+                td["recovery"] = recovery
             items.append(td)
 
         next_cursor = items[-1]["task_id"] if len(items) >= effective_limit else None
@@ -345,6 +368,11 @@ class MountainCommands:
         voice_source: str | None = None,
         visual_source: str | None = None,
         style_asset_id: str | None = None,
+        voice_asset_id: str | None = None,
+        style_asset_revision: int | None = None,
+        voice_asset_revision: int | None = None,
+        style_revision: int | None = None,
+        voice_revision: int | None = None,
         shots_per_image: int | None = None,
         line_density: str | None = None,
         brand_text: str | None = None,
@@ -361,13 +389,30 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", "文案至少需要 10 个字")
 
         formal_request = any(value is not None for value in (
-            voice_source, visual_source, style_asset_id, shots_per_image, line_density, brand_text,
+            voice_source, visual_source, style_asset_id, voice_asset_id,
+            style_asset_revision, voice_asset_revision, shots_per_image, line_density, brand_text,
         ))
+        if style_asset_revision is None:
+            style_asset_revision = style_revision
+        if voice_asset_revision is None:
+            voice_asset_revision = voice_revision
+        style_template = None
+        voice_asset = None
         if formal_request:
-            if voice_source != "uploaded-reference" or visual_source != "preset":
+            if voice_source not in {"uploaded-reference", "voice-asset"} or visual_source not in {"preset", "custom-reference"}:
                 raise DomainError("CAPABILITY_NOT_AVAILABLE", "当前组合暂不可用")
-            if not style_asset_id:
+            if visual_source == "custom-reference" and not style_asset_id:
                 raise DomainError("VALIDATION_ERROR", "style_asset_id 不能为空")
+            if voice_source == "voice-asset" and not voice_asset_id:
+                raise DomainError("VALIDATION_ERROR", "voice_asset_id 不能为空")
+            if voice_source == "voice-asset" and reference_audio_filename is not None:
+                raise DomainError("VALIDATION_ERROR", "voice-asset 不接受上传参考音频")
+            if voice_source == "uploaded-reference" and voice_asset_id:
+                raise DomainError("VALIDATION_ERROR", "uploaded-reference 不接受 voice_asset_id")
+            if voice_source == "uploaded-reference" and reference_audio_filename is None:
+                current = self.repository.get_request(task_id) or {}
+                if not current.get("reference_audio"):
+                    raise DomainError("VALIDATION_ERROR", "首次保存必须上传参考音频")
             if shots_per_image not in {1, 2, 3, 4}:
                 raise DomainError("VALIDATION_ERROR", "shots_per_image 必须为 1–4")
             if line_density not in ALLOWED_LINE_DENSITY:
@@ -376,16 +421,25 @@ class MountainCommands:
                 raise DomainError("VALIDATION_ERROR", "brand_text 最长 12 个字符")
             if not 5 <= target_chars <= 500:
                 raise DomainError("VALIDATION_ERROR", "target_chars 必须为 5–500")
-            try:
-                style_template = self.asset_repository.get_style_template(style_asset_id)
-            except (DomainError, NotFoundError):
-                raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
-            if style_template.kind != "preset" or style_template.status != "active" or style_template.engine != "whiteboard":
-                raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
-            if reference_audio_filename is None:
-                current = self.repository.get_request(task_id) or {}
-                if not current.get("reference_audio"):
-                    raise DomainError("VALIDATION_ERROR", "首次保存必须上传参考音频")
+            if style_asset_id:
+                try:
+                    style_template = self.asset_repository.get_style_template(style_asset_id)
+                except (DomainError, NotFoundError):
+                    raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
+                required_kind = "custom" if visual_source == "custom-reference" else "preset"
+                if style_template.kind != required_kind or style_template.status != "active":
+                    raise DomainError("VALIDATION_ERROR", "style_asset_id 不存在或不可用")
+                if style_asset_revision is not None and style_asset_revision != style_template.revision:
+                    raise DomainError("REVISION_CONFLICT", "风格资产版本已变化")
+            if voice_asset_id:
+                try:
+                    voice_asset = self.asset_repository.get_voice_asset(voice_asset_id)
+                except (DomainError, NotFoundError):
+                    raise DomainError("VALIDATION_ERROR", "voice_asset_id 不存在或不可用")
+                if not voice_asset.is_active:
+                    raise DomainError("VALIDATION_ERROR", "voice_asset_id 不存在或不可用")
+                if voice_asset_revision is not None and voice_asset_revision != voice_asset.revision:
+                    raise DomainError("REVISION_CONFLICT", "音色资产版本已变化")
 
         # 验证音频文件（如果有）
         if reference_audio_filename:
@@ -401,7 +455,7 @@ class MountainCommands:
         # New six-tab requests derive compatibility rules deterministically.
         if formal_request:
             min_chars, max_chars = _derive_script_rules(target_chars)
-            style = style_template.name
+            style = style_template.name if style_template else style
             pen_text = brand_text or ""
             stroke_detail = LINE_DENSITY_TO_STROKE[line_density or "rich"]
         execution_plan = None if formal_request else ExecutionPlan.create(
@@ -409,7 +463,7 @@ class MountainCommands:
         )
         try:
             preparation = prepare_script(
-                script.strip(),
+                script,
                 target_chars=target_chars,
                 min_chars=min_chars,
                 max_chars=max_chars,
@@ -424,7 +478,11 @@ class MountainCommands:
             reference_audio_relative = f"inputs/reference{suffix}"
 
         request_data = {
-            "script": script.strip(),
+            # Persist and segment the exact submitted source.  Validation above
+            # still ignores surrounding whitespace when judging whether there is
+            # enough content, but source ranges must be able to cover it.
+            "script": script,
+            "raw_script": script,
             "reference_audio": reference_audio_relative,
             "style": style,
             "include_subtitles": include_subtitles,
@@ -439,16 +497,28 @@ class MountainCommands:
             request_data["execution_plan"] = execution_plan.to_dict()
         if formal_request:
             request_data.update({
-                "voice_source": "uploaded-reference",
-                "visual_source": "preset",
+                "voice_source": voice_source,
+                "visual_source": visual_source,
                 "style_asset_id": style_asset_id,
-                "style_snapshot": {
+                "style_snapshot": ({
                     "style_id": style_template.style_id,
                     "revision": style_template.revision,
                     "name": style_template.name,
                     "prompt_text": style_template.prompt_text,
                     "negative_prompt": style_template.negative_prompt,
-                },
+                    "config": deepcopy(style_template.config),
+                } if style_template else None),
+                "voice_asset_id": voice_asset_id,
+                "voice_snapshot": ({
+                    "voice_id": voice_asset.voice_id,
+                    "revision": voice_asset.revision,
+                    "name": voice_asset.name,
+                    "language": voice_asset.language,
+                    "emotion_mode": voice_asset.emotion_mode,
+                    "emotion_weight": voice_asset.emotion_weight,
+                    "engine": voice_asset.engine,
+                    "compatibility": deepcopy(voice_asset.compatibility),
+                } if voice_asset else None),
                 "shots_per_image": shots_per_image,
                 "line_density": line_density,
                 "brand_text": brand_text,
@@ -528,11 +598,13 @@ class MountainCommands:
             "task_id": task_id,
             "saved": True,
             "inputs": {
-                "script": request_data.get("script", ""),
+                "script": request_data.get("raw_script", request_data.get("script", "")),
                 "voice_source": request_data.get("voice_source", "uploaded-reference"),
                 "visual_source": request_data.get("visual_source", "preset"),
                 "style_asset_id": request_data.get("style_asset_id"),
+                "voice_asset_id": request_data.get("voice_asset_id"),
                 "style_snapshot": request_data.get("style_snapshot"),
+                "voice_snapshot": request_data.get("voice_snapshot"),
                 "shots_per_image": request_data.get("shots_per_image", 1),
                 "line_density": request_data.get("line_density", "rich"),
                 "brand_text": request_data.get("brand_text", request_data.get("pen_text", "")),
@@ -548,6 +620,7 @@ class MountainCommands:
                 "max_chars": request_data.get("max_chars", 140),
             },
             "script_preparation": preparation,
+            "raw_script": request_data.get("raw_script", request_data.get("script", "")),
             "visual_anchor_enabled": visual_anchor_enabled,
         }
         if "execution_plan" in request_data:
@@ -583,8 +656,21 @@ class MountainCommands:
         invalid: list[str] = []
         if not request or not isinstance(request.get("script"), str) or len(request["script"].strip()) < 10:
             invalid.append("script")
-        reference = request.get("reference_audio") if request else None
-        if not isinstance(reference, str) or not reference:
+        if request and request.get("voice_source") == "voice-asset":
+            snapshot = request.get("voice_snapshot")
+            if not isinstance(snapshot, dict) or not snapshot.get("voice_id"):
+                invalid.append("voice_asset_id")
+            else:
+                try:
+                    self.asset_repository.get_voice_content(str(snapshot["voice_id"]))
+                except (NotFoundError, DomainError):
+                    invalid.append("voice_asset_id")
+            reference = "voice-asset"
+        else:
+            reference = request.get("reference_audio") if request else None
+        if request and request.get("voice_source") == "voice-asset":
+            reference = "voice-asset"
+        elif not isinstance(reference, str) or not reference:
             invalid.append("reference_audio")
         else:
             path = Path(reference)
@@ -723,6 +809,9 @@ class MountainCommands:
             "event_sequence": event["sequence"],
             "warnings": warnings, "next_stage": "clone-voice",
         }
+
+    def import_partial_historical_final(self, **kwargs: Any) -> dict[str, Any]:
+        return self.repository.import_partial_historical_final(**kwargs)
 
     def _generate_llm_anchors(
         self,
@@ -865,6 +954,9 @@ class MountainCommands:
             task_id, run_id, tuple(units),
             profile="default", engine=task.engine,
         )
+        # VoiceUnitService persists reconciled alignment warnings.  Reload so
+        # the command response cannot echo stale warnings from before a retry.
+        run = self.repository.get_run(task_id, run_id)
 
         event = self.telemetry.append_event(task_id, run_id, {
             "event_type": "CloneVoiceSucceeded",
@@ -1134,6 +1226,21 @@ class MountainCommands:
         """Return the deterministic persisted Stage Work Order view."""
         return WorkOrderService(self.repository).show(task_id, run_id, stage)
 
+    def work_order_import(self, task_id: str, run_id: str, work_order_id: str, manifest_path: str) -> dict[str, Any]:
+        return IllustrationCandidateService(self.repository).import_manifest(
+            task_id, run_id, work_order_id, manifest_path
+        )
+
+    def work_order_validate(self, task_id: str, run_id: str, work_order_id: str) -> dict[str, Any]:
+        return IllustrationCandidateService(self.repository).validate(task_id, run_id, work_order_id)
+
+    def work_order_accept(self, task_id: str, run_id: str, work_order_id: str) -> dict[str, Any]:
+        result = IllustrationCandidateService(self.repository).accept(task_id, run_id, work_order_id)
+        return self._stage_response(task_id, run_id, "generate-illustrations", result)
+
+    def work_order_reject(self, task_id: str, run_id: str, work_order_id: str, reason: str) -> dict[str, Any]:
+        return IllustrationCandidateService(self.repository).reject(task_id, run_id, work_order_id, reason)
+
     # ── Stage executor wrappers ──────────────────────────────────────
 
     def _exec_generate_visual_anchors(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
@@ -1147,6 +1254,28 @@ class MountainCommands:
 
         request = self._read_request(task_id)
         reference_audio = request.get("reference_audio")
+        voice_snapshot = request.get("voice_snapshot") if isinstance(request.get("voice_snapshot"), dict) else {}
+        voice_id = str(voice_snapshot.get("voice_id") or request.get("voice_asset_id") or "")
+        voice_config = {
+            key: voice_snapshot[key]
+            for key in ("language", "emotion_mode", "emotion_weight", "engine", "compatibility")
+            if key in voice_snapshot
+        }
+        if request.get("voice_source") == "voice-asset":
+            if not voice_id:
+                raise DomainError("VALIDATION_ERROR", "任务请求中缺少 voice asset snapshot")
+            try:
+                audio = self.asset_repository.get_voice_content(voice_id)
+                voice_asset = self.asset_repository.get_voice_asset(voice_id)
+            except (NotFoundError, DomainError) as exc:
+                raise DomainError("VALIDATION_ERROR", "音色资产内容不可用") from exc
+            # The provider receives only an internal execution file; the stable
+            # asset id and sanitized snapshot are the request's public contract.
+            reference_audio = f"inputs/.voice-assets/{voice_id}.{voice_asset.format}"
+            internal_path = self.repository.task_dir(task_id) / reference_audio
+            internal_path.parent.mkdir(parents=True, exist_ok=True)
+            if not internal_path.exists() or internal_path.read_bytes() != audio:
+                internal_path.write_bytes(audio)
         if not reference_audio:
             raise DomainError("VALIDATION_ERROR", "任务请求中缺少 reference_audio 字段")
 
@@ -1170,6 +1299,8 @@ class MountainCommands:
         return self.clone_voice(
             task_id, run_id, tts, alignment, media,
             reference_audio=ref_path,
+            voice_id=voice_id,
+            voice_config=voice_config,
             context=context,
         )
 
@@ -1184,7 +1315,7 @@ class MountainCommands:
         self,
         task_id: str,
         run_id: str,
-        text_model: TextModelPort,
+        text_model: TextModelPort | None,
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Generate storyboard for all Visual Items."""
@@ -1197,7 +1328,12 @@ class MountainCommands:
         run.command_ids.append(context.command_id)
         self.repository.save_run(run)
 
-        service = StoryboardService(text_model, self.repository)
+        request = self._read_request(task_id)
+        snapshot = request.get("style_snapshot") if isinstance(request.get("style_snapshot"), dict) else {}
+        service = StoryboardService(text_model, self.repository, {
+            "style": snapshot.get("prompt_text") or request.get("style") or "简约白板手绘风",
+            "color_scheme": snapshot.get("color_scheme") or "黑白为主，点缀彩色",
+        })
         result = service.run(task_id, run_id, task.engine)
 
         run.stages["plan-storyboard"] = StageState(StageStatus.SUCCEEDED, 1)
@@ -1279,13 +1415,19 @@ class MountainCommands:
 
     def _exec_plan_storyboard(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
         """Stage executor for plan-storyboard. Uses ServiceResolver + ProviderFactory.create_adapter."""
-        if self.provider_factory is None:
-            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 text model")
-        if self.service_resolver is not None:
-            text_def = self.service_resolver.resolve("text_generation")
-            text_model = self.provider_factory.create_adapter(text_def)
-        else:
-            text_model = self.provider_factory.create_text_model()
+        text_model = None
+        if self.provider_factory is not None:
+            try:
+                if self.service_resolver is not None:
+                    text_def = self.service_resolver.resolve("text_generation")
+                    text_model = self.provider_factory.create_adapter(text_def)
+                else:
+                    text_model = self.provider_factory.create_text_model()
+            except (DomainError, ValueError):
+                # Storyboard prompt construction has a deterministic local
+                # path; absence of an optional enhancement service is not a
+                # reason to block the production workflow.
+                text_model = None
         return self.plan_storyboard(task_id, run_id, text_model, context)
 
     def _exec_generate_illustrations(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:

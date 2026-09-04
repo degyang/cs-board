@@ -32,8 +32,9 @@ class StoryboardService:
         Project repository for reading/writing artifacts.
     """
 
-    text_model: TextModelPort
+    text_model: TextModelPort | None
     repository: FilesystemTaskRepository
+    style_context: dict[str, Any] = field(default_factory=dict)
     artifacts: FilesystemArtifactStore = field(init=False)
     telemetry: JsonlTelemetry = field(init=False)
 
@@ -173,7 +174,19 @@ class StoryboardService:
             max_tokens=1024,
         )
 
-        result = self.text_model.generate(request)
+        fallback = {
+            "style": str(self.style_context.get("style") or "简约白板手绘风"),
+            "color_scheme": str(self.style_context.get("color_scheme") or "黑白为主，点缀彩色"),
+            "composition_rules": ["居中构图", "留白充足", "重点突出"],
+            "mood": "专业、清晰、可信",
+            "visual_metaphors": [],
+        }
+        if self.text_model is None:
+            return fallback
+        try:
+            result = self.text_model.generate(request)
+        except Exception:
+            return fallback
 
         # Parse structured result or fall back to default
         if result.structured_value:
@@ -181,13 +194,7 @@ class StoryboardService:
         try:
             return json.loads(result.text)
         except (json.JSONDecodeError, ValueError):
-            return {
-                "style": "简约白板手绘风" if engine == "whiteboard" else "现代信息图",
-                "color_scheme": "黑白为主，点缀彩色",
-                "composition_rules": ["居中构图", "留白充足", "重点突出"],
-                "mood": "专业、清晰、可信",
-                "visual_metaphors": [],
-            }
+            return fallback
 
     def _generate_visual_prompts(
         self,

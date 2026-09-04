@@ -52,14 +52,27 @@ def test_create_options_are_application_owned_and_exact(client, monkeypatch):
     assert client.get("/api/v1/tasks/create-options").json() == expected
 
 
-def test_create_options_schema_defaults_and_unavailable_reason(client):
+def test_create_options_schema_defaults_and_native_asset_sources_available(client):
     body = client.get("/api/v1/tasks/create-options").json()
     assert body["defaults"] == {"engine": "whiteboard", "visual_source": "preset", "target_chars": 45,
                                 "shots_per_image": 2, "line_density": "rich", "visual_anchor_enabled": True,
                                 "include_subtitles": True}
     assert body["limits"] == {"script_min_chars": 10, "target_chars_min": 5,
                               "target_chars_max": 500, "brand_text_max_chars": 12}
-    assert next(item for item in body["voice_sources"] if item["id"] == "voice-asset")["reason"] == "CAPABILITY_NOT_AVAILABLE"
+    assert next(item for item in body["voice_sources"] if item["id"] == "voice-asset")["available"] is True
+    assert next(item for item in body["visual_sources"] if item["id"] == "custom-reference")["available"] is True
+
+
+def test_script_preview_is_authoritative_and_non_writing(client):
+    before = list(client.app.state.data_dir.rglob("task.json"))
+    response = client.post("/api/v1/scripts/prepare", json={"script": "医学2.0。\n\n这是什么意思呢？", "target_chars": 70})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["algorithm_version"] == "paragraph-first-v2"
+    assert body["rules"] == {"target_chars": 70, "min_chars": 42, "max_chars": 140}
+    assert body["voice_units"][0]["text"] == "医学2.0。"
+    assert body["voice_units"][1]["undersize_reason"] == "paragraph-boundary"
+    assert list(client.app.state.data_dir.rglob("task.json")) == before
 
 
 def test_summary_round_trip_and_legacy_task_read(client):
@@ -99,7 +112,7 @@ def test_submission_is_thread_safe_and_creates_one_task(tmp_path):
     threads = [threading.Thread(target=submit) for _ in range(2)]
     [thread.start() for thread in threads]; barrier.wait(); [thread.join() for thread in threads]
     assert len({item["task_id"] for item in responses}) == 1
-    assert len(list((tmp_path / "tasks").glob("*/task.json"))) == len(list((tmp_path / ".submissions").glob("*.json"))) == 1
+    assert len(list((tmp_path / ".task-packages").glob("*.json"))) == len(list((tmp_path / ".submissions").glob("*.json"))) == 1
 
 
 class _SubmissionFaultRepository(FilesystemTaskRepository):
@@ -127,6 +140,24 @@ def test_uploaded_reference_preset_six_tab_round_trip_and_compatibility_mapping(
     assert str(client.app.state.data_dir) not in json.dumps(body, ensure_ascii=False)
 
 
+def test_authoritative_preparation_preserves_raw_source_and_maps_normalized_units(client):
+    created = _create(client, "exact-source")
+    source = "\n这是包含首尾空白、但仍应完整回读的正式文案。\n"
+    assert _save(client, created["task_id"], script=source, target_chars="70").status_code == 200
+
+    body = client.get(f"/api/v1/tasks/{created['task_id']}/inputs").json()
+    preparation = body["script_preparation"]
+    units = preparation["voice_units"]
+    assert body["inputs"]["script"] == source
+    assert body["raw_script"] == source == preparation["raw_script"]
+    assert all("\n" not in unit["text"] and unit["text"] == unit["text"].strip() for unit in units)
+    assert preparation["normalized_processing_text"] == "这是包含首尾空白、但仍应完整回读的正式文案。"
+    assert preparation["source_mapping"]["index_unit"] == "unicode-code-point"
+    assert body["rules"] == preparation["rules"] == {
+        "target_chars": 70, "min_chars": 42, "max_chars": 140,
+    }
+
+
 def test_formal_inputs_ignore_legacy_execution_plan_fields(client):
     created = _create(client, "no-plan")
     response = client.post(f"/api/v1/tasks/{created['task_id']}/inputs", data={**_form(), "execution_mode": "selective", "manual_stages": '["clone-voice"]'}, files={"reference": ("voice.wav", io.BytesIO(b"RIFF" + b"x" * 128), "audio/wav")})
@@ -140,7 +171,7 @@ def test_formal_inputs_ignore_legacy_execution_plan_fields(client):
     ("brand_text", "x" * 13), ("target_chars", "4")])
 def test_invalid_formal_fields_preserve_previously_committed_inputs(client, field, value):
     created = _create(client, f"invalid-{field}"); assert _save(client, created["task_id"]).status_code == 200
-    task_dir = client.app.state.data_dir / "tasks" / created["task_id"]
+    task_dir = FilesystemTaskRepository(client.app.state.data_dir).task_dir(created["task_id"])
     def digest(): return hashlib.sha256(b"".join(path.read_bytes() for path in (task_dir / "request.json", task_dir / "task.json", task_dir / "inputs" / "reference.wav"))).hexdigest()
     before = digest(); response = _save(client, created["task_id"], **{field: value})
     assert response.status_code == 400 and digest() == before
@@ -151,11 +182,11 @@ def test_create_then_failed_first_input_can_retry_without_second_task(client):
     assert client.post(f"/api/v1/tasks/{created['task_id']}/inputs", data=_form()).status_code == 400
     assert client.post("/api/v1/tasks", json=_payload("retry")).json()["task_id"] == created["task_id"]
     assert _save(client, created["task_id"]).status_code == 200
-    assert len(list((client.app.state.data_dir / "tasks").glob("*/task.json"))) == 1
+    assert len(FilesystemTaskRepository(client.app.state.data_dir).list_task_ids()) == 1
 
 
 def test_formal_save_does_not_persist_or_start_execution_strategy(client):
     created = _create(client, "no-start"); assert _save(client, created["task_id"]).status_code == 200
-    request = json.loads((client.app.state.data_dir / "tasks" / created["task_id"] / "request.json").read_text())
+    request = json.loads((FilesystemTaskRepository(client.app.state.data_dir).task_dir(created["task_id"]) / "request.json").read_text())
     assert "execution_plan" not in request
     assert client.get(f"/api/v1/tasks/{created['task_id']}").json()["active_run"]["status"] == "pending"

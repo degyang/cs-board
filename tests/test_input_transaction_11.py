@@ -177,7 +177,7 @@ def test_first_save_without_ref_request_after_install_fault(tmp_path: Path):
 
     repo.set_fault(None)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     assert not (task_dir / "request.json").exists()
     assert _count_staging_artifacts(task_dir) == 0
     assert _count_task_artifacts(task_dir) == 0
@@ -200,7 +200,7 @@ def test_first_save_without_ref_task_after_install_fault(tmp_path: Path):
 
     repo.set_fault(None)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     assert not (task_dir / "request.json").exists()
     assert _count_staging_artifacts(task_dir) == 0
     assert _count_task_artifacts(task_dir) == 0
@@ -228,7 +228,7 @@ def test_first_save_with_ref_request_after_install_fault(tmp_path: Path):
 
     repo.set_fault(None)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     assert not (task_dir / "request.json").exists()
     assert not (task_dir / "inputs" / "reference.wav").exists()
     assert _count_staging_artifacts(task_dir) == 0
@@ -254,7 +254,7 @@ def test_first_save_with_ref_task_after_install_fault(tmp_path: Path):
 
     repo.set_fault(None)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     assert not (task_dir / "request.json").exists()
     assert not (task_dir / "inputs" / "reference.wav").exists()
     assert _count_staging_artifacts(task_dir) == 0
@@ -280,7 +280,7 @@ def test_first_save_with_ref_reference_after_install_fault(tmp_path: Path):
 
     repo.set_fault(None)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     assert not (task_dir / "request.json").exists()
     assert not (task_dir / "inputs" / "reference.wav").exists()
     assert _count_staging_artifacts(task_dir) == 0
@@ -298,7 +298,7 @@ def test_same_ext_ref_request_after_backup_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -330,7 +330,7 @@ def test_same_ext_ref_request_after_install_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -362,7 +362,7 @@ def test_same_ext_ref_task_after_install_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -394,7 +394,7 @@ def test_same_ext_ref_reference_after_backup_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -426,7 +426,7 @@ def test_same_ext_ref_reference_after_install_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -461,7 +461,7 @@ def test_cross_ext_ref_after_backup_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024, audio_name="reference.wav")
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -496,7 +496,7 @@ def test_cross_ext_ref_after_install_fault(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id, audio_bytes=b"\x00" * 1024, audio_name="reference.wav")
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     old_request_sha = _sha256(task_dir / "request.json")
     old_task_sha = _sha256(task_dir / "task.json")
     old_ref_sha = _sha256(task_dir / "inputs" / "reference.wav")
@@ -720,7 +720,7 @@ def test_concurrent_ref_preservation(tmp_path: Path):
     assert results.get("b") == 200, f"B 线程状态码: {results.get('b')}"
 
     # 验证最终状态
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = repo.task_dir(task_id)
     repo2 = FilesystemTaskRepository(tmp_path)
     request_data = repo2._read_json(task_dir / "request.json")
     task_data = repo2._read_json(task_dir / "task.json")
@@ -890,7 +890,7 @@ def test_real_http_upload_mnt_d():
         )
         assert resp.status_code == 200
 
-        task_dir = data_dir / "tasks" / task_id
+        task_dir = FilesystemTaskRepository(data_dir).task_dir(task_id)
         assert (task_dir / "request.json").exists()
         assert (task_dir / "inputs" / "reference.wav").exists()
         assert _count_staging_artifacts(task_dir) == 0
@@ -938,7 +938,7 @@ def test_success_cleanup_no_artifacts(tmp_path: Path):
 
     _save_inputs_with_ref(client, task_id)
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = FilesystemTaskRepository(tmp_path).task_dir(task_id)
     assert _count_staging_artifacts(task_dir) == 0
     assert _count_task_artifacts(task_dir) == 0
 
@@ -979,7 +979,7 @@ def test_all_saves_use_transaction(tmp_path: Path):
     resp = _save_inputs_without_ref(client, task_id)
     assert resp["ok"] is True
 
-    task_dir = tmp_path / "tasks" / task_id
+    task_dir = FilesystemTaskRepository(tmp_path).task_dir(task_id)
     assert _count_staging_artifacts(task_dir) == 0
 
     resp = _save_inputs_with_ref(client, task_id)

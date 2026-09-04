@@ -108,12 +108,16 @@ class VoiceUnitService:
         media: Any,
         repository: FilesystemTaskRepository,
         reference_audio: Path,
+        voice_id: str = "",
+        voice_config: dict[str, Any] | None = None,
     ) -> None:
         self.tts = tts
         self.alignment = alignment
         self.media = media
         self.repository = repository
         self.reference_audio = reference_audio
+        self.voice_id = voice_id
+        self.voice_config = dict(voice_config or {})
         self.artifacts = FilesystemArtifactStore(repository)
         self.telemetry = JsonlTelemetry(repository)
 
@@ -139,7 +143,8 @@ class VoiceUnitService:
                 from csboard.domain.provider_types import TTSRequest
                 request = TTSRequest(
                     text=unit.text,
-                    voice_id="default",
+                    voice_id=self.voice_id,
+                    voice_config=dict(self.voice_config or {}),
                     reference_audio=self.reference_audio,
                 )
                 result = self.tts.synthesize(request)
@@ -203,6 +208,12 @@ class VoiceUnitService:
 
         run = self.repository.get_run(task_id, run_id)
         run.stages["clone-voice"] = StageState(StageStatus.SUCCEEDED, 1)
+        # A retry may improve alignment.  Do not keep warnings from an older
+        # timeline after the corresponding unit now passes Whisper checks.
+        run.warnings = [
+            warning for warning in run.warnings
+            if warning.get("code") != "ALIGNMENT_EQUAL_FALLBACK"
+        ]
         for item in timings:
             if item.timing_source.value == "equal_fallback":
                 warning = {"code": "ALIGNMENT_EQUAL_FALLBACK", "unit_id": item.unit_id, "message": "该单元已按图片数量等分实际语音时长"}
