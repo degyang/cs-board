@@ -1,8 +1,7 @@
 """Mountain Asset API — /api/v1/assets 路由。
 
 音色 multipart 上传、真实媒体元数据、Range 支持。
-Style 列表支持 kind/status/engine/q/cursor/limit。
-preset 禁止 PATCH、DELETE、activate、deactivate。
+Style 列表支持 kind/status/engine/q/cursor/limit，preset 与 custom 均可管理。
 通用上传流式写入临时文件。
 Router 不调用 Repository 私有方法。
 """
@@ -39,6 +38,68 @@ VOICE_ALLOWED_MIMES = {
     "audio/ogg",
     "audio/flac", "audio/x-flac",
 }
+VOICE_EMOTION_MODES = {"speaker", "reference_audio", "vector", "text"}
+VOICE_AVAILABILITY_STATUSES = {"available", "verified", "limited"}
+
+
+def _validation_error(message: str):
+    return domain_error_response(DomainError("VALIDATION_ERROR", message), status_code=400)
+
+
+def _validated_characters(repository: FilesystemAssetRepository, raw: Any) -> list[dict[str, Any]]:
+    return repository.validate_style_characters(raw)
+
+
+def _parse_voice_compatibility(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise DomainError("VALIDATION_ERROR", "compatibility 必须是 JSON 对象") from exc
+    if not isinstance(value, dict) or not value:
+        raise DomainError("VALIDATION_ERROR", "compatibility 必须是非空对象")
+    engines = value.get("engines")
+    emotion_modes = value.get("emotion_modes")
+    limitations = value.get("limitations", [])
+    if (not isinstance(engines, list) or not engines or not all(isinstance(v, str) and v for v in engines)
+            or not isinstance(emotion_modes, list) or not emotion_modes
+            or not all(v in VOICE_EMOTION_MODES for v in emotion_modes)
+            or not isinstance(limitations, list) or not all(isinstance(v, str) for v in limitations)):
+        raise DomainError("VALIDATION_ERROR", "compatibility 字段无效")
+    return {"engines": list(engines), "emotion_modes": list(emotion_modes), "limitations": list(limitations)}
+
+
+def _voice_metadata(payload: dict[str, Any], *, defaults: bool) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    fields = {
+        "language": "und", "emotion_mode": "speaker", "example_text": "",
+        "availability_status": "available", "status_note": "", "engine": "unknown",
+        "emotion_reference_asset_id": "", "source": "",
+    }
+    for field, default in fields.items():
+        if field in payload or defaults:
+            value = payload.get(field, default)
+            if not isinstance(value, str):
+                raise DomainError("VALIDATION_ERROR", f"{field} 必须是字符串")
+            metadata[field] = value
+    if "language" in metadata and not metadata["language"].strip():
+        raise DomainError("VALIDATION_ERROR", "language 不能为空")
+    if "emotion_mode" in metadata and metadata["emotion_mode"] not in VOICE_EMOTION_MODES:
+        raise DomainError("VALIDATION_ERROR", "emotion_mode 无效")
+    if "availability_status" in metadata and metadata["availability_status"] not in VOICE_AVAILABILITY_STATUSES:
+        raise DomainError("VALIDATION_ERROR", "availability_status 无效")
+    if "engine" in metadata and not metadata["engine"].strip():
+        raise DomainError("VALIDATION_ERROR", "engine 不能为空")
+    if "compatibility" in payload:
+        metadata["compatibility"] = _parse_voice_compatibility(payload["compatibility"])
+    elif defaults:
+        metadata["compatibility"] = {"engines": [metadata["engine"]], "emotion_modes": [metadata["emotion_mode"]], "limitations": []}
+    if "emotion_weight" in payload:
+        weight = payload["emotion_weight"]
+        if weight is not None and (isinstance(weight, bool) or not isinstance(weight, (int, float)) or not 0 <= weight <= 1):
+            raise DomainError("VALIDATION_ERROR", "emotion_weight 必须在 0 到 1 之间")
+        metadata["emotion_weight"] = weight
+    return metadata
 
 
 def _probe_audio_metadata(file_path: Path) -> dict[str, Any]:
@@ -95,21 +156,26 @@ def _probe_audio_metadata(file_path: Path) -> dict[str, Any]:
         return {"duration_ms": 0, "sample_rate": 0, "channels": 0, "format": "wav"}
 
 
-def _is_preset(repository: FilesystemAssetRepository, style_id: str) -> bool:
-    """检查是否为 preset 风格。"""
-    try:
-        template = repository.get_style_template(style_id)
-        return template.kind == "preset"
-    except NotFoundError:
-        return False
-
-
 def mountain_asset_router(
     data_dir: Path,
     repository: FilesystemAssetRepository | None = None,
 ) -> APIRouter:
     router = APIRouter()
     repository = repository or FilesystemAssetRepository(data_dir)
+
+    # ── preconditions (read-only catalog) ─────────────────────────
+
+    @router.get("/api/v1/assets/preconditions")
+    def list_preconditions():
+        items = [precondition.to_dict() for precondition in repository.list_preconditions()]
+        return {"items": items, "total": len(items), "next_cursor": None}
+
+    @router.get("/api/v1/assets/preconditions/{precondition_id}")
+    def get_precondition(precondition_id: str):
+        try:
+            return repository.get_precondition(precondition_id).to_dict()
+        except NotFoundError as exc:
+            return domain_error_response(exc, status_code=404)
 
     # ── styles ────────────────────────────────────────────────────
 
@@ -145,17 +211,24 @@ def mountain_asset_router(
             return domain_error_response(DomainError("VALIDATION_ERROR", "name 和 prompt_text 不能为空"), status_code=400)
 
         kind = payload.get("kind", "custom")
+        if kind not in {"preset", "custom"}:
+            return _validation_error("kind 必须是 preset 或 custom")
         engine = payload.get("engine", "whiteboard")
         description = payload.get("description", "")
         negative_prompt = payload.get("negative_prompt", "")
         preview_asset_id = payload.get("preview_asset_id", "")
-        config = payload.get("config", {})
-        if not isinstance(config, dict):
-            return domain_error_response(DomainError("VALIDATION_ERROR", "config 必须是对象"), status_code=400)
+        try:
+            config = repository.validate_style_config(payload.get("config", {}))
+        except DomainError as exc:
+            return _validation_error(exc.message)
 
         raw_tags = payload.get("tags", [])
         if not isinstance(raw_tags, list):
             return domain_error_response(DomainError("VALIDATION_ERROR", "tags 必须是数组"), status_code=400)
+        try:
+            characters = _validated_characters(repository, payload.get("characters", []))
+        except DomainError as exc:
+            return _validation_error(exc.message)
 
         now = utc_now()
         template = StyleTemplate(
@@ -173,6 +246,7 @@ def mountain_asset_router(
             created_at=now,
             updated_at=now,
             config=config,
+            characters=characters,
         )
         repository.save_style_template(template)
         return template.to_dict()
@@ -192,11 +266,9 @@ def mountain_asset_router(
         except NotFoundError as exc:
             return domain_error_response(exc, status_code=404)
 
-        # preset 禁止修改
-        if template.kind == "preset":
-            return domain_error_response(
-                DomainError("VALIDATION_ERROR", "preset 风格禁止修改"), status_code=400
-            )
+        expected_revision = payload.get("expected_revision")
+        if expected_revision is not None and (isinstance(expected_revision, bool) or not isinstance(expected_revision, int)):
+            return _validation_error("expected_revision 必须是整数")
 
         if "name" in payload:
             template.name = payload["name"]
@@ -216,14 +288,18 @@ def mountain_asset_router(
                 return domain_error_response(DomainError("VALIDATION_ERROR", "tags 必须是数组"), status_code=400)
             template.tags = raw_tags
         if "config" in payload:
-            if not isinstance(payload["config"], dict):
-                return domain_error_response(DomainError("VALIDATION_ERROR", "config 必须是对象"), status_code=400)
-            template.config = payload["config"]
-        if "expected_revision" in payload:
-            template.expected_revision = payload["expected_revision"]
+            try:
+                template.config = repository.validate_style_config(payload["config"])
+            except DomainError as exc:
+                return _validation_error(exc.message)
+        if "characters" in payload:
+            try:
+                template.characters = _validated_characters(repository, payload["characters"])
+            except DomainError as exc:
+                return _validation_error(exc.message)
 
         try:
-            repository.save_style_template(template)
+            repository.save_style_template(template, expected_revision=expected_revision)
             return template.to_dict()
         except DomainError as exc:
             return domain_error_response(exc, status_code=409 if exc.code == "REVISION_CONFLICT" else 400)
@@ -235,22 +311,11 @@ def mountain_asset_router(
         except NotFoundError as exc:
             return domain_error_response(exc, status_code=404)
 
-        # preset 禁止删除
-        if template.kind == "preset":
-            return domain_error_response(
-                DomainError("VALIDATION_ERROR", "preset 风格禁止删除"), status_code=400
-            )
-
         repository.deactivate_style_template(style_id)
         return {"ok": True}
 
     @router.post("/api/v1/assets/styles/{style_id}/activate")
     def activate_style(style_id: str):
-        # preset 禁止 activate
-        if _is_preset(repository, style_id):
-            return domain_error_response(
-                DomainError("VALIDATION_ERROR", "preset 风格禁止启用/停用"), status_code=400
-            )
         try:
             repository.activate_style_template(style_id)
             return repository.get_style_template(style_id).to_dict()
@@ -259,11 +324,6 @@ def mountain_asset_router(
 
     @router.post("/api/v1/assets/styles/{style_id}/deactivate")
     def deactivate_style(style_id: str):
-        # preset 禁止 deactivate
-        if _is_preset(repository, style_id):
-            return domain_error_response(
-                DomainError("VALIDATION_ERROR", "preset 风格禁止启用/停用"), status_code=400
-            )
         try:
             repository.deactivate_style_template(style_id)
             return repository.get_style_template(style_id).to_dict()
@@ -347,6 +407,16 @@ def mountain_asset_router(
         file: UploadFile = File(...),
         name: str = Form(""),
         tags: str = Form(""),
+        language: str = Form("und"),
+        emotion_mode: str = Form("speaker"),
+        example_text: str = Form(""),
+        availability_status: str = Form("available"),
+        status_note: str = Form(""),
+        engine: str = Form("unknown"),
+        emotion_weight: float | None = Form(None),
+        emotion_reference_asset_id: str = Form(""),
+        source: str = Form(""),
+        compatibility: str = Form(""),
     ):
         """multipart 上传音色：file、name、tags。"""
         if not file.filename:
@@ -354,6 +424,21 @@ def mountain_asset_router(
 
         # 解析 tags
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        try:
+            voice_metadata = _voice_metadata({
+                "language": language,
+                "emotion_mode": emotion_mode,
+                "example_text": example_text,
+                "availability_status": availability_status,
+                "status_note": status_note,
+                "engine": engine,
+                "emotion_weight": emotion_weight,
+                "emotion_reference_asset_id": emotion_reference_asset_id,
+                "source": source,
+                **({"compatibility": compatibility} if compatibility else {}),
+            }, defaults=True)
+        except DomainError as exc:
+            return _validation_error(exc.message)
 
         # 校验扩展名
         original_name = Path(file.filename).name
@@ -411,6 +496,7 @@ def mountain_asset_router(
                 sample_rate=meta["sample_rate"],
                 channels=meta["channels"],
                 audio_format=meta["format"],
+                metadata=voice_metadata,
             )
             return _voice_to_public(voice)
         except HTTPException:
@@ -431,16 +517,25 @@ def mountain_asset_router(
 
     @router.patch("/api/v1/assets/voices/{voice_id}")
     def patch_voice(voice_id: str, payload: dict[str, Any]):
-        """更新 name / tags。通过 Repository 公共方法，不调用私有方法。"""
+        """更新可编辑元数据；媒体 probe 字段保持服务端真相。"""
         name = payload.get("name")
         tags = payload.get("tags")
         if tags is not None and not isinstance(tags, list):
             return domain_error_response(DomainError("VALIDATION_ERROR", "tags 必须是数组"), status_code=400)
         try:
-            voice = repository.update_voice_meta(voice_id, name=name, tags=tags)
+            metadata = _voice_metadata(payload, defaults=False)
+            expected_revision = payload.get("expected_revision")
+            if expected_revision is not None and (isinstance(expected_revision, bool) or not isinstance(expected_revision, int)):
+                return _validation_error("expected_revision 必须是整数")
+            voice = repository.update_voice_meta(
+                voice_id, name=name, tags=tags, metadata=metadata,
+                expected_revision=expected_revision,
+            )
             return _voice_to_public(voice)
         except NotFoundError as exc:
             return domain_error_response(exc, status_code=404)
+        except DomainError as exc:
+            return domain_error_response(exc, status_code=409 if exc.code == "REVISION_CONFLICT" else 400)
 
     @router.delete("/api/v1/assets/voices/{voice_id}")
     def delete_voice(voice_id: str):

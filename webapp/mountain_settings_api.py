@@ -73,7 +73,11 @@ def mountain_settings_router(
             })
 
         # Skills 目录检测
-        skills_dir = data_dir.parent / "skills"
+        # Skills are project capabilities, not runtime data.  A caller may
+        # place CSBOARD_DATA_DIR anywhere (the manual integration flow uses
+        # /tmp), so deriving this path from data_dir makes an installed skill
+        # disappear as soon as storage is relocated.
+        skills_dir = Path(__file__).resolve().parents[1] / "skills"
         components.append({
             "component": "skills",
             "available": skills_dir.is_dir(),

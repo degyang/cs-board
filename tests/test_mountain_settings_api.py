@@ -31,6 +31,9 @@ def test_toolchain(client: TestClient):
     for item in data["tools"]:
         assert "component" in item
         assert "available" in item
+    skills = next(item for item in data["tools"] if item["component"] == "skills")
+    assert skills["available"] is True
+    assert skills["error_code"] is None
 
 
 def test_storage(client: TestClient):

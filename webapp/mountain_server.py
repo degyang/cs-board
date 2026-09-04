@@ -60,6 +60,8 @@ def create_app(
 
     # ── 唯一组合根：创建所有共享组件 ──────────────────────────
     from csboard.application.default_services import seed as seed_default_services
+    from csboard.application.migrated_asset_catalog import seed as seed_migrated_assets
+    from csboard.application.precondition_catalog import seed as seed_preconditions
     from csboard.application.preset_catalog import seed as seed_preset_styles
     from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
     from csboard.adapters.secrets import create_secret_store
@@ -78,6 +80,8 @@ def create_app(
     # 新数据目录首次启动即具备真实可配置服务和预置风格；不覆盖用户数据。
     seed_default_services(effective_data_dir)
     seed_preset_styles(effective_data_dir)
+    seed_migrated_assets(effective_data_dir)
+    seed_preconditions(effective_data_dir)
 
     # 共享组件：所有 Router 使用同一实例
     service_registry = FilesystemServiceRegistry(effective_data_dir, secret_store)
@@ -99,7 +103,8 @@ def create_app(
     from webapp.mountain_settings_api import mountain_settings_router
 
     # 共享 Repository 和 Telemetry
-    task_repository = repository or FilesystemTaskRepository(effective_data_dir)
+    project_root = Path(os.environ.get("CSBOARD_PROJECT_ROOT", effective_data_dir)).resolve()
+    task_repository = repository or FilesystemTaskRepository(effective_data_dir, project_root=project_root)
     telemetry = JsonlTelemetry(task_repository)
     asset_repository = FilesystemAssetRepository(effective_data_dir)
 

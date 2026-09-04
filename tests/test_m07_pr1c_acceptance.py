@@ -157,12 +157,12 @@ class TestProviderFactorySoleEntry:
         run_id = result["run_id"]
 
         # 创建实际的参考音频文件（在 task 目录下）
-        ref_audio = tmp_data_dir / "tasks" / task_id / "inputs" / "reference.wav"
+        ref_audio = commands.repository.task_dir(task_id) / "inputs" / "reference.wav"
         ref_audio.parent.mkdir(parents=True, exist_ok=True)
         ref_audio.write_bytes(b"RIFF" + b"\x00" * 1000)
 
         # 写入 request.json（相对路径）
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "inputs/reference.wav"}),
             encoding="utf-8",
@@ -218,7 +218,7 @@ class TestProviderFactorySoleEntry:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -252,7 +252,7 @@ class TestProviderFactorySoleEntry:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -362,7 +362,7 @@ class TestAdapterCallParams:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -398,7 +398,7 @@ class TestAdapterCallParams:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -430,7 +430,7 @@ class TestAdapterCallParams:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -504,7 +504,7 @@ class TestProviderFailure:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -544,7 +544,7 @@ class TestProviderFailure:
         task_id = result["task_id"]
         run_id = result["run_id"]
 
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_path.write_text(
             json.dumps({"script": "测试文案", "reference_audio": "/tmp/test.wav"}),
             encoding="utf-8",
@@ -567,7 +567,7 @@ class TestProviderFailure:
             pass
 
         # 验证没有创建假媒体文件
-        run_dir = tmp_data_dir / "tasks" / task_id / "runs" / run_id / "artifacts"
+        run_dir = commands.repository.run_dir(task_id, run_id) / "artifacts"
         if run_dir.exists():
             for f in run_dir.rglob("*"):
                 if f.is_file() and f.suffix in (".wav", ".png", ".mp4"):
@@ -927,7 +927,7 @@ class TestSecretsNotExposed:
         task_id = result["task_id"]
 
         # 写入 request.json（模拟上传输入）
-        request_path = tmp_data_dir / "tasks" / task_id / "request.json"
+        request_path = commands.repository.task_dir(task_id) / "request.json"
         request_data = {
             "script": "测试文案",
             "reference_audio": "/tmp/test.wav",

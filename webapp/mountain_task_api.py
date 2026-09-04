@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, UploadFile
+from fastapi import APIRouter, Body, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from csboard.adapters.filesystem import FilesystemTaskRepository
@@ -65,6 +65,19 @@ def mountain_task_router(
         """Server-owned constraints for the six-tab create form."""
         return commands.create_options()
 
+    @router.post("/scripts/prepare")
+    def preview_script(payload: dict = Body(...)):
+        """Non-writing authoritative segmentation preview for the create form."""
+        if not isinstance(payload, dict) or not isinstance(payload.get("script"), str):
+            return domain_error_response(DomainError("VALIDATION_ERROR", "script 必须是字符串"), status_code=400)
+        try:
+            target_chars = payload.get("target_chars", 45)
+            if not isinstance(target_chars, int) or isinstance(target_chars, bool):
+                raise DomainError("VALIDATION_ERROR", "target_chars 必须是整数")
+            return commands.preview_script(payload["script"], target_chars)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
+
     @router.post("/tasks")
     def create_task(payload: dict = Body(...)):
         """创建新任务。"""
@@ -82,11 +95,30 @@ def mountain_task_router(
             return commands.create_task(
                 title, pipeline_id, engine, context=_context(),
                 summary=summary, submission_id=submission_id,
+                request={"output_root": payload.get("output_root")} if "output_root" in payload else None,
             )
         except DomainError as error:
             return domain_error_response(error, status_code=409 if error.code == "SUBMISSION_CONFLICT" else 400)
         except ValueError as error:
             return domain_error_response(DomainError("VALIDATION_ERROR", str(error)), status_code=400)
+
+    @router.post("/tasks/recover")
+    def recover_task(payload: dict = Body(...)):
+        """显式、可审计的部分历史成片导入。"""
+        try:
+            required = {"task_id", "run_id", "source_file", "size", "sha256", "authority_references", "missing_evidence"}
+            if not isinstance(payload, dict) or required - set(payload):
+                raise DomainError("VALIDATION_ERROR", "部分历史导入字段不完整")
+            return commands.import_partial_historical_final(
+                task_id=payload["task_id"], run_id=payload["run_id"], source_file=Path(payload["source_file"]),
+                expected_size=payload["size"], expected_sha256=payload["sha256"],
+                authority_refs=payload["authority_references"], missing_evidence=payload["missing_evidence"],
+                output_root=payload.get("output_root"),
+            )
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code == "RECOVERY_TARGET_CONFLICT" else 400)
+        except (TypeError, ValueError):
+            return domain_error_response(DomainError("VALIDATION_ERROR", "部分历史导入字段格式无效"), status_code=400)
 
     @router.get("/tasks")
     def list_tasks(
@@ -97,6 +129,16 @@ def mountain_task_router(
     ):
         """列出任务 — 委托 Application 层执行 filter→sort→cursor→limit。"""
         return commands.list_tasks(limit=limit, cursor=cursor, status=status, q=q)
+
+    @router.get("/directories")
+    def browse_directories(path: str | None = Query(default=None)):
+        """浏览项目内直属目录；只读且不返回文件内容。"""
+        try:
+            return repository.browse_project_directory(path)
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
 
     @router.get("/tasks/{task_id}")
     def get_task(task_id: str):
@@ -122,6 +164,11 @@ def mountain_task_router(
         voice_source: str | None = Form(None),
         visual_source: str | None = Form(None),
         style_asset_id: str | None = Form(None),
+        voice_asset_id: str | None = Form(None),
+        style_asset_revision: int | None = Form(None),
+        voice_asset_revision: int | None = Form(None),
+        style_revision: int | None = Form(None),
+        voice_revision: int | None = Form(None),
         shots_per_image: int | None = Form(None),
         line_density: str | None = Form(None),
         brand_text: str | None = Form(None),
@@ -186,6 +233,11 @@ def mountain_task_router(
                 voice_source=voice_source,
                 visual_source=visual_source,
                 style_asset_id=style_asset_id,
+                voice_asset_id=voice_asset_id,
+                style_asset_revision=style_asset_revision,
+                voice_asset_revision=voice_asset_revision,
+                style_revision=style_revision,
+                voice_revision=voice_revision,
                 shots_per_image=shots_per_image,
                 line_density=line_density,
                 brand_text=brand_text,
@@ -365,6 +417,42 @@ def mountain_task_router(
             return domain_error_response(error, status_code=404)
         except DomainError as error:
             return domain_error_response(error, status_code=400)
+
+    @router.post("/tasks/{task_id}/runs/{run_id}/work-orders/illustrations/import")
+    def import_illustration_candidate(task_id: str, run_id: str, payload: dict = Body(...)):
+        try:
+            return commands.work_order_import(task_id, run_id, payload.get("work_order_id", ""), payload.get("manifest", ""))
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code in {"INVALID_STATE", "WORK_ORDER_STALE"} else 400)
+
+    @router.post("/tasks/{task_id}/runs/{run_id}/work-orders/illustrations/validate")
+    def validate_illustration_candidate(task_id: str, run_id: str, payload: dict = Body(...)):
+        try:
+            return commands.work_order_validate(task_id, run_id, payload.get("work_order_id", ""))
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code in {"INVALID_STATE", "WORK_ORDER_STALE"} else 400)
+
+    @router.post("/tasks/{task_id}/runs/{run_id}/work-orders/illustrations/accept")
+    def accept_illustration_candidate(task_id: str, run_id: str, payload: dict = Body(...)):
+        try:
+            return commands.work_order_accept(task_id, run_id, payload.get("work_order_id", ""))
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code in {"INVALID_STATE", "WORK_ORDER_STALE"} else 400)
+
+    @router.post("/tasks/{task_id}/runs/{run_id}/work-orders/illustrations/reject")
+    def reject_illustration_candidate(task_id: str, run_id: str, payload: dict = Body(...)):
+        try:
+            return commands.work_order_reject(task_id, run_id, payload.get("work_order_id", ""), payload.get("reason", ""))
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=409 if error.code in {"INVALID_STATE", "WORK_ORDER_STALE"} else 400)
 
     # ── Voice Units ──────────────────────────────────────────────────────
 
@@ -604,13 +692,8 @@ def mountain_task_router(
     @router.get("/tasks/{task_id}/runs/{run_id}/final")
     def download_final(task_id: str, run_id: str):
         """下载成片。"""
-        path = (
-            repository.run_dir(task_id, run_id)
-            / "artifacts"
-            / "output"
-            / "final.mp4"
-        )
-        if not path.exists():
+        path = repository.final_path(task_id, run_id)
+        if not path.is_file():
             return domain_error_response(NotFoundError("成片尚未生成"), status_code=404)
         return FileResponse(
             path, media_type="video/mp4", filename=f"cs-board-{task_id}.mp4"
@@ -628,6 +711,10 @@ def mountain_task_router(
             "artifacts": [],
             "trace": None,
         }
+        recovery = repository.recovery_metadata(task.task_id)
+        if recovery:
+            result["recovery_status"] = "partial"
+            result["recovery"] = recovery
         if run:
             result["stages"] = [
                 {"stage": name, **state.to_dict()}

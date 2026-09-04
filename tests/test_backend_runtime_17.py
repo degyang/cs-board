@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -142,6 +143,21 @@ def test_launch_script_help():
     assert "--host" in result.stdout
     assert "--port" in result.stdout
     assert "--data-dir" in result.stdout
+
+
+def test_listener_does_not_force_abortive_rst_close():
+    """Large proxied responses require a normal FIN, not SO_LINGER(1, 0)."""
+    from scripts.run_mountain_backend import _create_listening_socket
+
+    listener = _create_listening_socket("127.0.0.1", 0)
+    try:
+        enabled, _timeout = struct.unpack(
+            "ii",
+            listener.getsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.calcsize("ii")),
+        )
+        assert enabled == 0
+    finally:
+        listener.close()
 
 
 def test_launch_script_port_occupied():
@@ -335,6 +351,7 @@ def test_two_fresh_data_dirs_reuse_same_port_after_normal_shutdown():
                 assert not _pid_alive(child_pid)
                 assert not data_dir.exists()
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reusable:
+                    reusable.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     reusable.bind(("127.0.0.1", port))
             finally:
                 if proc is not None and proc.poll() is None:

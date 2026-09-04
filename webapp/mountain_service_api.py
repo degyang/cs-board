@@ -35,7 +35,7 @@ def mountain_service_router(
         base = _reg.to_public_dict(service)
 
         # config_status
-        if service.adapter_type == "openai_compatible":
+        if service.adapter_type in {"openai_compatible", "anthropic_compatible"}:
             required_fields = {"endpoint", "model"}
         elif service.adapter_type == "indextts":
             required_fields = {"endpoint"}

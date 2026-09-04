@@ -61,13 +61,10 @@ class RealAdapterConformance(unittest.TestCase):
     """Verify real adapters satisfy their Protocol."""
 
     def test_openai_compatible_text(self):
-        try:
-            from csboard.adapters.openai_compatible.text_adapter import OpenAICompatibleTextAdapter
-            adapter = OpenAICompatibleTextAdapter(api_key="test-key")
-            missing = _check_protocol(adapter, TextModelPort)
-            self.assertEqual(missing, set())
-        except ImportError:
-            self.skipTest("httpx not installed")
+        from csboard.adapters.openai_compatible.text_adapter import OpenAITextAdapter
+        adapter = OpenAITextAdapter(base_url="http://127.0.0.1", api_key="test-key")
+        missing = _check_protocol(adapter, TextModelPort)
+        self.assertEqual(missing, set())
 
     def test_whiteboard_renderer(self):
         from csboard.adapters.whiteboard.renderer_adapter import WhiteboardRendererAdapter
