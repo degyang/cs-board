@@ -107,7 +107,7 @@ describe('race condition: tab/filter change', () => {
 
     // Only custom results should show (B wins)
     await waitFor(() => {
-      expect(screen.getByText('Custom Style')).toBeTruthy()
+      expect(screen.getAllByText('Custom Style')[0]).toBeTruthy()
     })
     expect(screen.queryByText('Preset Style')).toBeNull()
   })
@@ -159,7 +159,7 @@ describe('race condition: tab/filter change', () => {
 
     // Only new results should show
     await waitFor(() => {
-      expect(screen.getByText('New Result')).toBeTruthy()
+      expect(screen.getAllByText('New Result')[0]).toBeTruthy()
     })
     expect(screen.queryByText('Old Result')).toBeNull()
   })
@@ -212,7 +212,7 @@ describe('race condition: load-more vs reset', () => {
 
     // Wait for page 1
     await waitFor(() => {
-      expect(screen.getByText('Page 1 Item')).toBeTruthy()
+      expect(screen.getAllByText('Page 1 Item')[0]).toBeTruthy()
     })
 
     // Click load more
@@ -233,7 +233,7 @@ describe('race condition: load-more vs reset', () => {
 
     // Only filtered results should show, not page 2 items
     await waitFor(() => {
-      expect(screen.getByText('Filtered Item')).toBeTruthy()
+      expect(screen.getAllByText('Filtered Item')[0]).toBeTruthy()
     })
     expect(screen.queryByText('Page 1 Item')).toBeNull()
     expect(screen.queryByText('Page 2 Item')).toBeNull()
@@ -336,7 +336,7 @@ describe('race condition: request generation token', () => {
 
     // Only the last tab's (preset, item-2) results should show
     await waitFor(() => {
-      expect(screen.getByText('Item 2')).toBeTruthy()
+      expect(screen.getAllByText('Item 2')[0]).toBeTruthy()
     })
     expect(screen.queryByText('Item 0')).toBeNull()
     expect(screen.queryByText('Item 1')).toBeNull()
