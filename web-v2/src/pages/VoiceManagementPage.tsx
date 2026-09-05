@@ -8,17 +8,41 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { Tabs } from '../components/ui/Tabs'
 import { getVoiceContentUrl } from '../lib/api/http'
 import {
   fetchVoices, createVoice, updateVoice, deleteVoice,
 } from '../lib/api/assets'
-import type { VoiceDefinition } from '../lib/api/types'
+import { fetchServices } from '../lib/api/services'
+import { createVoiceProfile, createVoiceStyleProfile, fetchVoiceProfiles, fetchVoiceStyleProfiles, previewVoiceProfile } from '../lib/api/voiceProfiles'
+import type { ServiceDefinition, VoiceDefinition, VoiceProfile, VoiceStyleProfile } from '../lib/api/types'
+
+const VOICE_TABS = [
+  { key: 'library', label: '音色库' },
+  { key: 'presets', label: '预置音色' },
+  { key: 'designs', label: '音色设计' },
+  { key: 'styles', label: '发音风格' },
+]
 
 const STATUS_OPTIONS = [
   { value: '', label: '全部状态' },
   { value: 'active', label: '已启用' },
   { value: 'inactive', label: '未启用' },
 ]
+
+const DEFAULT_PREVIEW_TEXT = '这是一个语音测试，我会用清晰的语音提醒你，我就是你知心的助手。'
+
+function languageLabel(value?: string | null): string {
+  if (value === 'zh-CN') return '中文'
+  if (value === 'en-US') return '英文'
+  return '—'
+}
+
+function genderLabel(value?: string | null): string {
+  if (value === 'female') return '女'
+  if (value === 'male') return '男'
+  return '—'
+}
 
 /* ── Shared sub-components ─────────────────────────────────────────────── */
 
@@ -246,7 +270,7 @@ function VoiceFormDialog({
 
 /* ── Main Page ─────────────────────────────────────────────────────────── */
 
-export function VoiceManagementPage() {
+function LocalVoiceLibrary() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [items, setItems] = useState<VoiceDefinition[]>([])
@@ -371,12 +395,7 @@ export function VoiceManagementPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-head am-header">
-        <h1 className="page-title">音色管理</h1>
-        <p className="page-desc">集中维护视频生产所需的音色资产。支持搜索、筛选、试听、上传、编辑和删除。</p>
-      </div>
-
+    <div className="voice-library-panel">
       {feedback && <div className="am-feedback">{feedback}</div>}
       {error && <div className="am-error" role="alert">{error}</div>}
 
@@ -467,6 +486,318 @@ export function VoiceManagementPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  )
+}
+
+type ProviderTab = 'designs' | 'styles'
+
+function isSpeechProvider(service: ServiceDefinition): boolean {
+  return service.enabled && (
+    service.capability === 'speech.synthesize'
+    || service.capability === 'speech_synthesis'
+    || service.capability === 'audio_generation'
+  )
+}
+
+function PresetVoiceCatalog() {
+  const [profiles, setProfiles] = useState<VoiceProfile[]>([])
+  const [providers, setProviders] = useState<ServiceDefinition[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let current = true
+    setLoading(true)
+    setCatalogError(null)
+    fetchVoiceProfiles({ kind: 'provider-preset' })
+      .then(response => {
+        if (!current) return
+        setProfiles(response.items)
+        setSelectedId(previous => previous && response.items.some(item => item.profile_id === previous)
+          ? previous
+          : response.items[0]?.profile_id ?? '')
+      })
+      .catch(error => {
+        if (!current) return
+        setProfiles([])
+        const detail = error instanceof Error ? error.message : '未知错误'
+        setCatalogError(`接口尚未就绪：${detail}`)
+      })
+      .finally(() => { if (current) setLoading(false) })
+    fetchServices({ enabled: true })
+      .then(response => { if (current) setProviders(response.items.filter(isSpeechProvider)) })
+      .catch(() => { if (current) setProviders([]) })
+    return () => { current = false }
+  }, [])
+
+  const selected = profiles.find(item => item.profile_id === selectedId) ?? null
+  const groups = profiles.reduce<Array<{ id: string; name: string; items: VoiceProfile[] }>>((result, profile) => {
+    const id = profile.vendor_id || 'unclassified'
+    const existing = result.find(group => group.id === id)
+    if (existing) existing.items.push(profile)
+    else result.push({ id, name: profile.vendor_name || '厂家未标注', items: [profile] })
+    return result
+  }, [])
+  const providerName = selected
+    ? providers.find(provider => provider.service_id === selected.provider_id)?.display_name || selected.provider_id
+    : '—'
+
+  const selectProfile = (profileId: string) => {
+    setSelectedId(profileId)
+    setPreviewUrl(null)
+    setPreviewError(null)
+  }
+  const createPreview = async () => {
+    if (!selected) return
+    setPreviewing(true)
+    setPreviewError(null)
+    setPreviewUrl(null)
+    try {
+      const result = await previewVoiceProfile(selected.profile_id, selected.example_text || DEFAULT_PREVIEW_TEXT)
+      setPreviewUrl(result.audio_url)
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : '预览接口尚未就绪')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  return (
+    <section className="voice-preset-panel" aria-label="预置音色">
+      {catalogError && <div className="am-error" role="alert">预置音色加载失败：{catalogError}</div>}
+      {loading ? <div className="am-loading">加载中...</div> : profiles.length === 0 && !catalogError ? <div className="am-empty">暂无预置音色</div> : (
+        <div className="am-layout">
+          <aside className="am-list" aria-label="按厂家分组的预置音色">
+            {groups.map(group => (
+              <section className="voice-vendor-group" key={group.id} aria-labelledby={`voice-vendor-${group.id}`}>
+                <h3 id={`voice-vendor-${group.id}`} className="voice-vendor-name">{group.name}</h3>
+                {group.items.map(profile => (
+                  <button
+                    type="button"
+                    className={`am-list-item voice-preset-list-item${selectedId === profile.profile_id ? ' am-list-item--selected' : ''}`}
+                    key={profile.profile_id}
+                    onClick={() => selectProfile(profile.profile_id)}
+                    aria-pressed={selectedId === profile.profile_id}
+                  >
+                    <span className="am-list-item-name">{profile.name}</span>
+                    <AssetStatus status={profile.status} />
+                  </button>
+                ))}
+              </section>
+            ))}
+          </aside>
+          <article className="am-detail" aria-label="预置音色详情">
+            {selected ? <>
+              <div className="am-detail-head">
+                <div className="am-voice-avatar" aria-hidden="true">🔊</div>
+                <div><h2 className="am-detail-name">{selected.name}</h2><div className="am-detail-tag">只读预置音色 · <AssetStatus status={selected.status} /></div></div>
+              </div>
+              <section className="am-detail-section" aria-label="预置音色信息">
+                <h3 className="am-section-title">音色信息</h3>
+                <div className="am-detail-field"><span className="am-detail-label">语言:</span> {languageLabel(selected.language)}</div>
+                <div className="am-detail-field"><span className="am-detail-label">性别:</span> {genderLabel(selected.gender)}</div>
+                <div className="am-detail-field"><span className="am-detail-label">厂家:</span> {selected.vendor_name || '厂家未标注'}</div>
+                <div className="am-detail-field"><span className="am-detail-label">Provider:</span> {providerName}</div>
+                <div className="am-detail-field"><span className="am-detail-label">模型:</span> {selected.model_id || '—'}</div>
+                <div className="am-detail-field"><span className="am-detail-label">状态:</span> <AssetStatus status={selected.status} /></div>
+              </section>
+              <section className="am-detail-section" aria-label="真实音色预览">
+                <h3 className="am-section-title">音频预览</h3>
+                <div className="am-detail-field"><span className="am-detail-label">示例朗读文本:</span> {selected.example_text || DEFAULT_PREVIEW_TEXT}</div>
+                <button type="button" className="btn btn-primary btn-sm" onClick={createPreview} disabled={previewing}>{previewing ? '生成中...' : '生成预览'}</button>
+                {previewError && <div className="am-error voice-preview-error" role="alert">预览生成失败：{previewError}</div>}
+                <audio controls autoPlay={Boolean(previewUrl)} src={previewUrl || undefined} className="am-voice-player">您的浏览器不支持音频播放</audio>
+                {!previewUrl && !previewError && <p className="hint">点击“生成预览”后，将调用后端 Provider 生成真实音频。</p>}
+              </section>
+            </> : <div className="am-detail-empty"><strong>请选择预置音色</strong></div>}
+          </article>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ProviderProfileForm({
+  tab,
+  providers,
+  initialProviderId,
+  onClose,
+  onSaved,
+}: {
+  tab: 'designs' | 'styles'
+  providers: ServiceDefinition[]
+  initialProviderId: string
+  onClose: () => void
+  onSaved: () => void | Promise<void>
+}) {
+  const [providerId, setProviderId] = useState(initialProviderId)
+  const initialProvider = providers.find(item => item.service_id === initialProviderId)
+  const [modelId, setModelId] = useState(initialProvider?.model ?? '')
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [tags, setTags] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const changeProvider = (nextId: string) => {
+    setProviderId(nextId)
+    setModelId(providers.find(item => item.service_id === nextId)?.model ?? '')
+  }
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    setError(null)
+    const tagList = tags.split(',').map(tag => tag.trim()).filter(Boolean)
+    try {
+      if (tab === 'designs') {
+        await createVoiceProfile({
+          name: name.trim(), kind: 'provider-designed', provider_id: providerId,
+          model_id: modelId.trim(), design_prompt: description.trim(), tags: tagList,
+        })
+      } else {
+        await createVoiceStyleProfile({
+          name: name.trim(), provider_id: providerId, instruction: description.trim(), tags: tagList,
+        })
+      }
+      await onSaved()
+      onClose()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const noun = tab === 'designs' ? '音色设计' : '发音风格'
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={event => event.stopPropagation()}>
+        <h2 className="modal-title">新建{noun}</h2>
+        {error && <div className="error-card" role="alert">{error}</div>}
+        <form className="style-form" onSubmit={submit}>
+          <div className="form-field"><label className="form-label" htmlFor="profile-provider">Provider *</label><select id="profile-provider" className="input" required value={providerId} onChange={event => changeProvider(event.target.value)}>{providers.map(provider => <option value={provider.service_id} key={provider.service_id}>{provider.display_name}</option>)}</select></div>
+          <div className="form-field"><label className="form-label" htmlFor="profile-name">名称 *</label><input id="profile-name" className="input" required value={name} onChange={event => setName(event.target.value)} /></div>
+          {tab === 'designs' && <div className="form-field"><label className="form-label" htmlFor="profile-model">模型 *</label><input id="profile-model" className="input" required value={modelId} onChange={event => setModelId(event.target.value)} /></div>}
+          <div className="form-field"><label className="form-label" htmlFor="profile-description">{tab === 'designs' ? '设计描述' : '风格指令'} *</label><textarea id="profile-description" className="input" required rows={4} value={description} onChange={event => setDescription(event.target.value)} /></div>
+          <div className="form-field"><label className="form-label" htmlFor="profile-tags">标签（逗号分隔）</label><input id="profile-tags" className="input" value={tags} onChange={event => setTags(event.target.value)} /></div>
+          <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>取消</button><button type="submit" className="btn btn-primary" disabled={saving}>{saving ? '保存中...' : '保存'}</button></div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function ProviderCatalog({ tab }: { tab: ProviderTab }) {
+  const [providers, setProviders] = useState<ServiceDefinition[]>([])
+  const [providerId, setProviderId] = useState('')
+  const [items, setItems] = useState<Array<VoiceProfile | VoiceStyleProfile>>([])
+  const [loading, setLoading] = useState(true)
+  const [providerError, setProviderError] = useState<string | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    let current = true
+    setProviderError(null)
+    fetchServices({ enabled: true })
+      .then(response => {
+        if (!current) return
+        const next = response.items.filter(isSpeechProvider)
+        setProviders(next)
+        setProviderId(previous => previous && next.some(item => item.service_id === previous) ? previous : next[0]?.service_id ?? '')
+      })
+      .catch(error => {
+        if (current) setProviderError(error instanceof Error ? error.message : 'Provider 列表加载失败')
+      })
+    return () => { current = false }
+  }, [])
+
+  useEffect(() => {
+    let current = true
+    setLoading(true)
+    setCatalogError(null)
+    const request = tab === 'styles'
+      ? fetchVoiceStyleProfiles({ provider_id: providerId || undefined })
+      : fetchVoiceProfiles({ kind: 'provider-designed', provider_id: providerId || undefined })
+    request
+      .then(response => { if (current) setItems(response.items) })
+      .catch(() => {
+        if (!current) return
+        setItems([])
+        setCatalogError('接口尚未就绪，请先完成 VoiceProfile API 配置。')
+      })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [providerId, reload, tab])
+
+  const title = tab === 'designs' ? '音色设计' : '发音风格'
+
+  return (
+    <section className="voice-provider-panel" aria-label={title}>
+      <div className="voice-provider-toolbar">
+        <label htmlFor={`voice-provider-${tab}`}>Provider</label>
+        <select
+          id={`voice-provider-${tab}`}
+          className="input"
+          value={providerId}
+          onChange={event => setProviderId(event.target.value)}
+          disabled={providers.length === 0}
+        >
+          {providers.length === 0 && <option value="">Provider 未配置</option>}
+          {providers.map(provider => <option key={provider.service_id} value={provider.service_id}>{provider.display_name}</option>)}
+        </select>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)} disabled={!providerId}>+ 新建{title}</button>
+      </div>
+      {providerError && <div className="am-error" role="alert">Provider 列表加载失败：{providerError}</div>}
+      {!providerError && providers.length === 0 && <div className="am-empty-state"><strong>Provider 未配置</strong><span>请先在模型服务中启用支持语音合成的 Provider。</span></div>}
+      {catalogError && <div className="am-error" role="alert">{catalogError}</div>}
+      {loading ? <div className="am-loading">加载中...</div> : items.length > 0 && (
+        <div className="voice-profile-list">
+          {items.map(item => {
+            const style = 'style_profile_id' in item
+            const id = style ? item.style_profile_id : item.profile_id
+            return (
+              <article className="card voice-profile-card" key={id}>
+                <div className="voice-profile-heading"><strong>{item.name}</strong><AssetStatus status={item.status} /></div>
+                <div className="am-detail-field"><span className="am-detail-label">Provider:</span> {item.provider_id || '通用'}</div>
+                <div className="am-detail-field"><span className="am-detail-label">修订:</span> {item.revision}</div>
+                {style ? <p>{item.instruction}</p> : <>
+                  <div className="am-detail-field"><span className="am-detail-label">模型:</span> {item.model_id}</div>
+                  <p>{item.design_prompt || '暂无音色描述'}</p>
+                </>}
+                {item.tags.length > 0 && <div className="am-tags">{item.tags.map(tag => <span className="am-tag" key={tag}>{tag}</span>)}</div>}
+              </article>
+            )
+          })}
+        </div>
+      )}
+      {showCreate && <ProviderProfileForm tab={tab} providers={providers} initialProviderId={providerId} onClose={() => setShowCreate(false)} onSaved={() => setReload(value => value + 1)} />}
+    </section>
+  )
+}
+
+export function VoiceManagementPage() {
+  const [activeTab, setActiveTab] = useState('library')
+  return (
+    <div className="page">
+      <div className="page-head am-header">
+        <h1 className="page-title">音色管理</h1>
+        <p className="page-desc">管理本地音色资产，以及由模型服务 Provider 提供的预置音色、音色设计和发音风格。</p>
+      </div>
+      <Tabs items={VOICE_TABS} active={activeTab} onChange={setActiveTab} />
+      <div role="tabpanel" id={`tab-panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+        {activeTab === 'library'
+          ? <LocalVoiceLibrary />
+          : activeTab === 'presets'
+            ? <PresetVoiceCatalog />
+            : <ProviderCatalog tab={activeTab as ProviderTab} />}
+      </div>
     </div>
   )
 }

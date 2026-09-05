@@ -7,7 +7,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 
 const SETTINGS_TABS = [
   { to: '/settings/models', label: '模型服务' },
-  { to: '/settings/voice-alignment', label: '语音与对齐' },
+  { to: '/settings/voice-alignment', label: '本地服务' },
   { to: '/settings/toolchain', label: '工具链' },
   { to: '/settings/storage', label: '存储' },
   { to: '/settings/diagnostics', label: '诊断' },

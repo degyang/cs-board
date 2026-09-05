@@ -722,3 +722,57 @@
   padding: 4px;
 }
 .am-style-preview--head .am-preview-placeholder-icon { font-size: 24px; }
+
+/* Provider-neutral voice catalogs */
+.voice-library-panel { margin-top: 16px; }
+.voice-provider-panel { margin-top: 16px; }
+.voice-provider-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.voice-provider-toolbar label { color: var(--nt-text-secondary); font-size: 13px; font-weight: 600; }
+.voice-provider-toolbar .input { max-width: 320px; }
+.voice-provider-panel .am-empty-state {
+  align-items: flex-start;
+  background: var(--nt-surface);
+  border: 1px solid var(--nt-border);
+  border-radius: var(--nt-radius-lg);
+  color: var(--nt-text-muted);
+  padding: 28px;
+  text-align: left;
+}
+.voice-provider-panel .am-empty-state strong { color: var(--nt-text); }
+.voice-profile-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.voice-profile-card { margin: 0; }
+.voice-profile-heading { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.voice-profile-card p { color: var(--nt-text-secondary); font-size: 13px; line-height: 1.6; }
+
+/* Read-only preset voices: vendor-grouped master/detail catalog. */
+.voice-preset-panel { margin-top: 16px; }
+.voice-preset-panel .am-layout { grid-template-columns: 300px minmax(0, 1fr); }
+.voice-vendor-group + .voice-vendor-group { border-top: 1px solid var(--nt-border); margin-top: 10px; padding-top: 10px; }
+.voice-vendor-name {
+  color: var(--nt-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin: 2px 8px 7px;
+  text-transform: uppercase;
+}
+.voice-preset-list-item {
+  align-items: center;
+  background: transparent;
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+  width: 100%;
+}
+.voice-preset-list-item .am-status { margin-left: 8px; }
+.voice-preview-error { margin-top: 12px; }
+.voice-preset-panel .am-voice-player { display: block; margin-top: 12px; max-width: 100%; width: 420px; }
+
+@media (max-width: 768px) {
+  .voice-preset-panel .am-layout { grid-template-columns: 1fr; }
+}

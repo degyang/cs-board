@@ -15,8 +15,8 @@ const ADAPTERS = [
 ] as const
 /** Adapter types that require api_key in required_secrets. */
 const API_KEY_ADAPTERS = new Set(['openai_compatible', 'anthropic_compatible'])
-const LOCAL_ADAPTERS = new Set(['indextts', 'whisper', 'codex_skill', 'ffmpeg', 'local_process'])
-const LOCAL_IDS = new Set(['local-indextts', 'local-whisper', 'local-ffmpeg', 'whiteboard-renderer', 'codex-skills'])
+const LOCAL_ADAPTERS = new Set(['indextts', 'codex_skill', 'ffmpeg', 'local_process'])
+const LOCAL_IDS = new Set(['local-indextts', 'local-ffmpeg', 'whiteboard-renderer', 'codex-skills'])
 
 type Draft = {
   displayName: string

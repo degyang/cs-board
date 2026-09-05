@@ -53,7 +53,7 @@ export function VoiceAlignmentPage() {
   return (
     <div className="page-container">
       <div className="va-header">
-        <h1 className="va-title">声音对齐</h1>
+        <h1 className="va-title">本地服务</h1>
       </div>
 
       {feedback && <div className="va-feedback">{feedback}</div>}

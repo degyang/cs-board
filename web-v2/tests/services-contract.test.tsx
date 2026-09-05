@@ -143,7 +143,7 @@ describe('SettingsLayout with ModelServicesPage (production Router)', () => {
     })
     expect(screen.getByText('设置')).toBeInTheDocument()
     expect(screen.getByText('模型服务')).toBeInTheDocument()
-    expect(screen.getByText('语音与对齐')).toBeInTheDocument()
+    expect(screen.getByText('本地服务')).toBeInTheDocument()
     expect(screen.getByText('工具链')).toBeInTheDocument()
     expect(screen.getByText('存储')).toBeInTheDocument()
     expect(screen.getByText('诊断')).toBeInTheDocument()
@@ -760,7 +760,7 @@ describe('VoiceAlignmentPage (production route)', () => {
 
     await waitFor(() => {
       // Title appears in both tab and page content
-      expect(screen.getAllByText('语音与对齐').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('本地服务').length).toBeGreaterThanOrEqual(1)
     })
   })
 })
@@ -971,7 +971,7 @@ describe('Production route tree verification', () => {
       renderWithRouter(<VoiceAlignmentPage />, '/settings/voice-alignment')
     })
     await waitFor(() => {
-      expect(screen.getAllByText('语音与对齐').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('本地服务').length).toBeGreaterThanOrEqual(1)
     })
   })
 

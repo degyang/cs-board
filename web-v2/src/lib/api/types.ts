@@ -668,6 +668,62 @@ export interface VoiceListParams {
   limit?: number
 }
 
+// ── Assets: Provider voice profiles ────────────────────────────────────
+
+export type VoiceProfileKind = 'uploaded-reference' | 'provider-preset' | 'provider-designed'
+
+export interface VoiceProfile {
+  profile_id: string
+  revision: number
+  name: string
+  kind: VoiceProfileKind
+  vendor_id?: string | null
+  vendor_name?: string | null
+  provider_id: string
+  model_id: string
+  remote_voice_id?: string | null
+  design_prompt?: string | null
+  default_style_profile_id?: string | null
+  language?: string | null
+  gender?: string | null
+  example_text?: string | null
+  tags: string[]
+  status: 'active' | 'inactive'
+  capability_snapshot: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+}
+
+export interface VoiceProfileListResponse {
+  items: VoiceProfile[]
+  next_cursor?: string | null
+  total: number
+}
+
+export interface VoiceProfilePreviewResponse {
+  audio_url: string
+  content_type: string
+  duration_ms?: number | null
+}
+
+export interface VoiceStyleProfile {
+  style_profile_id: string
+  revision: number
+  name: string
+  provider_id?: string | null
+  instruction: string
+  tags: string[]
+  status: 'active' | 'inactive'
+  created_at?: string
+  updated_at?: string
+}
+
+export interface VoiceStyleProfileListResponse {
+  items: VoiceStyleProfile[]
+  next_cursor?: string | null
+  total: number
+}
+
 export interface CreateVoiceRequest {
   name: string
   tags?: string[]
