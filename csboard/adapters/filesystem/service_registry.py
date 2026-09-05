@@ -50,6 +50,17 @@ _NORMALIZED_SENSITIVE_KEYS = {k.replace("_", "") for k in _SENSITIVE_CONFIG_KEYS
 # probe 结果缓存（service_id → (result, timestamp)）
 _probe_cache: dict[str, tuple[dict[str, Any], float]] = {}
 _PROBE_CACHE_TTL = 60.0  # 60秒缓存
+# Health-probe connect timeout: fail fast when a service port is simply not open.
+_PROBE_HTTP_TIMEOUT = None  # lazily built via _get_probe_timeout()
+
+
+def _get_probe_timeout():
+    """Return a shared httpx.Timeout for liveness probes."""
+    import httpx
+    global _PROBE_HTTP_TIMEOUT
+    if _PROBE_HTTP_TIMEOUT is None:
+        _PROBE_HTTP_TIMEOUT = httpx.Timeout(connect=2.0, read=5.0)
+    return _PROBE_HTTP_TIMEOUT
 
 
 def _validate_service_id(service_id: str) -> None:
@@ -377,7 +388,7 @@ class FilesystemServiceRegistry:
         if not api_key:
             return False, "SECRET_NOT_CONFIGURED", "请配置 api_key"
         try:
-            with httpx.Client(timeout=5) as client:
+            with httpx.Client(timeout=_get_probe_timeout()) as client:
                 response = client.get(
                     f"{endpoint}/models",
                     headers={"Authorization": f"Bearer {api_key}"},
@@ -398,14 +409,15 @@ class FilesystemServiceRegistry:
         import httpx
         url = service.config.get("url", service.endpoint or "http://127.0.0.1:7860")
         mode = service.config.get("mode", "gradio")
+        probe_timeout = _get_probe_timeout()
         try:
             if mode == "fastapi":
-                with httpx.Client(timeout=5) as client:
+                with httpx.Client(timeout=probe_timeout) as client:
                     response = client.get(f"{url}/health")
                     if response.status_code == 200:
                         return True, None, None
             else:
-                with httpx.Client(timeout=5) as client:
+                with httpx.Client(timeout=probe_timeout) as client:
                     response = client.get(f"{url}/")
                     if response.status_code == 200:
                         return True, None, None
@@ -430,7 +442,7 @@ class FilesystemServiceRegistry:
             import httpx
             url = service.config.get("base_url", service.endpoint or "http://127.0.0.1:9000")
             try:
-                with httpx.Client(timeout=5) as client:
+                with httpx.Client(timeout=_get_probe_timeout()) as client:
                     response = client.get(f"{url}/health")
                     if response.status_code == 200:
                         return True, None, None

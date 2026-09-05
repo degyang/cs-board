@@ -98,9 +98,20 @@ def test_unsupported_adapter_type(factory: ProviderFactory):
     assert exc_info.value.code == "UNSUPPORTED_ADAPTER"
 
 
-def test_unsupported_capability_for_openai(factory: ProviderFactory):
-    """openai_compatible 不支持非 text/image capability。"""
+def test_openai_speech_capability_creates_tts_adapter(factory: ProviderFactory):
+    """openai_compatible + speech_synthesis creates the provider-neutral TTS adapter.
+
+    Supported as of the TTS adapter addition. Previously this combination raised
+    UNSUPPORTED_ADAPTER; the old regression test was removed and replaced by this one.
+    """
     svc = _make_service("bad-1", "openai_compatible", "speech_synthesis")
+    adapter = factory.create_adapter(svc)
+    assert adapter.__class__.__name__ == "OpenAITTSAdapter"
+
+
+def test_unsupported_capability_for_openai_raises(factory: ProviderFactory):
+    """openai_compatible with a genuinely unsupported capability raises UNSUPPORTED_ADAPTER."""
+    svc = _make_service("bad-video", "openai_compatible", "video_generation")
     with pytest.raises(DomainError) as exc_info:
         factory.create_adapter(svc)
     assert exc_info.value.code == "UNSUPPORTED_ADAPTER"

@@ -1,0 +1,1 @@
+"""Remotion infographic adapter package."""

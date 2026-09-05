@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { VoiceManagementPage } from '../src/pages/VoiceManagementPage'
+import { dedupePresetProfiles, PRESET_PREVIEW_TIMEOUT_MS, VoiceManagementPage } from '../src/pages/VoiceManagementPage'
 
 vi.mock('../src/lib/api/assets', () => ({
   fetchVoices: vi.fn(),
@@ -14,14 +14,16 @@ vi.mock('../src/lib/api/services', () => ({ fetchServices: vi.fn() }))
 vi.mock('../src/lib/api/voiceProfiles', () => ({
   fetchVoiceProfiles: vi.fn(),
   fetchVoiceStyleProfiles: vi.fn(),
+  createPresetVoiceProfile: vi.fn(),
   createVoiceProfile: vi.fn(),
   createVoiceStyleProfile: vi.fn(),
   previewVoiceProfile: vi.fn(),
+  updateVoiceProfile: vi.fn(),
 }))
 
 import { fetchVoices } from '../src/lib/api/assets'
 import { fetchServices } from '../src/lib/api/services'
-import { createVoiceProfile, createVoiceStyleProfile, fetchVoiceProfiles, fetchVoiceStyleProfiles, previewVoiceProfile } from '../src/lib/api/voiceProfiles'
+import { createPresetVoiceProfile, createVoiceProfile, createVoiceStyleProfile, fetchVoiceProfiles, fetchVoiceStyleProfiles, previewVoiceProfile, updateVoiceProfile } from '../src/lib/api/voiceProfiles'
 
 const voice = {
   voice_id: 'voice-local', name: '本地真实音色', description: '', tags: ['中文'],
@@ -43,6 +45,7 @@ const legacyAudioProvider = {
   service_id: 'provider-mimo',
   display_name: 'MiMo 音色 Provider',
   capability: 'audio_generation',
+  model: 'mimo-v2.5-tts, mimo-v2.5-tts-voicedesign',
 }
 
 describe('VoiceManagementPage provider information architecture', () => {
@@ -53,8 +56,22 @@ describe('VoiceManagementPage provider information architecture', () => {
     vi.mocked(fetchVoiceProfiles).mockRejectedValue(new Error('404'))
     vi.mocked(fetchVoiceStyleProfiles).mockRejectedValue(new Error('404'))
     vi.mocked(createVoiceProfile).mockRejectedValue(new Error('接口尚未就绪'))
+    vi.mocked(createPresetVoiceProfile).mockRejectedValue(new Error('接口尚未就绪'))
     vi.mocked(createVoiceStyleProfile).mockRejectedValue(new Error('接口尚未就绪'))
     vi.mocked(previewVoiceProfile).mockRejectedValue(new Error('预览接口尚未就绪'))
+    vi.mocked(updateVoiceProfile).mockRejectedValue(new Error('接口尚未就绪'))
+  })
+
+  it('shows one deterministic directory row per normalized vendor and remote voice while retaining its Provider binding', () => {
+    const source = [
+      { profile_id: 'z-provider', vendor_id: 'MiMo', remote_voice_id: 'BingTang', provider_id: 'provider-z' },
+      { profile_id: 'a-provider', vendor_id: ' mimo ', remote_voice_id: ' bingtang ', provider_id: 'provider-a' },
+      { profile_id: 'different-voice', vendor_id: 'mimo', remote_voice_id: 'chloe', provider_id: 'provider-a' },
+      { profile_id: 'incomplete', vendor_id: '', remote_voice_id: 'bingtang', provider_id: 'provider-a' },
+    ] as unknown as Parameters<typeof dedupePresetProfiles>[0]
+    expect(dedupePresetProfiles(source).map(profile => [profile.profile_id, profile.provider_id])).toEqual([
+      ['a-provider', 'provider-a'], ['different-voice', 'provider-a'], ['incomplete', 'provider-a'],
+    ])
   })
 
   it('renders four tabs and directly retains the local voice library behavior', async () => {
@@ -86,7 +103,7 @@ describe('VoiceManagementPage provider information architecture', () => {
     await waitFor(() => expect(fetchVoiceStyleProfiles).toHaveBeenCalledWith({ provider_id: undefined }))
   })
 
-  it('groups read-only preset profiles by vendor and renders the required detail fields', async () => {
+  it('groups selectable preset profiles by vendor and renders the required detail fields', async () => {
     vi.mocked(fetchServices).mockResolvedValue({ items: [provider], next_cursor: null, total: 1 })
     vi.mocked(fetchVoiceProfiles).mockResolvedValue({
       items: [{
@@ -106,17 +123,18 @@ describe('VoiceManagementPage provider information architecture', () => {
     })
     await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
     await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    await userEvent.click(await screen.findByText('远程预置音色'))
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'MiMo' })).toBeInTheDocument()
-      expect(screen.getAllByText('远程预置音色')).toHaveLength(2)
+      expect(screen.getAllByText('远程预置音色')).toHaveLength(3)
       expect(screen.getByText('女')).toBeInTheDocument()
       expect(screen.getByText('中文')).toBeInTheDocument()
       expect(screen.queryByText('zh-CN')).not.toBeInTheDocument()
       expect(screen.queryByText('female')).not.toBeInTheDocument()
       expect(screen.getByText('语音 Provider')).toBeInTheDocument()
       expect(screen.getByText('tts-model')).toBeInTheDocument()
-      expect(screen.getByText('这是一个语音测试，我会用清晰的语音提醒你，我就是你知心的助手。')).toBeInTheDocument()
+      expect(screen.getByLabelText('示例朗读文本')).toHaveValue('这是一个语音测试，我会用清晰的语音提醒你，我就是你知心的助手。')
       expect(fetchVoiceProfiles).toHaveBeenCalledWith({ kind: 'provider-preset' })
     })
     await userEvent.click(screen.getByText('Dean'))
@@ -126,8 +144,8 @@ describe('VoiceManagementPage provider information architecture', () => {
     expect(screen.queryByText('male')).not.toBeInTheDocument()
     await userEvent.click(screen.getByText('未知规范值'))
     expect(within(screen.getByRole('article', { name: '预置音色详情' })).getAllByText('—')).toHaveLength(2)
-    expect(screen.queryByRole('button', { name: /上传|编辑/ })).not.toBeInTheDocument()
-    expect(document.querySelector('audio')).not.toHaveAttribute('src')
+    expect(screen.getByRole('button', { name: '编辑' })).toBeInTheDocument()
+    expect(screen.queryByRole('audio')).not.toBeInTheDocument()
   })
 
   it('recognizes a legacy audio_generation service in preset detail and both Provider selectors', async () => {
@@ -145,6 +163,7 @@ describe('VoiceManagementPage provider information architecture', () => {
     await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
 
     await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    await userEvent.click(await screen.findByText('冰糖'))
     await waitFor(() => expect(screen.getByText('MiMo 音色 Provider')).toBeInTheDocument())
     for (const tabName of ['音色设计', '发音风格']) {
       await userEvent.click(screen.getByRole('tab', { name: tabName }))
@@ -164,7 +183,8 @@ describe('VoiceManagementPage provider information architecture', () => {
     })
     await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
     await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
-    await userEvent.click(await screen.findByRole('button', { name: '生成预览' }))
+    await userEvent.click(await screen.findByText('冰糖'))
+    await userEvent.click(screen.getByRole('button', { name: '生成试听' }))
 
     const text = '这是一个语音测试，我会用清晰的语音提醒你，我就是你知心的助手。'
     await waitFor(() => expect(previewVoiceProfile).toHaveBeenCalledWith('profile/voice', text))
@@ -178,10 +198,115 @@ describe('VoiceManagementPage provider information architecture', () => {
     }], next_cursor: null, total: 1 })
     await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
     await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
-    await userEvent.click(await screen.findByRole('button', { name: '生成预览' }))
+    await userEvent.click(await screen.findByText('冰糖'))
+    await userEvent.click(screen.getByRole('button', { name: '生成试听' }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('预览生成失败：预览接口尚未就绪'))
-    expect(document.querySelector('audio')).not.toHaveAttribute('src')
+    expect(document.querySelector('audio')).toBeNull()
+  })
+
+  it('derives preset Provider choices only from enabled audio/TTS service capabilities', async () => {
+    const textOnlyProvider = { ...provider, service_id: 'text-only', display_name: '文本模型', capability: 'text_generation' }
+    vi.mocked(fetchServices).mockResolvedValue({ items: [textOnlyProvider, legacyAudioProvider], next_cursor: null, total: 2 })
+    vi.mocked(fetchVoiceProfiles).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
+    await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    await userEvent.click(await screen.findByRole('button', { name: '+ 新增预置音色' }))
+    expect(screen.getByRole('option', { name: 'MiMo 音色 Provider' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '文本模型' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('模型 *')).toHaveValue('mimo-v2.5-tts')
+    expect(fetchServices).toHaveBeenCalledWith({ enabled: true })
+  })
+
+  it('creates and edits a preset using Provider identity fields', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [provider], next_cursor: null, total: 1 })
+    const preset = {
+      profile_id: 'preset-1', revision: 1, name: '初始音色', kind: 'provider-preset' as const, vendor_name: '任意服务',
+      provider_id: 'provider-speech', model_id: 'tts-model', remote_voice_id: 'remote-1', language: 'zh-CN', tags: [], status: 'active' as const, capability_snapshot: {},
+    }
+    vi.mocked(fetchVoiceProfiles).mockResolvedValue({ items: [preset], next_cursor: null, total: 1 })
+    vi.mocked(createPresetVoiceProfile).mockResolvedValue(preset)
+    vi.mocked(updateVoiceProfile).mockResolvedValue({ ...preset, name: '已编辑音色' })
+    await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
+    await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    await userEvent.click(await screen.findByRole('button', { name: '+ 新增预置音色' }))
+    await userEvent.type(screen.getByLabelText('名称 *'), '新建音色')
+    await userEvent.type(screen.getByLabelText('模型 *'), 'provider-model')
+    await userEvent.type(screen.getByLabelText('远端音色 ID *'), 'remote-new')
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(createPresetVoiceProfile).toHaveBeenCalledWith(expect.objectContaining({ name: '新建音色', provider_id: 'provider-speech', model_id: 'provider-model', remote_voice_id: 'remote-new' })))
+    await userEvent.click(screen.getByText('初始音色'))
+    await userEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const name = screen.getByLabelText('名称 *')
+    await userEvent.clear(name)
+    await userEvent.type(name, '已编辑音色')
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(updateVoiceProfile).toHaveBeenCalledWith('preset-1', expect.objectContaining({ name: '已编辑音色', provider_id: 'provider-speech' })))
+  })
+
+  it('stops an edit locally when its Provider has no declared usable model instead of issuing a 400 PATCH', async () => {
+    const modelLessProvider = { ...provider, service_id: 'local-indextts', display_name: '本地 IndexTTS', model: '' }
+    const preset = {
+      profile_id: 'legacy-local', revision: 1, name: '旧本地预置', kind: 'provider-preset' as const,
+      provider_id: 'local-indextts', model_id: 'indextts-2', remote_voice_id: 'legacy', language: 'zh-CN', tags: [], status: 'active' as const, capability_snapshot: {},
+    }
+    vi.mocked(fetchServices).mockResolvedValue({ items: [modelLessProvider], next_cursor: null, total: 1 })
+    vi.mocked(fetchVoiceProfiles).mockResolvedValue({ items: [preset], next_cursor: null, total: 1 })
+    await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
+    await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    await userEvent.click(await screen.findByText('旧本地预置'))
+    await userEvent.click(screen.getByRole('button', { name: '编辑' }))
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('当前 Provider 未声明可用模型')
+    expect(updateVoiceProfile).not.toHaveBeenCalled()
+  })
+
+  it('binds editable preview text to the selection and invalidates stale audio on a new selection', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [provider], next_cursor: null, total: 1 })
+    vi.mocked(fetchVoiceProfiles).mockResolvedValue({ items: [
+      { profile_id: 'one', revision: 1, name: '音色一', kind: 'provider-preset', vendor_name: '服务', provider_id: 'provider-speech', model_id: 'tts', remote_voice_id: 'one', tags: [], status: 'active', capability_snapshot: {} },
+      { profile_id: 'two', revision: 1, name: '音色二', kind: 'provider-preset', vendor_name: '服务', provider_id: 'provider-speech', model_id: 'tts', remote_voice_id: 'two', tags: [], status: 'active', capability_snapshot: {} },
+    ], next_cursor: null, total: 2 })
+    let resolvePreview: ((value: { audio_url: string; content_type: string }) => void) | undefined
+    vi.mocked(previewVoiceProfile).mockImplementation(() => new Promise(resolve => { resolvePreview = resolve }))
+    await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
+    await userEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    expect(screen.getByRole('button', { name: '生成试听' })).toBeDisabled()
+    await userEvent.click(await screen.findByText('音色一'))
+    const text = screen.getByLabelText('示例朗读文本')
+    expect(text).toHaveValue('这是一个语音测试，我会用清晰的语音提醒你，我就是你知心的助手。')
+    await userEvent.clear(text)
+    await userEvent.type(text, '自定义试听文本')
+    await userEvent.click(screen.getByRole('button', { name: '生成试听' }))
+    expect(previewVoiceProfile).toHaveBeenCalledWith('one', '自定义试听文本')
+    await userEvent.click(screen.getByText('音色二'))
+    await act(async () => { resolvePreview?.({ audio_url: '/old.wav', content_type: 'audio/wav' }) })
+    expect(screen.queryByText('/old.wav')).not.toBeInTheDocument()
+    expect(document.querySelector('audio')).toBeNull()
+  })
+
+  it('keeps a desktop-safe preset master/detail structure and ends a stalled preview with a visible timeout error', async () => {
+    vi.mocked(fetchServices).mockResolvedValue({ items: [provider], next_cursor: null, total: 1 })
+    vi.mocked(fetchVoiceProfiles).mockResolvedValue({ items: [{
+      profile_id: 'timeout', revision: 1, name: '不会竖排的预置音色', kind: 'provider-preset', vendor_name: '服务', provider_id: 'provider-speech', model_id: 'tts', remote_voice_id: 'timeout', tags: [], status: 'active', capability_snapshot: {},
+    }], next_cursor: null, total: 1 })
+    vi.mocked(previewVoiceProfile).mockImplementation(() => new Promise(() => undefined))
+    await act(async () => { render(<MemoryRouter><VoiceManagementPage /></MemoryRouter>) })
+    fireEvent.click(screen.getByRole('tab', { name: '预置音色' }))
+    const item = await screen.findByText('不会竖排的预置音色')
+    fireEvent.click(item)
+    expect(screen.getByRole('region', { name: '预置音色' }).querySelector('.am-layout')).toHaveClass('am-layout')
+    expect(screen.getByRole('article', { name: '预置音色详情' })).toBeInTheDocument()
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '生成试听' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(PRESET_PREVIEW_TIMEOUT_MS) })
+      expect(screen.getByRole('alert')).toHaveTextContent('预览生成失败：试听生成超时，请检查 Provider 后重试。')
+      expect(screen.getByRole('button', { name: '生成试听' })).toBeEnabled()
+      expect(document.querySelector('audio')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('creates designs and speaking styles with an explicit Provider and no secret fields', async () => {

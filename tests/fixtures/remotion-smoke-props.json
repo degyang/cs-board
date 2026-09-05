@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "fps": 30,
   "width": 1920,
   "height": 1080,
@@ -15,6 +16,12 @@
       "chapterTitle": "测试章节",
       "pageTitle": "元素跟随旁白出现",
       "layoutType": "focus",
+      "composition": "split-right",
+      "slideRole": "detail",
+      "relationshipType": "none",
+      "coreIdea": "真实语音锚点",
+      "visualStrategy": "按旁白出现",
+      "narrativeLink": "时间轴",
       "nodes": ["真实语音锚点", "禁止平均估算"],
       "conclusion": "先听到，再看到",
       "seriesPersistent": false,

@@ -1,4 +1,4 @@
-import { get, post } from './http'
+import { get, patch, post } from './http'
 import type {
   VoiceProfileKind,
   VoiceProfileListResponse,
@@ -40,6 +40,30 @@ export function createVoiceProfile(body: {
   tags: string[]
 }): Promise<import('./types').VoiceProfile> {
   return post('/voice-profiles', body)
+}
+
+export interface PresetVoiceProfileInput {
+  name: string
+  provider_id: string
+  model_id: string
+  remote_voice_id: string
+  language?: string
+  gender?: string
+  example_text?: string
+  tags: string[]
+}
+
+/** Persist user-managed preset metadata; provider identity remains explicit. */
+export function createPresetVoiceProfile(body: PresetVoiceProfileInput): Promise<import('./types').VoiceProfile> {
+  return post('/voice-profiles', { ...body, kind: 'provider-preset' })
+}
+
+export function updateVoiceProfile(profileId: string, body: PresetVoiceProfileInput): Promise<import('./types').VoiceProfile> {
+  // The profile's Provider is its catalog identity, not an editable PATCH
+  // field.  The server accepts metadata changes only; sending a binding here
+  // made the UI imply a Provider switch that the API cannot perform.
+  const { provider_id: _providerId, example_text: _exampleText, ...update } = body
+  return patch(`/voice-profiles/${encodeURIComponent(profileId)}`, update)
 }
 
 /** Generate a real provider preview; the returned URL points at backend-owned audio content. */

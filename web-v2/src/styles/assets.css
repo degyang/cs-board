@@ -751,7 +751,22 @@
 
 /* Read-only preset voices: vendor-grouped master/detail catalog. */
 .voice-preset-panel { margin-top: 16px; }
-.voice-preset-panel .am-layout { grid-template-columns: 300px minmax(0, 1fr); }
+.voice-preset-panel .am-layout {
+  /* Keep the master/detail view genuinely usable on desktop.  A minmax(0, 1fr)
+     detail column was allowed to collapse into one-character-wide CJK text. */
+  grid-template-columns: minmax(320px, 36%) minmax(640px, 1fr);
+}
+.voice-preset-panel .am-detail { min-width: 640px; }
+.preset-voice-editor { min-width: 0; }
+.preset-voice-editor .style-form { max-width: 720px; }
+.voice-preset-panel .am-list { max-height: 360px; overflow-y: auto; }
+.voice-preset-panel .am-detail-head > :nth-child(2) { min-width: 0; }
+.voice-preset-panel .am-detail-name,
+.voice-preset-panel .am-detail-field,
+.voice-preset-panel .am-detail-field > :not(.am-detail-label) {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
 .voice-vendor-group + .voice-vendor-group { border-top: 1px solid var(--nt-border); margin-top: 10px; padding-top: 10px; }
 .voice-vendor-name {
   color: var(--nt-text-muted);
@@ -773,6 +788,10 @@
 .voice-preview-error { margin-top: 12px; }
 .voice-preset-panel .am-voice-player { display: block; margin-top: 12px; max-width: 100%; width: 420px; }
 
+/* Keep the master/detail workspace side-by-side through tablet and desktop.
+   Only a genuine phone viewport may stack the detail below the list. */
 @media (max-width: 768px) {
   .voice-preset-panel .am-layout { grid-template-columns: 1fr; }
+  .voice-preset-panel .am-detail { min-width: 0; }
+  .voice-preset-panel .am-list { max-height: 360px; overflow-y: auto; }
 }

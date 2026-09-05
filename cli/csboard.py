@@ -212,6 +212,9 @@ def parser() -> argparse.ArgumentParser:
     service_secret_delete.add_argument("--id", required=True)
     service_secret_delete.add_argument("--key", required=True)
 
+    # ── capabilities ──────────────────────────────────────────────────
+    resources.add_parser("capabilities")
+
     # ── settings ─────────────────────────────────────────────────────
     settings = resources.add_parser("settings")
     settings_actions = settings.add_subparsers(dest="action", required=True)
@@ -278,6 +281,12 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         service_resolver=service_resolver,
         repository=FilesystemTaskRepository(args.data_dir, project_root=ROOT),
     )
+
+    # ── capabilities ──────────────────────────────────────────────────
+    if args.resource == "capabilities":
+        from csboard.application.capabilities import CapabilityService
+        cap_svc = CapabilityService(registry, project_root=ROOT)
+        return cap_svc.snapshot()
 
     # ── task ──────────────────────────────────────────────────────
     if (args.resource, args.action) == ("task", "create"):

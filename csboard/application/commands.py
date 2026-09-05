@@ -13,7 +13,7 @@ from typing import Any
 from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.adapters.observability import JsonlTelemetry
-from csboard.application.av_artifacts import av_plan_document, json_bytes
+from csboard.application.av_artifacts import av_plan_document, json_bytes, render_manifest_document
 from csboard.application.composition import CompositionService
 from csboard.application.context import CommandContext, new_id, utc_now
 from csboard.application.illustrations import IllustrationService
@@ -86,6 +86,9 @@ class MountainCommands:
     repository: FilesystemTaskRepository | None = None  # 注入的 repository
     telemetry: JsonlTelemetry | None = None  # 注入的 telemetry
     asset_repository: FilesystemAssetRepository | None = None
+    # P4's only allowed infographic execution seam.  Production composition
+    # does not expose it through HTTP/CLI; fake E2E injects a test renderer.
+    infographic_renderer_factory: Any | None = None
     pipeline: PipelineOrchestrator = field(init=False)
 
     def __post_init__(self) -> None:
@@ -118,6 +121,7 @@ class MountainCommands:
         *,
         summary: str | None = None,
         submission_id: str | None = None,
+        internal_test_only: bool = False,
     ) -> dict[str, Any]:
         if not title.strip():
             raise ValueError("任务名称不能为空")
@@ -126,11 +130,34 @@ class MountainCommands:
         resolved_summary = title.strip() if summary is None else summary.strip()
         if not resolved_summary:
             raise ValueError("任务摘要不能为空")
-        if pipeline_id != "mountain-av-v1" or engine is not Engine.WHITEBOARD:
-            raise ValueError("M04 仅支持标准 whiteboard 的 mountain-av-v1；自定义参考和动态信息图将在 M09 开放")
+        if pipeline_id != "mountain-av-v1":
+            raise ValueError("仅支持 mountain-av-v1 流水线")
+        context = context or CommandContext(entrypoint=Entrypoint.CLI)
+        if engine is Engine.INFOGRAPHIC_REMOTION:
+            from csboard.application.capabilities import CapabilityService
+            cap_svc = CapabilityService(
+                self.service_resolver._registry, project_root=self.root,
+            ) if self.service_resolver is not None else None
+            # P4 is intentionally not a public submission switch.  A caller
+            # must opt in at this non-HTTP seam *and* carry the test actor.
+            if cap_svc is None:
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", "引擎 infographic-remotion 当前不可用")
+            cap_snapshot = cap_svc.snapshot()
+            infographic_item = next(
+                (item for item in cap_snapshot["items"]
+                 if item["engine"] == "infographic-remotion"
+                 and item["visual_source"] == "preset"),
+                None,
+            )
+            # P3a remains publicly unsupported.  P4 consumes bootstrap only
+            # for its controlled fake/internal route; P2 is bound by the
+            # concrete adapter selected below, never by generic rendering.
+            internal_allowed = internal_test_only and context.actor_type == "internal-test" and bool((infographic_item or {}).get("bootstrap_ready"))
+            if infographic_item is None or not internal_allowed:
+                reason = (infographic_item or {}).get("reason_code") or "CAPABILITY_NOT_AVAILABLE"
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", f"引擎 infographic-remotion 当前不可用: {reason}")
         if submission_id is not None and not _is_high_entropy_token(submission_id):
             raise ValueError("submission_id 必须是高熵客户端标识")
-        context = context or CommandContext(entrypoint=Entrypoint.CLI)
         output_root = None if request is None else request.get("output_root")
         # The root is a placement instruction, not task-package content: an
         # absolute machine path must never leak into a portable package.
@@ -212,8 +239,41 @@ class MountainCommands:
 
     def create_options(self) -> dict[str, Any]:
         """Authoritative six-tab capability query used by every delivery edge."""
+        engines: list[dict[str, Any]] = [
+            {"id": "whiteboard", "label": "白板动画", "available": True},
+        ]
+
+        # Infographic-remotion: dynamically check capability from the service
+        # registry and remotion toolchain readiness.
+        if self.service_resolver is not None:
+            from csboard.application.capabilities import CapabilityService
+            cap_svc = CapabilityService(
+                self.service_resolver._registry, project_root=self.root,
+            )
+            cap_snapshot = cap_svc.snapshot()
+            infographic_item = next(
+                (item for item in cap_snapshot["items"]
+                 if item["engine"] == "infographic-remotion"
+                 and item["visual_source"] == "preset"),
+                None,
+            )
+            if infographic_item is not None:
+                engines.append({
+                    "id": "infographic-remotion",
+                    "label": "动态信息图",
+                    "available": infographic_item["supported"],
+                    "reason": infographic_item.get("reason_code") or "能力未就绪",
+                })
+        else:
+            engines.append({
+                "id": "infographic-remotion",
+                "label": "动态信息图",
+                "available": False,
+                "reason": "CAPABILITY_NOT_AVAILABLE",
+            })
+
         return {
-            "engines": [{"id": "whiteboard", "label": "白板动画", "available": True}],
+            "engines": engines,
             "visual_sources": [
                 {"id": "preset", "label": "预设风格", "available": True},
                 {"id": "custom-reference", "label": "自定义参考", "available": True},
@@ -640,6 +700,7 @@ class MountainCommands:
     ) -> dict[str, Any]:
         """启动运行：检查输入和服务可用性。"""
         task = self.repository.get_task(task_id)
+        self._require_native_task(task)
         run = self.repository.get_run(task_id, run_id)
         if run.task_id != task.task_id:
             raise NotFoundError("运行记录不存在")
@@ -706,6 +767,37 @@ class MountainCommands:
     def export_diagnostics(self, task_id: str, run_id: str) -> dict[str, Any]:
         path = self.telemetry.export_diagnostic_bundle(task_id, run_id)
         return {"ok": True, "task_id": task_id, "run_id": run_id, "bundle": str(path)}
+
+    def segment_script(
+        self,
+        task_id: str,
+        run_id: str,
+        script: str,
+        context: CommandContext | None = None,
+    ) -> dict[str, Any]:
+        """Legacy compatibility: segment script text, persist preparation, then run generate-visual-anchors.
+
+        This is the public entrypoint used by the ``/stages/segment-script``
+        HTTP alias.  It writes ``script_preparation`` into ``task.json`` and
+        delegates to :meth:`generate_visual_anchors`.
+        """
+        if not script.strip():
+            raise ValueError("脚本不能为空")
+
+        task = self.repository.get_task(task_id)
+        context = context or CommandContext(entrypoint=Entrypoint.CLI)
+
+        # Segment / prepare
+        preparation = prepare_script(script, target_chars=80, min_chars=35, max_chars=140)
+
+        # Persist into task.json so generate_visual_anchors can read it
+        task_json_path = self.repository.task_dir(task_id) / "task.json"
+        task_data = json.loads(task_json_path.read_text(encoding="utf-8"))
+        task_data["script_preparation"] = preparation
+        task_data.setdefault("visual_anchor_enabled", True)
+        self.repository.write_json(task_json_path, task_data)
+
+        return self.generate_visual_anchors(task_id, run_id, context)
 
     def generate_visual_anchors(self, task_id: str, run_id: str, context: CommandContext | None = None) -> dict[str, Any]:
         """Generate visual anchors for each saved Voice Unit.
@@ -1025,6 +1117,7 @@ class MountainCommands:
     ) -> dict[str, Any]:
         """Retry a stage, optionally scoped to a specific unit or visual."""
         with self.repository.task_lock(task_id):
+            self._require_native_task(self.repository.get_task(task_id))
             run = self.repository.get_run(task_id, run_id)
             context = context or CommandContext(entrypoint=Entrypoint.CLI)
 
@@ -1083,6 +1176,7 @@ class MountainCommands:
         context: CommandContext | None = None,
     ) -> dict[str, Any]:
         """Explicitly trigger a stage, including a configured manual gate."""
+        self._require_native_task(self.repository.get_task(task_id))
         if stage not in CANONICAL_STAGES: raise DomainError("VALIDATION_ERROR", "未知 Stage")
         gates = self.repository.get_gates(task_id, run_id)
         blocked = [gate.stage_id for gate in gates[:CANONICAL_STAGES.index(stage)] if gate.status != GATE_APPROVED]
@@ -1171,6 +1265,7 @@ class MountainCommands:
     ) -> dict[str, Any]:
         """Run the pipeline with the given policy."""
         task = self.repository.get_task(task_id)
+        self._require_native_task(task)
         if run_id is None:
             run_id = task.active_run_id
         if not run_id:
@@ -1199,6 +1294,7 @@ class MountainCommands:
     ) -> dict[str, Any]:
         """Resume a pipeline from the last successful stage."""
         task = self.repository.get_task(task_id)
+        self._require_native_task(task)
         if run_id is None:
             run_id = task.active_run_id
         if not run_id:
@@ -1221,6 +1317,12 @@ class MountainCommands:
         """Load the sole persisted execution decision source for every entrypoint."""
         request = self.repository.get_request(task_id) or {}
         return ExecutionPlan.from_dict(request.get("execution_plan", {}))
+
+    @staticmethod
+    def _require_native_task(task: Task) -> None:
+        """P5: legacy projections are observable, never executable here."""
+        if task.pipeline_id != "mountain-av-v1":
+            raise DomainError("LEGACY_READ_ONLY", "历史任务仅支持只读查看，不能执行、重试或恢复")
 
     def work_order_show(self, task_id: str, run_id: str, stage: str) -> dict[str, Any]:
         """Return the deterministic persisted Stage Work Order view."""
@@ -1328,13 +1430,16 @@ class MountainCommands:
         run.command_ids.append(context.command_id)
         self.repository.save_run(run)
 
-        request = self._read_request(task_id)
-        snapshot = request.get("style_snapshot") if isinstance(request.get("style_snapshot"), dict) else {}
-        service = StoryboardService(text_model, self.repository, {
-            "style": snapshot.get("prompt_text") or request.get("style") or "简约白板手绘风",
-            "color_scheme": snapshot.get("color_scheme") or "黑白为主，点缀彩色",
-        })
-        result = service.run(task_id, run_id, task.engine)
+        if task.engine is Engine.INFOGRAPHIC_REMOTION:
+            result = self._plan_storyboard_infographic(task_id, run_id, task, context)
+        else:
+            request = self._read_request(task_id)
+            snapshot = request.get("style_snapshot") if isinstance(request.get("style_snapshot"), dict) else {}
+            service = StoryboardService(text_model, self.repository, {
+                "style": snapshot.get("prompt_text") or request.get("style") or "简约白板手绘风",
+                "color_scheme": snapshot.get("color_scheme") or "黑白为主，点缀彩色",
+            })
+            result = service.run(task_id, run_id, task.engine)
 
         run.stages["plan-storyboard"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)
@@ -1363,6 +1468,86 @@ class MountainCommands:
             "warnings": [],
             "next_stage": "generate-illustrations",
         }
+
+    def _plan_storyboard_infographic(
+        self,
+        task_id: str,
+        run_id: str,
+        task: Any,
+        context: CommandContext,
+    ) -> dict[str, Any]:
+        """Storyboard path for infographic-remotion engine.
+
+        Reads av-plan and timeline, converts to InfographicStoryboard via
+        voice_units_to_pages(), then to Remotion props via
+        InfographicStoryboardAdapter.  Embeds both the standard visuals
+        array and the remotion_props in the storyboard artifact so the
+        render stage can use them directly.
+        """
+        from csboard.adapters.remotion.storyboard_adapter import InfographicStoryboardAdapter
+        from csboard.application.av_artifacts import storyboard_document
+        from csboard.domain.infographic import voice_units_to_pages
+
+        store = FilesystemArtifactStore(self.repository)
+
+        av_plan = self._read_artifact(store, task_id, run_id, "planning.av-plan")
+        timeline = self._read_artifact(store, task_id, run_id, "timing.timeline")
+        if not av_plan:
+            raise DomainError("VALIDATION_ERROR", "请先运行 generate-visual-anchors 生成 av-plan")
+        if not timeline:
+            raise DomainError("VALIDATION_ERROR", "请先运行 clone-voice 生成 timeline")
+
+        voice_units = av_plan.get("voice_units", [])
+        timeline_units = timeline.get("units", [])
+
+        # Build visuals list for storyboard document (whiteboard-compatible)
+        visuals: list[dict[str, Any]] = []
+        timing_by_unit: dict[str, dict] = {u["unit_id"]: u for u in timeline_units}
+        for unit in voice_units:
+            unit_timing = timing_by_unit.get(unit["unit_id"], {})
+            for vt in unit_timing.get("visual_timings", []):
+                visuals.append({
+                    "visual_id": vt["visual_id"],
+                    "unit_id": unit["unit_id"],
+                    "text": unit.get("text", ""),
+                    "order": 1,
+                    "start_ms": vt.get("start_ms", 0),
+                    "end_ms": vt.get("end_ms", 0),
+                    "prompt": unit.get("text", ""),
+                })
+
+        # Convert to InfographicStoryboard → Remotion props
+        infographic_sb = voice_units_to_pages(voice_units, timeline_units, visuals)
+        adapter = InfographicStoryboardAdapter()
+        remotion_props = adapter.to_remotion_props(infographic_sb)
+
+        # Build storyboard document with embedded remotion_props
+        bible = {"style": "动态信息图", "color_scheme": "多彩", "composition_rules": [], "mood": "专业", "visual_metaphors": []}
+        doc = storyboard_document(task_id, run_id, visuals, bible, task.engine)
+        doc["remotion_props"] = remotion_props
+        doc["voice_units"] = voice_units  # embed for renderer
+
+        artifact = store.commit_bytes(
+            task_id, run_id, "planning.storyboard", "planning/storyboard.json",
+            json_bytes(doc), "plan-storyboard",
+        )
+
+        return {
+            "storyboard": doc,
+            "visual_count": len(visuals),
+            "bible": bible,
+            "artifact_key": artifact.artifact_key,
+        }
+
+    def _read_artifact(self, store: FilesystemArtifactStore, task_id: str, run_id: str, key: str) -> dict[str, Any] | None:
+        """Read an artifact by key, returning parsed JSON or None."""
+        ref = store.get(task_id, run_id, key)
+        if not ref:
+            return None
+        path = self.repository.run_dir(task_id, run_id) / "artifacts" / ref["relative_path"]
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def generate_illustrations(
         self,
@@ -1464,7 +1649,16 @@ class MountainCommands:
         store = FilesystemArtifactStore(self.repository)
         def artifact_path(key: str) -> Path | None:
             ref = store.get(task_id, run_id, key)
-            return run_dir / "artifacts" / ref["relative_path"] if ref else None
+            if not ref or ref.get("status", "succeeded") != "succeeded":
+                return None
+            candidate = run_dir / "artifacts" / str(ref.get("relative_path", ""))
+            try:
+                candidate.resolve().relative_to((run_dir / "artifacts").resolve())
+            except ValueError:
+                return None
+            if not candidate.is_file() or hashlib.sha256(candidate.read_bytes()).hexdigest() != ref.get("sha256"):
+                return None
+            return candidate
         timeline_path = artifact_path("timing.timeline")
         storyboard_path = artifact_path("planning.storyboard")
         illustration_manifest_path = artifact_path("illustrations.manifest")
@@ -1475,9 +1669,18 @@ class MountainCommands:
             raise DomainError("VALIDATION_ERROR", "storyboard 不存在，请先运行 plan-storyboard")
         if illustration_manifest_path is None or not illustration_manifest_path.exists():
             raise DomainError("VALIDATION_ERROR", "illustration-manifest 不存在，请先运行 generate-illustrations")
+        if task.engine is Engine.INFOGRAPHIC_REMOTION:
+            for label, path in (("timeline", timeline_path), ("storyboard", storyboard_path),
+                                ("illustration-manifest", illustration_manifest_path)):
+                try:
+                    document = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    raise DomainError("ARTIFACT_INDEX_INVALID", f"{label} 输入不可读取") from exc
+                if document.get("task_id") != task_id or document.get("run_id") != run_id:
+                    raise DomainError("ARTIFACT_RUN_MISMATCH", f"{label} 不属于当前 run")
 
-        # Create output directory
-        output_dir = run_dir / "render"
+        # Indexable renderer output must remain inside this run's artifacts.
+        output_dir = run_dir / "artifacts" / "render"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Build render request
@@ -1489,17 +1692,31 @@ class MountainCommands:
             request_id=f"{task_id}:{run_id}:render",
         )
 
-        # Execute render
-        result = renderer.render(request)
+        try:
+            result = renderer.render(request)
+            output_path = Path(result.output_path).resolve()
+            output_path.relative_to(output_dir.resolve())
+            if not output_path.is_file() or output_path.stat().st_size <= 0:
+                raise DomainError("RENDER_OUTPUT_INVALID", "renderer 未生成可索引输出")
+        except Exception:
+            run = self.repository.get_run(task_id, run_id)
+            run.status = RunStatus.FAILED
+            run.stages["render-visuals"] = StageState(StageStatus.FAILED, run.stages["render-visuals"].attempt)
+            self.repository.save_run(run)
+            raise
 
         # Build render manifest
+        output_bytes = output_path.read_bytes()
+        output_ref = store.commit_bytes(task_id, run_id, "render.video", "render/infographic.mp4", output_bytes, "render-visuals")
+        probe = result.provider_metadata.get("probe", {})
         render_manifest = {
-            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "engine": task.engine.value,
-            "total_duration_ms": result.duration_ms,
-            "total_frames": result.frames,
-            "clips": result.provider_metadata.get("clips", []),
-            "output_path": str(result.output_path.relative_to(self.repository.root)),
+            **render_manifest_document(task_id, run_id, result.provider_metadata.get("clips", []), task.engine),
+            "output_relative_path": f"artifacts/{output_ref.relative_path}",
+            "output_sha256": output_ref.sha256,
+            "size_bytes": output_ref.size_bytes,
+            "duration_ms": result.duration_ms,
+            "frames": result.frames,
+            "probe_sha256": hashlib.sha256(json.dumps(probe, sort_keys=True).encode()).hexdigest(),
         }
 
         artifact_key = store.commit_bytes(
@@ -1530,7 +1747,7 @@ class MountainCommands:
             "command_id": context.command_id,
             "stage": "render-visuals",
             "result": "succeeded",
-            "artifacts": [artifact_key],
+            "artifacts": ["render.video", artifact_key],
             "event_sequence": event["sequence"],
             "warnings": [],
             "next_stage": "compose-video",
@@ -1587,13 +1804,23 @@ class MountainCommands:
         }
 
     def _exec_render_visuals(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:
-        """Stage executor for render-visuals. Uses ServiceResolver + ProviderFactory.create_adapter."""
-        if self.provider_factory is None:
-            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 renderer")
-        if self.service_resolver is None:
-            raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 renderer adapter")
-        render_def = self.service_resolver.resolve("rendering")
-        renderer = self.provider_factory.create_adapter(render_def)
+        """Stage executor for render-visuals. Routes by task.engine."""
+        task = self.repository.get_task(task_id)
+
+        if task.engine is Engine.INFOGRAPHIC_REMOTION:
+            from csboard.adapters.remotion.renderer_adapter import RemotionRendererAdapter
+            renderer = (self.infographic_renderer_factory()
+                        if self.infographic_renderer_factory is not None
+                        else RemotionRendererAdapter(self.root / "video_renderer" / "render.mjs"))
+        else:
+            # WHITEBOARD path — unchanged ServiceResolver routing
+            if self.provider_factory is None:
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", "ProviderFactory 未注入，无法构造 renderer")
+            if self.service_resolver is None:
+                raise DomainError("CAPABILITY_NOT_AVAILABLE", "ServiceResolver 未注入，无法构造 renderer adapter")
+            render_def = self.service_resolver.resolve("rendering")
+            renderer = self.provider_factory.create_adapter(render_def)
+
         return self.render_visuals(task_id, run_id, renderer, context)
 
     def _exec_compose_video(self, task_id: str, run_id: str, context: CommandContext) -> dict[str, Any]:

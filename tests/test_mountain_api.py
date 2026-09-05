@@ -32,7 +32,14 @@ def _create_test_app(tmpdir: Path) -> tuple[FastAPI, FilesystemTaskRepository]:
 
 
 def _setup_task(repo: FilesystemTaskRepository, task_id: str = "proj-1", run_id: str = "run-1"):
-    """Create a test task and run."""
+    """Create a test task and run.
+
+    Writes task.json to the legacy ``tasks/`` directory (``root / "tasks" /
+    task_id / "task.json"``) rather than using ``repo.create_task()`` which
+    writes to the new ``outputs/`` package path.  The API's
+    ``GET /api/mountain/tasks`` endpoint globs ``tasks/*/task.json`` directly,
+    so the legacy path is the one the endpoint actually reads from.
+    """
     task = Task(
         task_id=task_id,
         title="Test Task",
@@ -53,7 +60,10 @@ def _setup_task(repo: FilesystemTaskRepository, task_id: str = "proj-1", run_id:
         target_stage="compose-video",
         started_at="2025-01-01T00:00:00Z",
     )
-    repo.create_task(task)
+    # Write to legacy tasks/ path — the API reads from here, not from outputs/.
+    task_dir = repo.root / "tasks" / task_id
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / "task.json").write_text(json.dumps(task.to_dict()), encoding="utf-8")
     repo.create_run(run)
     return task, run
 
@@ -116,7 +126,6 @@ class TestTaskEndpoints(unittest.TestCase):
             self.assertEqual(response.status_code, 404)
 
 
-@unittest.skip("Legacy mountain_api tests — segment_script alias removed, legacy API being decommissioned")
 class TestStageEndpoints(unittest.TestCase):
     """Test stage operation endpoints."""
 

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createVoiceProfile,
+  createPresetVoiceProfile,
   createVoiceStyleProfile,
   fetchVoiceProfiles,
   fetchVoiceStyleProfiles,
   previewVoiceProfile,
+  updateVoiceProfile,
 } from '../src/lib/api/voiceProfiles'
 
 function response(body: unknown) {
@@ -53,5 +55,22 @@ describe('provider-neutral voice profile API', () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain('/voice-profiles/mimo%2F%E5%86%B0%E7%B3%96/preview')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ text: '真实预览文本' })
+  })
+
+  it('creates presets and PATCHes only server-editable metadata fields', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => response({}))
+    vi.stubGlobal('fetch', fetchMock)
+    const body = { name: '预置声', provider_id: 'configured-service', model_id: 'configured-model', remote_voice_id: 'remote-voice', language: 'zh-CN', gender: 'female', example_text: '说明', tags: ['自然'] }
+    await createPresetVoiceProfile(body)
+    await updateVoiceProfile('profile/a', body)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ ...body, kind: 'provider-preset' })
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/voice-profiles/profile%2Fa')
+    expect(fetchMock.mock.calls[1][1].method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      name: '预置声', model_id: 'configured-model', remote_voice_id: 'remote-voice',
+      language: 'zh-CN', gender: 'female', tags: ['自然'],
+    })
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty('provider_id')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty('example_text')
   })
 })

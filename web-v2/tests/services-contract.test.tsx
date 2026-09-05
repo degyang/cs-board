@@ -744,6 +744,10 @@ describe('ServiceFormPage (create)', () => {
 describe('VoiceAlignmentPage (production route)', () => {
   beforeEach(() => {
     vi.mocked(fetchVoiceAlignmentSettings).mockReset()
+    vi.mocked(fetchServices).mockReset()
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
+    vi.mocked(fetchServiceSecrets).mockReset()
+    vi.mocked(fetchServiceSecrets).mockResolvedValue({ items: [], total: 0 })
   })
 
   it('renders the page title', async () => {
@@ -964,9 +968,7 @@ describe('Production route tree verification', () => {
   })
 
   it('renders /settings/voice-alignment through production-equivalent route tree', async () => {
-    vi.mocked(fetchVoiceAlignmentSettings).mockResolvedValue({
-      speech_synthesis: null, speech_alignment: null, indextts: null, whisper: null,
-    })
+    vi.mocked(fetchServices).mockResolvedValue({ items: [], next_cursor: null, total: 0 })
     await act(async () => {
       renderWithRouter(<VoiceAlignmentPage />, '/settings/voice-alignment')
     })

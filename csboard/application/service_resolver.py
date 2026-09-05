@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from dataclasses import replace
 
 from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
 from csboard.domain.errors import DomainError
@@ -70,6 +71,9 @@ class ServiceResolver:
 
     def _configured_services(self, capability: str) -> list[ServiceDefinition]:
         services = self._registry.list_services(capability=capability, enabled=True)
+        if capability == "speech_synthesis":
+            services += self._registry.list_services(capability="audio_generation", enabled=True)
+            services = [replace(service, capability="speech_synthesis") for service in services]
         # 排序：is_default 降序 → priority 升序 → service_id 升序
         services.sort(
             key=lambda s: (

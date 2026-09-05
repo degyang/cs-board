@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "engine": "infographic-remotion",
+  "pages": [
+    {
+      "page_id": "page-unit-001",
+      "title": "Single visual",
+      "cue_start_ms": 0,
+      "cue_end_ms": 1000,
+      "nodes": [{
+        "node_id": "unit-001-visual-001",
+        "kind": "image",
+        "props": {
+          "visual_id": "visual-001",
+          "image_path": "artifacts/planning/illustrations/visual-001.png",
+          "text": "One visual"
+        }
+      }],
+      "cues": [{"cue_id": "enter-visual-001", "trigger_ms": 0, "action": "enter"}]
+    }
+  ],
+  "total_duration_ms": 1000,
+  "metadata": {"page_strategy": "exactly_one_page_per_voice_unit"}
+}

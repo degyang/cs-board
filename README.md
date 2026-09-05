@@ -6,8 +6,6 @@
 
 素材、密钥、任务历史和成片默认都保留在本机；同一局域网内的团队也可以共用一条制作队列。
 
-![白板动画成片示例](examples/scene-01-monkey-mountain-banana-whiteboard.gif)
-
 ## 你可以用它做什么
 
 ```text
@@ -41,22 +39,20 @@
 
 选择模板会同时影响插画的配色、线条、材质与构图。预览图展示的是视觉方向；实际人物、物体和场景会随文案变化。
 
-| 模板 | 预览 | 画面特征 | 推荐内容 |
-| --- | --- | --- | --- |
-| **极简粗线简笔白板风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/minimal-whiteboard.webp" alt="极简粗线简笔白板风预览" width="140" /> | 粗黑线、少量配色、清爽留白 | 知识讲解、个人表达、复盘总结 |
-| **极简商务涂鸦风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/business-doodle.webp" alt="极简商务涂鸦风预览" width="140" /> | 几何图表、蓝绿配色、专业克制 | 产品介绍、商业分析、任务汇报 |
-| **暖米黄素描白板风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/warm-pencil.webp" alt="暖米黄素描白板风预览" width="140" /> | 铅笔排线、纸张质感、温暖细腻 | 人物故事、个人成长、品牌叙事 |
-| **粗线扁平国风卡通** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/guofeng-flat.webp" alt="粗线扁平国风卡通预览" width="140" /> | 朱红玉绿、国风纹样、生动平涂 | 传统文化、国风品牌、中文创意 |
-| **爆款高热吸睛风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/viral-pop.webp" alt="爆款高热吸睛风预览" width="140" /> | 高饱和、强对比、夸张动势 | 短视频开场、强观点、热点表达 |
-| **黑金科技发布会风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/black-gold-tech.webp" alt="黑金科技发布会风预览" width="140" /> | 黑金光效、科技舞台、高级权威 | AI、科技产品、发布会 |
-| **清新治愈手账风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/healing-journal.webp" alt="清新治愈手账风预览" width="140" /> | 柔和水彩、低饱和配色、生活手账感 | 情感、生活方式、自我成长 |
-| **复古报纸拼贴风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/retro-collage.webp" alt="复古报纸拼贴风预览" width="140" /> | 撕纸拼贴、半色调、编辑杂志感 | 深度观点、文化内容、案例复盘 |
-| **纸感隐喻拼贴风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/paper-metaphor.png" alt="纸感隐喻拼贴风预览" width="140" /> | 手工剪纸、观点隐喻、高级克制 | 价值观、关系、流程、复杂观点 |
-| **漫画墨线解释风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/oil-visual.png" alt="漫画墨线解释风预览" width="140" /> | 漫画墨线、半调网点、概念机制 | 原理讲解、机制拆解、商业洞察 |
-| **3D黏土趣味风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/clay-3d.webp" alt="3D黏土趣味风预览" width="140" /> | 黏土材质、玩具比例、温暖可爱 | 亲子教育、轻量品牌、趣味科普 |
-| **赛博霓虹漫画风** | <img src="https://raw.githubusercontent.com/ChenShuo2004/cs-board/main/web/public/styles/cyber-neon.webp" alt="赛博霓虹漫画风预览" width="140" /> | 霓虹青紫、漫画速度线、未来感 | AI 趋势、数码科技、年轻化观点 |
-
-> 模板预览使用 GitHub Raw 地址，避免 README 中的表格图片因相对路径无法渲染。当前前端实际提供 12 个模板；如果你只记得原来的 11 个，新增的是「漫画墨线解释风」。
+| 模板 | 画面特征 | 推荐内容 |
+| --- | --- | --- |
+| 极简粗线简笔白板风 | 粗黑线、少量配色、清爽留白 | 知识讲解、个人表达、复盘总结 |
+| 极简商务涂鸦风 | 几何图表、蓝绿配色、专业克制 | 产品介绍、商业分析、任务汇报 |
+| 暖米黄素描白板风 | 铅笔排线、纸张质感、温暖细腻 | 人物故事、个人成长、品牌叙事 |
+| 粗线扁平国风卡通 | 朱红玉绿、国风纹样、生动平涂 | 传统文化、国风品牌、中文创意 |
+| 爆款高热吸睛风 | 高饱和、强对比、夸张动势 | 短视频开场、强观点、热点表达 |
+| 黑金科技发布会风 | 黑金光效、科技舞台、高级权威 | AI、科技产品、发布会 |
+| 清新治愈手账风 | 柔和水彩、低饱和配色、生活手账感 | 情感、生活方式、自我成长 |
+| 复古报纸拼贴风 | 撕纸拼贴、半色调、编辑杂志感 | 深度观点、文化内容、案例复盘 |
+| 纸感隐喻拼贴风 | 手工剪纸、观点隐喻、高级克制 | 价值观、关系、流程、复杂观点 |
+| 漫画墨线解释风 | 漫画墨线、半调网点、概念机制 | 原理讲解、机制拆解、商业洞察 |
+| 3D黏土趣味风 | 黏土材质、玩具比例、温暖可爱 | 亲子教育、轻量品牌、趣味科普 |
+| 赛博霓虹漫画风 | 霓虹青紫、漫画速度线、未来感 | AI 趋势、数码科技、年轻化观点 |
 
 ## 5 分钟启动
 
@@ -193,12 +189,10 @@ Windows PowerShell 请将最后一行替换为：
 ```text
 ├── assets/               # 画笔、视觉风格与参考素材
 ├── docs/                 # 动态信息图与工作流文档
-├── examples/             # 白板动画示例
 ├── scripts/              # 白板渲染、时间线与维护脚本
 ├── schemas/mountain/     # Mountain Task、Artifact、Event、Log 与 Audit JSON Schema
 ├── tests/                # 队列、恢复、语义时间与 Mountain 契约测试
 ├── video_renderer/       # Remotion 动态信息图渲染器
-├── web/                  # 当前 legacy Vinext 前端
 ├── web-v2/               # Mountain 新 React/Vite 前端（独立目录，M07 实现）
 ├── webapp/               # FastAPI 后端
 ├── start-webapp.py       # 跨平台启动逻辑

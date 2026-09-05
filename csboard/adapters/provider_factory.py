@@ -191,6 +191,9 @@ class ProviderFactory:
     def check_all_availability(self) -> dict[str, Any]:
         """检查所有 Provider 实际可用性（配置 + 连接测试）。
 
+        Checks run concurrently so that sequential HTTP timeouts do not
+        accumulate (each probe has its own timeout).
+
         Returns:
             {
                 "all_available": bool,
@@ -198,13 +201,30 @@ class ProviderFactory:
                 "unavailable": list[str],
             }
         """
-        providers = {}
-        unavailable = []
-        for name in self._profiles:
-            status = self.check_provider_availability(name)
-            providers[name] = status
-            if not status["available"]:
-                unavailable.append(name)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        providers: dict[str, Any] = {}
+        unavailable: list[str] = []
+        names = list(self._profiles.keys())
+        if not names:
+            return {"all_available": True, "providers": {}, "unavailable": []}
+
+        with ThreadPoolExecutor(max_workers=min(len(names), 4)) as pool:
+            futures = {pool.submit(self.check_provider_availability, n): n for n in names}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    status = future.result()
+                except Exception:
+                    status = {
+                        "available": False,
+                        "component": name,
+                        "error_code": "CHECK_FAILED",
+                        "suggestion": f"Provider '{name}' 可用性检查异常",
+                    }
+                providers[name] = status
+                if not status["available"]:
+                    unavailable.append(name)
         return {
             "all_available": len(unavailable) == 0,
             "providers": providers,
@@ -271,15 +291,18 @@ class ProviderFactory:
         import httpx
         url = profile.config.get("url", "http://127.0.0.1:7860")
         mode = profile.config.get("mode", "gradio")
+        # Short connect timeout for liveness probe — avoids 5s TCP SYN wait
+        # when the service is simply not running.
+        probe_timeout = httpx.Timeout(connect=2.0, read=5.0)
         try:
             if mode == "fastapi":
-                with httpx.Client(timeout=5) as client:
+                with httpx.Client(timeout=probe_timeout) as client:
                     response = client.get(f"{url}/health")
                     if response.status_code == 200:
                         return {"available": True, "component": "tts", "error_code": None, "suggestion": None}
             else:
                 # Gradio 模式，尝试连接
-                with httpx.Client(timeout=5) as client:
+                with httpx.Client(timeout=probe_timeout) as client:
                     response = client.get(f"{url}/")
                     if response.status_code == 200:
                         return {"available": True, "component": "tts", "error_code": None, "suggestion": None}
@@ -325,8 +348,9 @@ class ProviderFactory:
             # HTTP 模式
             import httpx
             url = profile.config.get("base_url", "http://127.0.0.1:9000")
+            probe_timeout = httpx.Timeout(connect=2.0, read=5.0)
             try:
-                with httpx.Client(timeout=5) as client:
+                with httpx.Client(timeout=probe_timeout) as client:
                     response = client.get(f"{url}/health")
                     if response.status_code == 200:
                         return {"available": True, "component": "alignment", "error_code": None, "suggestion": None}
@@ -516,6 +540,13 @@ class ProviderFactory:
                     base_url=endpoint or config.get("base_url", "https://api.openai.com/v1"),
                     api_key=secrets.get("api_key", ""),
                     model=service_definition.model or config.get("model", "gpt-image-1"),
+                )
+            elif capability in {"speech_synthesis", "audio_generation"}:
+                from csboard.adapters.openai_compatible.tts_adapter import OpenAITTSAdapter
+                return OpenAITTSAdapter(
+                    base_url=endpoint or config.get("base_url", "https://api.openai.com/v1"),
+                    api_key=secrets.get("api_key", ""),
+                    model=service_definition.model or config.get("model", "mimo-v2.5-tts"),
                 )
             else:
                 raise DomainError("UNSUPPORTED_ADAPTER", f"openai_compatible 不支持 capability: {capability}")

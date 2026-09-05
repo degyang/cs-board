@@ -74,6 +74,16 @@ def test_capabilities_has_stable_sanitized_shape_without_probe(tmp_path: Path):
     assert "https://" not in encoded
 
 
+def test_api_uses_the_shared_capability_read_model(tmp_path: Path, monkeypatch):
+    expected = {"items": [{"engine": "shared-read-model"}], "providers": {"all_available": False}}
+    monkeypatch.setattr(CapabilityService, "snapshot", lambda _self: expected)
+
+    response = _client(tmp_path).get("/api/v1/capabilities")
+
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
 def test_capability_service_handles_an_empty_dynamic_registry(tmp_path: Path):
     body = CapabilityService(_registry(tmp_path)).snapshot()
 

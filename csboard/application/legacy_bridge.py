@@ -118,7 +118,9 @@ class LegacyJobBridge:
 
     @staticmethod
     def _is_infographic(job: dict[str, Any]) -> bool:
-        return job.get("reference_mode") == "infographic" or job.get("job_type") == "infographic"
+        return (job.get("reference_mode") == "infographic"
+                or job.get("job_type") == "infographic"
+                or job.get("pipeline_id") == "infographic-remotion-v8")
 
     @staticmethod
     def _signature(job: dict[str, Any]) -> str:

@@ -6,7 +6,7 @@
    voice tab in AssetManagementPage — no mock or duplicated state logic.
    ========================================================================== */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Tabs } from '../components/ui/Tabs'
 import { getVoiceContentUrl } from '../lib/api/http'
@@ -14,7 +14,7 @@ import {
   fetchVoices, createVoice, updateVoice, deleteVoice,
 } from '../lib/api/assets'
 import { fetchServices } from '../lib/api/services'
-import { createVoiceProfile, createVoiceStyleProfile, fetchVoiceProfiles, fetchVoiceStyleProfiles, previewVoiceProfile } from '../lib/api/voiceProfiles'
+import { createPresetVoiceProfile, createVoiceProfile, createVoiceStyleProfile, fetchVoiceProfiles, fetchVoiceStyleProfiles, previewVoiceProfile, updateVoiceProfile } from '../lib/api/voiceProfiles'
 import type { ServiceDefinition, VoiceDefinition, VoiceProfile, VoiceStyleProfile } from '../lib/api/types'
 
 const VOICE_TABS = [
@@ -31,6 +31,29 @@ const STATUS_OPTIONS = [
 ]
 
 const DEFAULT_PREVIEW_TEXT = '这是一个语音测试，我会用清晰的语音提醒你，我就是你知心的助手。'
+// A provider preview is remote work.  It must always return the controls to a
+// terminal state instead of leaving the page indefinitely at “生成中...”.
+export const PRESET_PREVIEW_TIMEOUT_MS = 20_000
+
+/**
+ * Provider services are bindings, not distinct directory voices.  The vendor
+ * catalog therefore has one deterministic row for a vendor/remote voice pair;
+ * an empty vendor or remote id is intentionally never merged with another
+ * incomplete record.
+ */
+export function dedupePresetProfiles(profiles: VoiceProfile[]): VoiceProfile[] {
+  const ordered = [...profiles].sort((left, right) => left.profile_id.localeCompare(right.profile_id))
+  const seen = new Set<string>()
+  return ordered.filter(profile => {
+    const vendor = profile.vendor_id?.trim().toLocaleLowerCase()
+    const remote = profile.remote_voice_id?.trim().toLocaleLowerCase()
+    if (!vendor || !remote) return true
+    const key = `${vendor}\u0000${remote}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 function languageLabel(value?: string | null): string {
   if (value === 'zh-CN') return '中文'
@@ -493,10 +516,100 @@ function LocalVoiceLibrary() {
 type ProviderTab = 'designs' | 'styles'
 
 function isSpeechProvider(service: ServiceDefinition): boolean {
+  const capability = service.capability.toLowerCase()
   return service.enabled && (
-    service.capability === 'speech.synthesize'
-    || service.capability === 'speech_synthesis'
-    || service.capability === 'audio_generation'
+    capability === 'speech.synthesize'
+    || capability === 'speech_synthesis'
+    || capability === 'speech-synthesis'
+    || capability === 'tts'
+    || capability === 'text_to_speech'
+    || capability === 'text-to-speech'
+    || capability === 'audio_generation'
+    || capability === 'audio.generation'
+  )
+}
+
+/** A service can advertise several comma-separated models; a profile has one. */
+function defaultProviderModel(service: ServiceDefinition | undefined): string {
+  return service?.model?.split(',')[0]?.trim() ?? ''
+}
+
+function hasDeclaredProviderModel(service: ServiceDefinition | undefined, modelId: string): boolean {
+  // Older service records did not expose a model field.  Preserve their
+  // existing edit path; only an explicit empty declaration is a hard block.
+  if (service?.model == null) return true
+  const normalized = modelId.trim().toLocaleLowerCase()
+  return Boolean(normalized) && (service?.model ?? '').split(',')
+    .some(model => model.trim().toLocaleLowerCase() === normalized)
+}
+
+function PresetVoiceForm({
+  profile, providers, onClose, onSaved,
+}: {
+  profile: VoiceProfile | null
+  providers: ServiceDefinition[]
+  onClose: () => void
+  onSaved: () => void | Promise<void>
+}) {
+  const editing = profile !== null
+  const [name, setName] = useState(profile?.name ?? '')
+  const [providerId, setProviderId] = useState(profile?.provider_id ?? providers[0]?.service_id ?? '')
+  const initialProvider = providers.find(provider => provider.service_id === profile?.provider_id) ?? providers[0]
+  const [modelId, setModelId] = useState(
+    profile && hasDeclaredProviderModel(initialProvider, profile.model_id)
+      ? profile.model_id
+      : defaultProviderModel(initialProvider),
+  )
+  const [remoteVoiceId, setRemoteVoiceId] = useState(profile?.remote_voice_id ?? '')
+  const [language, setLanguage] = useState(profile?.language ?? '')
+  const [gender, setGender] = useState(profile?.gender ?? '')
+  const [exampleText, setExampleText] = useState(profile?.example_text ?? '')
+  const [tags, setTags] = useState(profile?.tags.join(', ') ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const changeProvider = (nextProviderId: string) => {
+    setProviderId(nextProviderId)
+    setModelId(defaultProviderModel(providers.find(provider => provider.service_id === nextProviderId)))
+  }
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setError(null)
+    const selectedProvider = providers.find(provider => provider.service_id === providerId)
+    if (editing && !hasDeclaredProviderModel(selectedProvider, modelId)) {
+      setError('当前 Provider 未声明可用模型，无法保存此预置音色。请在模型服务中配置模型后重试。')
+      return
+    }
+    setSaving(true)
+    const body = {
+      name: name.trim(), provider_id: providerId, model_id: modelId.trim(), remote_voice_id: remoteVoiceId.trim(),
+      language: language.trim(), gender: gender.trim(), example_text: exampleText, tags: tags.split(',').map(tag => tag.trim()).filter(Boolean),
+    }
+    try {
+      if (editing) await updateVoiceProfile(profile.profile_id, body)
+      else await createPresetVoiceProfile(body)
+      await onSaved()
+      onClose()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '保存失败')
+    } finally { setSaving(false) }
+  }
+  return (
+    <section className="preset-voice-editor" aria-label={editing ? '编辑预置音色' : '新增预置音色'}>
+        <h2 className="am-detail-name">{editing ? '编辑预置音色' : '新增预置音色'}</h2>
+        {error && <div className="error-card" role="alert">{error}</div>}
+        <form className="style-form" onSubmit={submit}>
+          <div className="form-field"><label className="form-label" htmlFor="preset-name">名称 *</label><input id="preset-name" className="input" required value={name} onChange={event => setName(event.target.value)} /></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-provider">Provider *</label><select id="preset-provider" className="input" required value={providerId} onChange={event => changeProvider(event.target.value)}><option value="" disabled>请选择 Provider</option>{providers.map(provider => <option key={provider.service_id} value={provider.service_id}>{provider.display_name || provider.service_id}</option>)}</select></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-model">模型 *</label><input id="preset-model" className="input" required={!editing} value={modelId} onChange={event => setModelId(event.target.value)} /></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-remote-id">远端音色 ID *</label><input id="preset-remote-id" className="input" required value={remoteVoiceId} onChange={event => setRemoteVoiceId(event.target.value)} /></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-language">语言</label><input id="preset-language" className="input" value={language} onChange={event => setLanguage(event.target.value)} placeholder="zh-CN" /></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-gender">性别</label><input id="preset-gender" className="input" value={gender} onChange={event => setGender(event.target.value)} /></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-example">音色说明/示例</label><textarea id="preset-example" className="input" rows={3} value={exampleText} onChange={event => setExampleText(event.target.value)} /></div>
+          <div className="form-field"><label className="form-label" htmlFor="preset-tags">标签（逗号分隔）</label><input id="preset-tags" className="input" value={tags} onChange={event => setTags(event.target.value)} /></div>
+          <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>取消</button><button type="submit" className="btn btn-primary" disabled={saving || !providerId}>{saving ? '保存中...' : '保存'}</button></div>
+        </form>
+    </section>
   )
 }
 
@@ -509,18 +622,32 @@ function PresetVoiceCatalog() {
   const [previewing, setPreviewing] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewText, setPreviewText] = useState(DEFAULT_PREVIEW_TEXT)
+  const [showForm, setShowForm] = useState(false)
+  const [editingProfile, setEditingProfile] = useState<VoiceProfile | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const previewGenerationRef = useRef(0)
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const reloadProfiles = useCallback(async () => {
+    setLoading(true); setCatalogError(null)
+    try {
+      const response = await fetchVoiceProfiles({ kind: 'provider-preset' })
+      setProfiles(response.items)
+      setSelectedId(previous => previous && response.items.some(item => item.profile_id === previous) ? previous : '')
+    } catch (error) {
+      setProfiles([])
+      setCatalogError(`接口尚未就绪：${error instanceof Error ? error.message : '未知错误'}`)
+    } finally { setLoading(false) }
+  }, [])
 
   useEffect(() => {
     let current = true
-    setLoading(true)
-    setCatalogError(null)
     fetchVoiceProfiles({ kind: 'provider-preset' })
       .then(response => {
         if (!current) return
         setProfiles(response.items)
-        setSelectedId(previous => previous && response.items.some(item => item.profile_id === previous)
-          ? previous
-          : response.items[0]?.profile_id ?? '')
+        setSelectedId(previous => previous && response.items.some(item => item.profile_id === previous) ? previous : '')
       })
       .catch(error => {
         if (!current) return
@@ -536,41 +663,65 @@ function PresetVoiceCatalog() {
   }, [])
 
   const selected = profiles.find(item => item.profile_id === selectedId) ?? null
-  const groups = profiles.reduce<Array<{ id: string; name: string; items: VoiceProfile[] }>>((result, profile) => {
+  const directoryProfiles = useMemo(() => dedupePresetProfiles(profiles), [profiles])
+  const selectedDirectoryProfile = directoryProfiles.find(item => item.profile_id === selectedId) ?? null
+  const groups = directoryProfiles.reduce<Array<{ id: string; name: string; items: VoiceProfile[] }>>((result, profile) => {
     const id = profile.vendor_id || 'unclassified'
     const existing = result.find(group => group.id === id)
     if (existing) existing.items.push(profile)
     else result.push({ id, name: profile.vendor_name || '厂家未标注', items: [profile] })
     return result
   }, [])
-  const providerName = selected
-    ? providers.find(provider => provider.service_id === selected.provider_id)?.display_name || selected.provider_id
+  const providerName = selectedDirectoryProfile
+    ? providers.find(provider => provider.service_id === selectedDirectoryProfile.provider_id)?.display_name || selectedDirectoryProfile.provider_id
     : '—'
 
-  const selectProfile = (profileId: string) => {
+  const invalidatePreview = (profileId: string) => {
+    previewGenerationRef.current += 1
+    if (previewTimeoutRef.current !== null) {
+      clearTimeout(previewTimeoutRef.current)
+      previewTimeoutRef.current = null
+    }
+    audioRef.current?.pause()
     setSelectedId(profileId)
     setPreviewUrl(null)
     setPreviewError(null)
+    setPreviewing(false)
   }
+  const selectProfile = (profileId: string) => invalidatePreview(profileId)
   const createPreview = async () => {
     if (!selected) return
+    const requestGeneration = ++previewGenerationRef.current
+    const profileId = selected.profile_id
+    audioRef.current?.pause()
     setPreviewing(true)
     setPreviewError(null)
     setPreviewUrl(null)
     try {
-      const result = await previewVoiceProfile(selected.profile_id, selected.example_text || DEFAULT_PREVIEW_TEXT)
-      setPreviewUrl(result.audio_url)
+      const timeout = new Promise<never>((_, reject) => {
+        previewTimeoutRef.current = setTimeout(() => reject(new Error('试听生成超时，请检查 Provider 后重试。')), PRESET_PREVIEW_TIMEOUT_MS)
+      })
+      // The API helper does not expose an AbortSignal.  The generation token
+      // makes a late response inert, while the race guarantees a visible
+      // timeout terminal state for the active request.
+      const result = await Promise.race([previewVoiceProfile(profileId, previewText), timeout])
+      if (requestGeneration === previewGenerationRef.current && selectedId === profileId) setPreviewUrl(result.audio_url)
     } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : '预览接口尚未就绪')
+      if (requestGeneration === previewGenerationRef.current && selectedId === profileId) setPreviewError(error instanceof Error ? error.message : '预览接口尚未就绪')
     } finally {
-      setPreviewing(false)
+      if (previewTimeoutRef.current !== null) {
+        clearTimeout(previewTimeoutRef.current)
+        previewTimeoutRef.current = null
+      }
+      if (requestGeneration === previewGenerationRef.current) setPreviewing(false)
     }
   }
 
   return (
     <section className="voice-preset-panel" aria-label="预置音色">
+      <div className="voice-provider-toolbar"><button type="button" className="btn btn-primary btn-sm" onClick={() => { setEditingProfile(null); setShowForm(true) }} disabled={providers.length === 0}>+ 新增预置音色</button>{providers.length === 0 && <span className="hint">请先在模型服务中启用音频或 TTS 服务。</span>}</div>
       {catalogError && <div className="am-error" role="alert">预置音色加载失败：{catalogError}</div>}
-      {loading ? <div className="am-loading">加载中...</div> : profiles.length === 0 && !catalogError ? <div className="am-empty">暂无预置音色</div> : (
+      {loading ? <div className="am-loading">加载中...</div> : profiles.length === 0 && !catalogError && !showForm ? <div className="am-empty">暂无预置音色</div> : (
         <div className="am-layout">
           <aside className="am-list" aria-label="按厂家分组的预置音色">
             {groups.map(group => (
@@ -592,32 +743,34 @@ function PresetVoiceCatalog() {
             ))}
           </aside>
           <article className="am-detail" aria-label="预置音色详情">
-            {selected ? <>
+            {showForm ? <PresetVoiceForm profile={editingProfile} providers={providers} onClose={() => setShowForm(false)} onSaved={reloadProfiles} /> : selectedDirectoryProfile ? <>
               <div className="am-detail-head">
                 <div className="am-voice-avatar" aria-hidden="true">🔊</div>
-                <div><h2 className="am-detail-name">{selected.name}</h2><div className="am-detail-tag">只读预置音色 · <AssetStatus status={selected.status} /></div></div>
+                <div><h2 className="am-detail-name">{selectedDirectoryProfile.name}</h2><div className="am-detail-tag">预置音色 · <AssetStatus status={selectedDirectoryProfile.status} /></div></div>
+                <div className="am-tools"><button type="button" className="btn btn-primary btn-sm" onClick={() => { setEditingProfile(selectedDirectoryProfile); setShowForm(true) }}>编辑</button></div>
               </div>
               <section className="am-detail-section" aria-label="预置音色信息">
                 <h3 className="am-section-title">音色信息</h3>
-                <div className="am-detail-field"><span className="am-detail-label">语言:</span> {languageLabel(selected.language)}</div>
-                <div className="am-detail-field"><span className="am-detail-label">性别:</span> {genderLabel(selected.gender)}</div>
-                <div className="am-detail-field"><span className="am-detail-label">厂家:</span> {selected.vendor_name || '厂家未标注'}</div>
+                <div className="am-detail-field"><span className="am-detail-label">语言:</span> {languageLabel(selectedDirectoryProfile.language)}</div>
+                <div className="am-detail-field"><span className="am-detail-label">性别:</span> {genderLabel(selectedDirectoryProfile.gender)}</div>
+                <div className="am-detail-field"><span className="am-detail-label">厂家:</span> {selectedDirectoryProfile.vendor_name || '厂家未标注'}</div>
                 <div className="am-detail-field"><span className="am-detail-label">Provider:</span> {providerName}</div>
-                <div className="am-detail-field"><span className="am-detail-label">模型:</span> {selected.model_id || '—'}</div>
-                <div className="am-detail-field"><span className="am-detail-label">状态:</span> <AssetStatus status={selected.status} /></div>
-              </section>
-              <section className="am-detail-section" aria-label="真实音色预览">
-                <h3 className="am-section-title">音频预览</h3>
-                <div className="am-detail-field"><span className="am-detail-label">示例朗读文本:</span> {selected.example_text || DEFAULT_PREVIEW_TEXT}</div>
-                <button type="button" className="btn btn-primary btn-sm" onClick={createPreview} disabled={previewing}>{previewing ? '生成中...' : '生成预览'}</button>
-                {previewError && <div className="am-error voice-preview-error" role="alert">预览生成失败：{previewError}</div>}
-                <audio controls autoPlay={Boolean(previewUrl)} src={previewUrl || undefined} className="am-voice-player">您的浏览器不支持音频播放</audio>
-                {!previewUrl && !previewError && <p className="hint">点击“生成预览”后，将调用后端 Provider 生成真实音频。</p>}
+                <div className="am-detail-field"><span className="am-detail-label">模型:</span> {selectedDirectoryProfile.model_id || '—'}</div>
+                <div className="am-detail-field"><span className="am-detail-label">状态:</span> <AssetStatus status={selectedDirectoryProfile.status} /></div>
               </section>
             </> : <div className="am-detail-empty"><strong>请选择预置音色</strong></div>}
           </article>
         </div>
       )}
+      <section className="am-detail-section voice-preset-audition" aria-label="独立试听区" aria-live="polite">
+        <h3 className="am-section-title">试听区</h3>
+        {selected ? <p className="hint">当前绑定音色：<strong>{selected.name}</strong></p> : <p className="hint">请先在上方选择一个预置音色。</p>}
+        <div className="form-field"><label className="form-label" htmlFor="preset-preview-text">示例朗读文本</label><textarea id="preset-preview-text" className="input" rows={3} value={previewText} onChange={event => setPreviewText(event.target.value)} disabled={!selected || previewing} /></div>
+        <button type="button" className="btn btn-primary btn-sm" onClick={createPreview} disabled={!selected || previewing}>{previewing ? '生成中...' : '生成试听'}</button>
+        {previewError && <div className="am-error voice-preview-error" role="alert">预览生成失败：{previewError}</div>}
+        {previewUrl && <audio ref={audioRef} controls autoPlay src={previewUrl} className="am-voice-player">您的浏览器不支持音频播放</audio>}
+        {!previewUrl && !previewError && selected && <p className="hint">点击“生成试听”后，将调用后端 Provider 生成真实音频。</p>}
+      </section>
     </section>
   )
 }

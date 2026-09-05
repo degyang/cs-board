@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "engine": "infographic-remotion",
+  "pages": [
+    {
+      "page_id": "page-unit-001",
+      "title": "Two visuals, one Voice Unit page",
+      "cue_start_ms": 0,
+      "cue_end_ms": 2000,
+      "nodes": [
+        {"node_id": "unit-001-visual-001", "kind": "image", "props": {"visual_id": "visual-001", "image_path": "artifacts/planning/illustrations/visual-001.png"}},
+        {"node_id": "unit-001-visual-002", "kind": "image", "props": {"visual_id": "visual-002", "image_path": "artifacts/planning/illustrations/visual-002.png"}}
+      ],
+      "cues": [
+        {"cue_id": "enter-visual-001", "trigger_ms": 0, "action": "enter"},
+        {"cue_id": "enter-visual-002", "trigger_ms": 1000, "action": "enter"}
+      ]
+    },
+    {
+      "page_id": "page-unit-002",
+      "title": "Next Voice Unit",
+      "cue_start_ms": 2000,
+      "cue_end_ms": 3000,
+      "nodes": [{"node_id": "unit-002-visual-003", "kind": "image", "props": {"visual_id": "visual-003", "image_path": "artifacts/planning/illustrations/visual-003.png"}}],
+      "cues": [{"cue_id": "enter-visual-003", "trigger_ms": 2000, "action": "enter"}]
+    }
+  ],
+  "total_duration_ms": 3000,
+  "metadata": {"page_strategy": "exactly_one_page_per_voice_unit"}
+}

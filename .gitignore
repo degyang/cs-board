@@ -21,6 +21,8 @@ web/.wrangler/
 web/coverage/
 web/outputs/
 outputs/
+.task-packages/
+test-results/
 web/work/
 web/*.tsbuildinfo
 web-v2/vite.config.ts.timestamp-*.mjs

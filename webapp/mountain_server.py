@@ -15,6 +15,9 @@ mountain_server.create_app() 是唯一组合根。只在这里创建一次：
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +29,61 @@ from webapp.error_contract import domain_error_response
 
 # 稳定默认目录：使用 $HOME/.csboard 而非相对路径
 _DEFAULT_DATA_DIR = Path(os.environ.get("CSBOARD_DATA_DIR", Path.home() / ".csboard"))
+
+# ── Seed template cache ──────────────────────────────────────────────────
+# After the first create_app() seeds a data_dir, cache the deterministic
+# assets/ and settings/ subtrees.  Subsequent create_app() calls with
+# fresh (empty) data_dirs can hardlink-copy from this template in ~2 ms
+# instead of paying ~700 ms for seed_preset_styles alone.
+_SEED_TEMPLATE_DIR: Path | None = None
+_SEED_TEMPLATE_LOCK = threading.Lock()
+_SEED_TEMPLATE_TDIR: tempfile.TemporaryDirectory | None = None  # prevent GC
+
+
+def _try_populate_from_seed_cache(target: Path) -> bool:
+    """Hardlink-copy cached seed assets into *target*. Returns True on cache hit."""
+    global _SEED_TEMPLATE_DIR
+    if _SEED_TEMPLATE_DIR is None:
+        return False
+    src = _SEED_TEMPLATE_DIR
+    if not src.is_dir():
+        _SEED_TEMPLATE_DIR = None
+        return False
+    for subdir in ("assets", "settings"):
+        src_sub = src / subdir
+        if not src_sub.is_dir():
+            continue
+        dst_sub = target / subdir
+        dst_sub.mkdir(parents=True, exist_ok=True)
+        for src_file in src_sub.rglob("*"):
+            if not src_file.is_file():
+                continue
+            rel = src_file.relative_to(src_sub)
+            dest_file = dst_sub / rel
+            if dest_file.exists():
+                continue
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.link(src_file, dest_file)
+            except OSError:
+                shutil.copy2(src_file, dest_file)
+    return True
+
+
+def _cache_seed_template(source: Path) -> None:
+    """Store *source*'s assets/ and settings/ as a reusable hardlink template."""
+    global _SEED_TEMPLATE_DIR, _SEED_TEMPLATE_TDIR
+    with _SEED_TEMPLATE_LOCK:
+        if _SEED_TEMPLATE_DIR is not None:
+            return
+        tdir = tempfile.TemporaryDirectory(prefix="csboard-seed-tpl-")
+        tpl = Path(tdir.name)
+        for subdir in ("assets", "settings"):
+            src_sub = source / subdir
+            if src_sub.is_dir():
+                shutil.copytree(src_sub, tpl / subdir, copy_function=os.link)
+        _SEED_TEMPLATE_DIR = tpl
+        _SEED_TEMPLATE_TDIR = tdir  # prevent GC until process exit
 
 
 def create_app(
@@ -78,10 +136,16 @@ def create_app(
     )
 
     # 新数据目录首次启动即具备真实可配置服务和预置风格；不覆盖用户数据。
-    seed_default_services(effective_data_dir)
-    seed_preset_styles(effective_data_dir)
-    seed_migrated_assets(effective_data_dir)
-    seed_preconditions(effective_data_dir)
+    # Fast path: if we have a cached seed template, hardlink from it (~5ms)
+    # and skip the seed functions entirely — they are idempotent and the
+    # template already contains their output.
+    if not _try_populate_from_seed_cache(effective_data_dir):
+        seed_default_services(effective_data_dir)
+        seed_preset_styles(effective_data_dir)
+        seed_migrated_assets(effective_data_dir)
+        seed_preconditions(effective_data_dir)
+        if data_dir is not None:
+            _cache_seed_template(effective_data_dir)
 
     # 共享组件：所有 Router 使用同一实例
     service_registry = FilesystemServiceRegistry(effective_data_dir, secret_store)
@@ -101,6 +165,7 @@ def create_app(
     from webapp.mountain_capability_api import mountain_capability_router
     from webapp.mountain_service_api import mountain_service_router
     from webapp.mountain_settings_api import mountain_settings_router
+    from webapp.mountain_voice_profile_api import mountain_voice_profile_router
 
     # 共享 Repository 和 Telemetry
     project_root = Path(os.environ.get("CSBOARD_PROJECT_ROOT", effective_data_dir)).resolve()
@@ -140,6 +205,7 @@ def create_app(
         effective_data_dir, registry=service_registry, secret_store=secret_store,
         is_encrypted=is_encrypted,
     ))
+    app.include_router(mountain_voice_profile_router(service_registry, effective_data_dir, provider_factory))
 
     # Health endpoint — 真实健康检查
     @app.get("/api/v1/health")
