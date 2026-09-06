@@ -72,7 +72,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-所有运行时依赖必须安装在实际启动任务的系统中。例如在 WSL 中启动时，Python、Node、FFmpeg 和字体都应安装在该 WSL 发行版中；不要混用 Windows 的 `.venv` 或 `node_modules`。**推荐每个系统使用各自的 Git 克隆目录**；若必须共用目录，在切换系统前删除 `.venv`、`web/node_modules` 与 `video_renderer/node_modules` 后重新安装，避免原生依赖互相污染。
+所有运行时依赖必须安装在实际启动任务的系统中。例如在 WSL 中启动时，Python、Node、FFmpeg 和字体都应安装在该 WSL 发行版中；不要混用 Windows 的 `.venv` 或 `node_modules`。**推荐每个系统使用各自的 Git 克隆目录**；若必须共用目录，在切换系统前删除 `.venv` 与 `video_renderer/node_modules` 后重新安装，避免原生依赖互相污染。
 
 ### Windows
 
@@ -190,7 +190,7 @@ Windows PowerShell 请将最后一行替换为：
 ├── assets/               # 画笔、视觉风格与参考素材
 ├── docs/                 # 动态信息图与工作流文档
 ├── scripts/              # 白板渲染、时间线与维护脚本
-├── schemas/mountain/     # Mountain Task、Artifact、Event、Log 与 Audit JSON Schema
+├── schemas/     # Mountain Task、Artifact、Event、Log 与 Audit JSON Schema
 ├── tests/                # 队列、恢复、语义时间与 Mountain 契约测试
 ├── video_renderer/       # Remotion 动态信息图渲染器
 ├── web-v2/               # Mountain 新 React/Vite 前端（独立目录，M07 实现）

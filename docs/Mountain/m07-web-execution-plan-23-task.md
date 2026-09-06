@@ -26,7 +26,7 @@ Connect `web-v2` to the committed backend execution-plan API contract from
 
 - No Stage Work Order.
 - No selective execution orchestration, stage scheduling, or new backend API.
-- No `web/` legacy-surface changes and no secret/path/traceback rendering.
+- No removed-legacy-surface changes and no secret/path/traceback rendering.
 
 ## Acceptance evidence
 

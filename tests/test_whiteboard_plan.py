@@ -14,7 +14,7 @@ class WhiteboardPlanTest(unittest.TestCase):
         document = storyboard_document("task-1", "run-1", units)
         expected = {item.visual_id for unit in units for item in unit.visual_items}
         self.assertEqual(storyboard_ids(document), expected)
-        schema = Path(__file__).resolve().parents[1] / "schemas" / "mountain" / "storyboard.schema.json"
+        schema = Path(__file__).resolve().parents[1] / "schemas" / "storyboard.schema.json"
         self.assertEqual([], list(validator_for(schema).iter_errors(document)))
 
 

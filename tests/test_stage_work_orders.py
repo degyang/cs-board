@@ -45,7 +45,7 @@ def test_every_stage_has_stable_schema_valid_persisted_work_order(tmp_path: Path
     store = FilesystemArtifactStore(FilesystemTaskRepository(tmp_path))
     for key in {key for values in __import__("csboard.application.work_orders", fromlist=["STAGE_INPUTS"]).STAGE_INPUTS.values() for key in values}:
         store.commit_bytes(task_id, run_id, key, f"safe/{key}.json", key.encode(), "test")
-    schema = json.loads((Path(__file__).parents[1] / "schemas/mountain/stage-work-order.schema.json").read_text())
+    schema = json.loads((Path(__file__).parents[1] / "schemas/stage-work-order.schema.json").read_text())
     validator = Draft202012Validator(schema)
     for stage in CANONICAL_STAGES:
         first = client.get(f"/api/v1/tasks/{task_id}/runs/{run_id}/work-orders/{stage}")

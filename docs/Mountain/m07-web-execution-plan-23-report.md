@@ -39,4 +39,4 @@ saved-plan display, standard-error parsing, and safe rendering of the 409
 suggestion without an unrelated server detail.
 
 Known gaps: none within this display-and-feedback slice. No Stage Work Order,
-selective orchestration, backend API, or legacy `web/` surface was changed.
+selective orchestration, backend API, or removed legacy surface was changed.

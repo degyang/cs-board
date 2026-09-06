@@ -118,10 +118,10 @@ cli/
 skills/
 └── <skill-name>/SKILL.md     # 薄交互层，只调用 CLI
 
-web-v2/                       # 新 React + Vite SPA；与 legacy web/ 物理隔离
+web-v2/                       # 唯一 React + Vite SPA
 ```
 
-`csboard` 是中立包，不依赖 `webapp`、`cli`、Electron/Tauri 或 Skills。入口可以依赖 `csboard`，反向依赖禁止。现有 `web/` 仅作为 legacy 前端保留；新页面只能在 `web-v2/` 创建，不能通过跨目录导入复用旧页面状态。
+`csboard` 是中立包，不依赖 `webapp`、`cli`、Electron/Tauri 或 Skills。入口可以依赖 `csboard`，反向依赖禁止。旧 `web/` 已移除；新页面只能在 `web-v2/` 创建，不能通过跨目录导入复用旧页面状态。
 
 ## 3. 共享内核的详细职责
 

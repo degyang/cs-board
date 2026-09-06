@@ -11,5 +11,5 @@ class RenderPlanTest(unittest.TestCase):
   illustrations={"illustrations":[{"visual_id":"visual-001-01"}]}
   document=render_manifest_document("task-1","run-1",timeline,illustrations)
   self.assertEqual(document["clips"][0]["duration_ms"],900)
-  schema=Path(__file__).resolve().parents[1]/"schemas"/"mountain"/"render-manifest.schema.json"
+  schema=Path(__file__).resolve().parents[1]/"schemas"/"render-manifest.schema.json"
   self.assertEqual([],list(validator_for(schema).iter_errors(document)))

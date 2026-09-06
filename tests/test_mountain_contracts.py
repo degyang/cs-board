@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator, FormatChecker, RefResolver
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_DIR = ROOT / "schemas" / "mountain"
+SCHEMA_DIR = ROOT / "schemas"
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "mountain-task"
 
 SCHEMA_FIXTURES = {

@@ -12,7 +12,7 @@
 Skills/CLI 消费边界。状态迁移均有明确退出动作；accept 前不会提交正式 `illustrations.manifest`。
 
 契约中的规范 Stage、Artifact key 与当前 `csboard/application/pipeline.py`、
-`csboard/adapters/filesystem/artifacts.py`、`schemas/mountain/` 及现行 Mountain 文档一致。
+`csboard/adapters/filesystem/artifacts.py`、`schemas/` 及现行 Mountain 文档一致。
 `illustrations.job`、`illustrations.candidates` 和 `style.snapshot` 是已声明但待实现的 additive
 契约，文档已明确不冒充生产现状。
 

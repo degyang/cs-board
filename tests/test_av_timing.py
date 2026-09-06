@@ -55,7 +55,7 @@ class AvTimingTest(unittest.TestCase):
         timing = time_voice_unit(units[0], 1000, None)
         timeline = timeline_document("task-1", "run-1", (timing,))
         voice = voice_manifest_document("task-1", "run-1", [{"unit_id": "unit-001", "audio_path": "artifacts/media/voices/unit-001.wav", "sha256": "sha256:abcdef12", "duration_ms": 1000, "sample_rate": 24000, "channels": 1, "tts_profile": "test", "attempt": 1}])
-        root = Path(__file__).resolve().parents[1] / "schemas" / "mountain"
+        root = Path(__file__).resolve().parents[1] / "schemas"
         for name, document in (("av-plan.schema.json", plan), ("timeline.schema.json", timeline), ("voice-manifest.schema.json", voice)):
             self.assertEqual([], list(validator_for(root / name).iter_errors(document)), name)
 

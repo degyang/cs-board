@@ -221,7 +221,7 @@ web-v2/src/
     └── formatting.ts
 ```
 
-组件按业务特征拆分。WebUI v2 只消费 API View，不导入 Python Domain，也不复制状态机或 fallback 公式。`web-v2/` 与 legacy `web/` 不共享页面、状态或构建目录；迁移只允许通过 API 契约和独立复写完成。
+组件按业务特征拆分。WebUI v2 只消费 API View，不导入 Python Domain，也不复制状态机或 fallback 公式。旧 `web/` 已移除；页面迁移只能通过 API 契约和独立复写完成。
 
 ## 9. 状态同步
 

@@ -28,7 +28,7 @@
 - `csboard/application/`：确定性生成、读取和状态投影；
 - `webapp/mountain_*_api.py`：只读 WO API；
 - `cli/csboard.py`：`work-order show` 只读命令；
-- `schemas/mountain/`：仅本任务 DTO 必需的新 schema；
+- `schemas/`：仅本任务 DTO 必需的新 schema；
 - 对应后端测试与 `docs/agents/reports/CORE-WO-003.md`。
 
 ## Forbidden surfaces

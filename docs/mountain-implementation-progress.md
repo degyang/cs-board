@@ -51,19 +51,19 @@ All 13 docs + README were reviewed:
 |-------------|--------|----------|
 | Mountain docs | DONE | 13 files in `docs/Mountain/` |
 | Architecture decisions | DONE | `docs/Mountain/08-decisions.md` with 23 decisions |
-| `project.schema.json` | DONE | `schemas/mountain/project.schema.json` |
-| `run.schema.json` | DONE | `schemas/mountain/run.schema.json` |
-| `av-plan.schema.json` | DONE | `schemas/mountain/av-plan.schema.json` |
-| `voice-manifest.schema.json` | DONE | `schemas/mountain/voice-manifest.schema.json` |
-| `timeline.schema.json` | DONE | `schemas/mountain/timeline.schema.json` |
-| `storyboard.schema.json` | DONE | `schemas/mountain/storyboard.schema.json` |
-| `illustration-manifest.schema.json` | DONE | `schemas/mountain/illustration-manifest.schema.json` |
-| `render-manifest.schema.json` | DONE | `schemas/mountain/render-manifest.schema.json` |
-| `final-manifest.schema.json` | DONE | `schemas/mountain/final-manifest.schema.json` |
-| `domain-event.schema.json` | DONE | `schemas/mountain/domain-event.schema.json` |
-| `diagnostic-log.schema.json` | DONE | `schemas/mountain/diagnostic-log.schema.json` |
-| `audit-record.schema.json` | DONE | `schemas/mountain/audit-record.schema.json` |
-| `common.schema.json` | DONE | `schemas/mountain/common.schema.json` |
+| `project.schema.json` | DONE | `schemas/project.schema.json` |
+| `run.schema.json` | DONE | `schemas/run.schema.json` |
+| `av-plan.schema.json` | DONE | `schemas/av-plan.schema.json` |
+| `voice-manifest.schema.json` | DONE | `schemas/voice-manifest.schema.json` |
+| `timeline.schema.json` | DONE | `schemas/timeline.schema.json` |
+| `storyboard.schema.json` | DONE | `schemas/storyboard.schema.json` |
+| `illustration-manifest.schema.json` | DONE | `schemas/illustration-manifest.schema.json` |
+| `render-manifest.schema.json` | DONE | `schemas/render-manifest.schema.json` |
+| `final-manifest.schema.json` | DONE | `schemas/final-manifest.schema.json` |
+| `domain-event.schema.json` | DONE | `schemas/domain-event.schema.json` |
+| `diagnostic-log.schema.json` | DONE | `schemas/diagnostic-log.schema.json` |
+| `audit-record.schema.json` | DONE | `schemas/audit-record.schema.json` |
+| `common.schema.json` | DONE | `schemas/common.schema.json` |
 | Schema fixtures | DONE | `tests/fixtures/mountain-project/` (12 fixture files) |
 | Legacy fixture | DONE | `tests/fixtures/legacy-job/job.json` |
 | Secret canary test | DONE | `test_mountain_contracts.py:88` tests forbidden fields |
@@ -381,7 +381,7 @@ cancel_run, get_task, get_run_trace, list_projects
 **Doc 03 specifies:** Full schema for 7 artifacts + project + run + 3 observability records
 
 **Code has:**
-- All 13 JSON schemas in `schemas/mountain/`
+- All 13 JSON schemas in `schemas/`
 - All 12 fixtures in `tests/fixtures/mountain-project/`
 - Artifact document builders for: av-plan, voice-manifest, timeline, storyboard, illustration-manifest, render-manifest, final-manifest
 - Downstream invalidation map in `artifacts.py`
