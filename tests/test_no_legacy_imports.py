@@ -1,7 +1,7 @@
-"""WBS-8: Migration boundary — ensure new adapters never import legacy webapp.
+"""WBS-8: Migration boundary — ensure new adapters never import legacy backend.
 
 Any new adapter under ``csboard/adapters/remotion/`` or the capability
-service must not depend on the old ``webapp.server`` module.  This test
+service must not depend on the old ``backend.server`` module.  This test
 scans the source tree statically so it runs fast and requires no network.
 """
 
@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-# Paths that must never import from the legacy webapp.
+# Paths that must never import from the legacy backend.
 _FORBIDDEN_IMPORT_ROOTS = (
-    "webapp",
-    "webapp.server",
-    "webapp.mountain_stages",
+    "backend",
+    "backend.server",
+    "backend.mountain_stages",
 )
 
 # Source directories to scan.
@@ -26,7 +26,7 @@ _SCAN_DIRS = (
 )
 
 # Files explicitly exempted (e.g. the legacy bridge itself is allowed to
-# know about webapp for migration purposes).
+# know about backend for migration purposes).
 _EXEMPT_FILES = {
     Path("csboard/application/legacy_bridge.py"),
 }
@@ -51,7 +51,7 @@ def _collect_imports(filepath: Path) -> list[str]:
 
 
 def _scan_for_legacy_imports() -> list[tuple[Path, str]]:
-    """Find any import of legacy webapp modules in scanned directories."""
+    """Find any import of legacy backend modules in scanned directories."""
     violations: list[tuple[Path, str]] = []
     for scan_dir in _SCAN_DIRS:
         if not scan_dir.exists():
@@ -66,12 +66,12 @@ def _scan_for_legacy_imports() -> list[tuple[Path, str]]:
     return violations
 
 
-def test_no_legacy_webapp_imports_in_new_adapters():
-    """New infographic/remotion code must not import webapp.server."""
+def test_no_legacy_backend_imports_in_new_adapters():
+    """New infographic/remotion code must not import backend.server."""
     violations = _scan_for_legacy_imports()
     assert not violations, (
-        f"Legacy webapp imports found in new code: {violations}\n"
-        f"These modules must not depend on webapp.server."
+        f"Legacy backend imports found in new code: {violations}\n"
+        f"These modules must not depend on backend.server."
     )
 
 

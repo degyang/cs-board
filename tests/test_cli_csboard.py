@@ -193,7 +193,7 @@ class CliCsboardTest(unittest.TestCase):
     def test_every_canonical_stage_uses_persisted_plan_dispatch_in_subprocess(self) -> None:
         """No stage-specific CLI input can bypass the persisted manual gate."""
         from starlette.testclient import TestClient
-        from webapp.mountain_server import create_app
+        from backend.mountain_server import create_app
         client = TestClient(create_app(self.root))
         plan = {"mode": "selective", "manual_stages": list(CANONICAL_STAGES)}
         for stage in CANONICAL_STAGES:
@@ -219,7 +219,7 @@ class CliCsboardTest(unittest.TestCase):
 
     def test_stage_retry_uses_persisted_plan_in_subprocess(self) -> None:
         from starlette.testclient import TestClient
-        from webapp.mountain_server import create_app
+        from backend.mountain_server import create_app
         client = TestClient(create_app(self.root))
         created = client.post("/api/v1/tasks", json={"title": "CLI retry persisted plan", "summary": "CLI retry persisted plan", "engine": "whiteboard", "pipeline_id": "mountain-av-v1", "submission_id": "submit-cli-retry-0123456789abcdef"}).json()
         task_id, run_id = created["task_id"], created["run_id"]

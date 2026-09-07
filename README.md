@@ -80,8 +80,8 @@ ffprobe -version
 
 ```powershell
 python scripts/prepare_env.py
-.\.venv\Scripts\python.exe -m pip install -r webapp\requirements.txt
-Push-Location web
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+Push-Location frontend
 npm ci
 Pop-Location
 Push-Location video_renderer
@@ -103,8 +103,8 @@ Pop-Location
 sudo apt update
 sudo apt install -y ffmpeg fonts-noto-cjk
 python3 scripts/prepare_env.py
-.venv/bin/python -m pip install -r webapp/requirements.txt
-(cd web && npm ci)
+.venv/bin/python -m pip install -r backend/requirements.txt
+(cd frontend && npm ci)
 (cd video_renderer && npm ci)
 ./start-webapp.sh
 ```
@@ -118,8 +118,8 @@ python3 scripts/prepare_env.py
 ```bash
 brew install python@3.11 node ffmpeg
 python3 scripts/prepare_env.py
-.venv/bin/python -m pip install -r webapp/requirements.txt
-(cd web && npm ci)
+.venv/bin/python -m pip install -r backend/requirements.txt
+(cd frontend && npm ci)
 (cd video_renderer && npm ci)
 chmod +x start-webapp.sh
 ./start-webapp.sh
@@ -131,7 +131,7 @@ macOS 自带苹方字体；Linux 请安装 `fonts-noto-cjk`，否则图片中的
 
 打开右上角的 **API 设置**，填写并测试以下内容：
 
-1. **OpenLux API Key**：只保存在本机 `.webapp/config.json`，页面不会回显完整密钥。
+1. **OpenLux API Key**：加密保存在项目 `settings/secrets/`，页面不会回显完整密钥。
 2. **文本模型**：默认 `gpt-5`，用于拆解文案、生成分镜或信息图结构。
 3. **图片模型**：默认 `gpt-image-2`，用于生成插画。
 4. **IndexTTS 地址与接口类型**：Gradio 通常为 `http://127.0.0.1:7860`，FastAPI 通常为 `8000` 端口。
@@ -154,16 +154,22 @@ macOS 自带苹方字体；Linux 请安装 `fonts-noto-cjk`，否则图片中的
 
 ## 运行与数据
 
-所有本地配置、任务文件和成片均保存在 `.webapp/`：
+产品运行数据只使用两个项目目录：配置在 `settings/`，任务及运行结果在 `outputs/`：
 
 ```text
-.webapp/
-├── config.json          # 本机 API 与语音配置
-├── preferences.json     # 兼容旧版偏好
-└── jobs/<任务 ID>/       # 音频、分镜、图片、检查点、成片与任务元数据
+settings/
+├── services/            # 模型与本地服务配置
+├── secrets/             # 加密凭据及主密钥
+├── profiles/            # Provider 非敏感配置
+└── assets/              # 风格、音色与用户资产目录
+outputs/
+├── indexes/             # 任务与提交索引
+├── logs/                # 前后端启动日志
+├── temp/                # 可清理临时文件
+└── task-*/               # 输入、运行记录、中间产物与最终成片
 ```
 
-`.webapp/`、`.env*`、虚拟环境、`node_modules` 与视频产物都已被 Git 忽略。不要在 Issue、日志、截图或提交记录中公开 API Key、参考音频和任务目录；安全问题请按 [SECURITY.md](SECURITY.md) 中的方式私下报告。
+`settings/`、`outputs/`、`.env*`、虚拟环境与 `node_modules` 均不会被 Git 跟踪。旧产品运行目录迁入 `archive/legacy-runtime/` 暂存；不要在 Issue、日志、截图或提交记录中公开其中的 API Key、参考音频和任务目录。
 
 ## 开发验证
 
@@ -172,7 +178,7 @@ macOS 自带苹方字体；Linux 请安装 `fonts-noto-cjk`，否则图片中的
 .venv/bin/python -m pip install -r requirements-dev.txt
 
 # 前端构建与页面验证
-(cd web && npm test)
+(cd frontend && npm test)
 
 # 后端任务队列、断点恢复、时间线与 Mountain 契约测试
 .venv/bin/python -m unittest discover -s tests -v
@@ -193,8 +199,8 @@ Windows PowerShell 请将最后一行替换为：
 ├── schemas/     # Mountain Task、Artifact、Event、Log 与 Audit JSON Schema
 ├── tests/                # 队列、恢复、语义时间与 Mountain 契约测试
 ├── video_renderer/       # Remotion 动态信息图渲染器
-├── web-v2/               # Mountain 新 React/Vite 前端（独立目录，M07 实现）
-├── webapp/               # FastAPI 后端
+├── frontend/               # Mountain 新 React/Vite 前端（独立目录，M07 实现）
+├── backend/               # FastAPI 后端
 ├── start-webapp.py       # 跨平台启动逻辑
 ├── start-webapp.sh       # WSL / Linux / macOS 入口
 └── start-webapp.ps1      # Windows PowerShell 入口

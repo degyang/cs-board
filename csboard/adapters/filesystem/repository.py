@@ -50,15 +50,17 @@ class FilesystemTaskRepository:
             if not self._is_allowed_package_dir(package) and "project_root" not in value:
                 raise DomainError("TASK_PACKAGE_INVALID", "任务包位置不在允许范围内")
             return package
+        # Read-only compatibility for pre-package tasks. New tasks are always
+        # created under the project outputs directory and indexed there.
         return self.root / "tasks" / task_id
 
     def package_locator_path(self, task_id: str) -> Path:
-        return self.root / ".task-packages" / f"{task_id}.json"
+        return self.project_root / "outputs" / "indexes" / "tasks" / f"{task_id}.json"
 
     def list_task_ids(self) -> list[str]:
         """Return package tasks plus legacy tasks without importing either."""
         ids: set[str] = set()
-        locators = self.root / ".task-packages"
+        locators = self.project_root / "outputs" / "indexes" / "tasks"
         if locators.is_dir():
             for path in locators.glob("*.json"):
                 try:
@@ -184,7 +186,7 @@ class FilesystemTaskRepository:
             return self._locks.setdefault(f"submission:{submission_id}", threading.RLock())
 
     def submission_index_path(self, submission_id: str) -> Path:
-        return self.root / ".submissions" / f"{submission_id}.json"
+        return self.project_root / "outputs" / "indexes" / "submissions" / f"{submission_id}.json"
 
     def get_submission(self, submission_id: str) -> dict | None:
         path = self.submission_index_path(submission_id)
@@ -205,7 +207,7 @@ class FilesystemTaskRepository:
             if target.exists() or self.package_locator_path(task.task_id).exists() or (self.root / "tasks" / task.task_id).exists():
                 raise FileExistsError(f"Task already exists: {task.task_id}")
             root.mkdir(parents=True, exist_ok=True)
-            staging_root = root / ".csboard-staging"
+            staging_root = root / "staging"
             staging_root.mkdir(exist_ok=True)
             staging = staging_root / uuid.uuid4().hex
             try:
@@ -381,7 +383,7 @@ class FilesystemTaskRepository:
             now = utc_now()
             task = Task(task_id=task_id, title="昨日任务（部分历史恢复）", summary="基于已验证成片的部分历史导入", pipeline_id="mountain-av-v1", engine=Engine.WHITEBOARD, status=TaskStatus.SUCCEEDED, created_at=now, updated_at=now, active_run_id=run_id)
             run = Run(run_id=run_id, task_id=task_id, trace_id="trace-recovered-" + run_id.removeprefix("run-"), entrypoint=Entrypoint.CLI, command_ids=[], status=RunStatus.SUCCEEDED, target_stage="compose-video", started_at=now, finished_at=now)
-            staging_root = output_root / ".csboard-staging"
+            staging_root = output_root / "staging"
             staging_root.mkdir(parents=True, exist_ok=True)
             staging = staging_root / uuid.uuid4().hex
             try:

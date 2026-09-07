@@ -7,7 +7,7 @@ Covers:
 - create_task with whiteboard engine unchanged
 - _exec_render_visuals routes to RemotionRendererAdapter for infographic tasks
 - _exec_render_visuals routes to ServiceResolver path for whiteboard tasks
-- No webapp imports in commands.py changes
+- No backend imports in commands.py changes
 """
 
 from __future__ import annotations
@@ -213,26 +213,26 @@ class TestInfographicTaskCreation(unittest.TestCase):
         mock_factory.create_adapter.assert_called_once()
         self.assertIs(captured_renderer["renderer"], mock_renderer)
 
-    # ── Test 7: no webapp imports in commands.py ──
+    # ── Test 7: no backend imports in commands.py ──
 
-    def test_no_webapp_imports_in_commands_changes(self) -> None:
-        """AST scan of commands.py for webapp imports — must be clean."""
+    def test_no_backend_imports_in_commands_changes(self) -> None:
+        """AST scan of commands.py for backend imports — must be clean."""
         commands_path = Path("csboard/application/commands.py")
         tree = ast.parse(commands_path.read_text(encoding="utf-8"), filename=str(commands_path))
 
-        webapp_imports = []
+        backend_imports = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.startswith("webapp"):
-                        webapp_imports.append(f"import {alias.name}")
+                    if alias.name.startswith("backend"):
+                        backend_imports.append(f"import {alias.name}")
             elif isinstance(node, ast.ImportFrom):
-                if node.module and node.module.startswith("webapp"):
-                    webapp_imports.append(f"from {node.module} import ...")
+                if node.module and node.module.startswith("backend"):
+                    backend_imports.append(f"from {node.module} import ...")
 
         self.assertEqual(
-            webapp_imports, [],
-            f"commands.py must not import webapp modules. Found: {webapp_imports}",
+            backend_imports, [],
+            f"commands.py must not import backend modules. Found: {backend_imports}",
         )
 
 

@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 @pytest.fixture()
@@ -32,7 +32,7 @@ def client(tmp_path: Path) -> TestClient:
 
 def test_app_importable():
     """mountain_server:app 可导入。"""
-    from webapp.mountain_server import app
+    from backend.mountain_server import app
     assert app is not None
 
 
@@ -152,14 +152,14 @@ def test_api_unknown_returns_json_404(client: TestClient):
 
 
 def test_no_legacy_import():
-    """mountain_server 不导入 webapp.server、LegacyJobBridge、JOBS。"""
-    import webapp.mountain_server as mod
+    """mountain_server 不导入 backend.server、LegacyJobBridge、JOBS。"""
+    import backend.mountain_server as mod
     source = Path(mod.__file__).read_text(encoding="utf-8")
     # 只检查实际 import 语句，不检查注释
     import_lines = [l.strip() for l in source.splitlines() if l.strip().startswith(("from ", "import "))]
     for line in import_lines:
         assert "LegacyJobBridge" not in line, f"Forbidden import: {line}"
-        assert "webapp.server" not in line, f"Forbidden import: {line}"
+        assert "backend.server" not in line, f"Forbidden import: {line}"
 
 
 def test_default_encrypted_startup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
@@ -326,7 +326,7 @@ def test_reference_metadata_from_manifest(client: TestClient):
 
 def test_staging_on_same_filesystem(tmp_path: Path):
     """验证 staging 与目标数据目录位于同一文件系统。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
     from starlette.testclient import TestClient
     import io
 
@@ -356,7 +356,7 @@ def test_staging_on_same_filesystem(tmp_path: Path):
 
 def test_chunked_read_verification(tmp_path: Path):
     """验证分块读取参数正确。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
     from starlette.testclient import TestClient
     import io
 
@@ -387,7 +387,7 @@ def test_chunked_read_verification(tmp_path: Path):
 
 def test_internal_error_no_path_leak(tmp_path: Path):
     """验证 INTERNAL_ERROR 不泄漏绝对路径或异常原文。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
     from starlette.testclient import TestClient
     import io
 

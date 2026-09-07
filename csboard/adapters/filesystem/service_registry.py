@@ -47,8 +47,11 @@ _SENSITIVE_CONFIG_KEYS = {
 _NORMALIZED_SENSITIVE_KEYS = {k.replace("_", "") for k in _SENSITIVE_CONFIG_KEYS}
 
 
-# probe 结果缓存（service_id → (result, timestamp)）
-_probe_cache: dict[str, tuple[dict[str, Any], float]] = {}
+# Probe results are process-local and partitioned by registry data root. The
+# public mapping retains a narrow legacy test-injection seam: bare service-ID
+# entries are migrated into the next root cache read, while production writes
+# are always nested by absolute root and cannot cross roots.
+_probe_cache: dict[object, Any] = {}
 _PROBE_CACHE_TTL = 60.0  # 60秒缓存
 # Health-probe connect timeout: fail fast when a service port is simply not open.
 _PROBE_HTTP_TIMEOUT = None  # lazily built via _get_probe_timeout()
@@ -59,7 +62,12 @@ def _get_probe_timeout():
     import httpx
     global _PROBE_HTTP_TIMEOUT
     if _PROBE_HTTP_TIMEOUT is None:
-        _PROBE_HTTP_TIMEOUT = httpx.Timeout(connect=2.0, read=5.0)
+        _PROBE_HTTP_TIMEOUT = httpx.Timeout(
+            connect=2.0,
+            read=5.0,
+            write=5.0,
+            pool=2.0,
+        )
     return _PROBE_HTTP_TIMEOUT
 
 
@@ -104,10 +112,29 @@ class FilesystemServiceRegistry:
     """文件系统服务注册表。"""
 
     def __init__(self, data_dir: Path, secret_store: SecretStoreProtocol) -> None:
-        self._data_dir = data_dir
+        self._data_dir = data_dir.resolve()
         self._services_dir = data_dir / "settings" / "services"
         self._services_dir.mkdir(parents=True, exist_ok=True)
         self._secret_store = secret_store
+
+    def _root_probe_cache(self) -> dict[str, tuple[dict[str, Any], float]]:
+        """Return this registry's isolated process-local probe partition."""
+        root_key = str(self._data_dir)
+        cache = _probe_cache.get(root_key)
+        if not isinstance(cache, dict):
+            cache = {}
+            _probe_cache[root_key] = cache
+        # Existing tests historically injected a flat cache after constructing
+        # one registry. Migrate only those explicit test entries; normal
+        # registry writes are nested and therefore remain partitioned.
+        legacy_entries = [
+            (key, value) for key, value in _probe_cache.items()
+            if isinstance(key, str) and isinstance(value, tuple)
+        ]
+        for service_id, value in legacy_entries:
+            cache[service_id] = value
+            del _probe_cache[service_id]
+        return cache
 
     def _service_path(self, service_id: str) -> Path:
         return self._services_dir / f"{service_id}.json"
@@ -329,9 +356,10 @@ class FilesystemServiceRegistry:
 
     def probe_service(self, service_id: str, force: bool = False) -> dict[str, Any]:
         """探测服务可用性。使用缓存（60秒TTL），force=True 强制重新探测。"""
+        cache = self._root_probe_cache()
         now = time.monotonic()
-        if not force and service_id in _probe_cache:
-            result, cached_at = _probe_cache[service_id]
+        if not force and service_id in cache:
+            result, cached_at = cache[service_id]
             if now - cached_at < _PROBE_CACHE_TTL:
                 return result
 
@@ -350,15 +378,90 @@ class FilesystemServiceRegistry:
             "error_code": error_code,
             "suggestion": suggestion,
         }
-        _probe_cache[service_id] = (result, now)
+        cache[service_id] = (result, now)
         return result
 
     def get_cached_probe(self, service_id: str) -> dict[str, Any] | None:
         """获取缓存的 probe 结果，无缓存返回 None。"""
-        if service_id in _probe_cache:
-            result, _ = _probe_cache[service_id]
+        cache = self._root_probe_cache()
+        if service_id in cache:
+            result, _ = cache[service_id]
             return result
         return None
+
+    def probe_enabled_readiness_services(
+        self,
+        capabilities: tuple[str, ...] = (
+            "text_generation", "speech_synthesis", "speech_alignment", "media",
+        ),
+    ) -> list[dict[str, Any]]:
+        """Refresh only enabled service prerequisites required for readiness.
+
+        This is a bounded health probe, not a provider generation request. Each
+        probe owns its existing timeout and failures are recorded as unavailable
+        instead of preventing application startup.
+        """
+        from csboard.application.service_capabilities import (
+            declared_capabilities,
+            normalized_capability,
+            supports_capability,
+        )
+
+        enabled = self.list_services(enabled=True)
+        selected: list[ServiceDefinition] = []
+        selected_ids: set[str] = set()
+        for capability in capabilities:
+            candidates = [service for service in enabled if supports_capability(service, capability)]
+            if not candidates:
+                continue
+            # One deterministic candidate per readiness prerequisite. Probing
+            # every fallback alternative changes the activation fingerprint
+            # after restart, even when a selected service already restores the
+            # accepted gate. Prefer explicit secondary declarations (MiMo
+            # Codeplan text), then the audio_generation compatibility alias
+            # (MiMo TTS speech), before legacy primary declarations.
+            def readiness_rank(service: ServiceDefinition) -> tuple[int, int, str]:
+                declared = declared_capabilities(service)
+                primary = service.capability.strip() if isinstance(service.capability, str) else ""
+                secondary_matches = any(
+                    normalized_capability(value) == capability
+                    for value in declared[1:]
+                )
+                if secondary_matches:
+                    rank = 0
+                elif capability == "speech_synthesis" and primary == "audio_generation":
+                    rank = 1
+                elif normalized_capability(primary) == capability:
+                    rank = 2
+                else:
+                    rank = 3
+                return (rank, service.priority, service.service_id)
+
+            # Prefer a distinct selected service when one exists. A
+            # multi-capability text service may also inherit the audio alias;
+            # using it twice would leave the dedicated TTS prerequisite
+            # unprobed despite an available deterministic candidate.
+            service = min(
+                candidates,
+                key=lambda candidate: (candidate.service_id in selected_ids, *readiness_rank(candidate)),
+            )
+            if service.service_id not in selected_ids:
+                selected.append(service)
+                selected_ids.add(service.service_id)
+        results: list[dict[str, Any]] = []
+        for service in selected:
+            try:
+                results.append(self.probe_service(service.service_id, force=True))
+            except Exception:
+                results.append({
+                    "available": False,
+                    "checked_at": utc_now(),
+                    "latency_ms": 0,
+                    "component": service.service_id,
+                    "error_code": "PROBE_ERROR",
+                    "suggestion": "探测时发生内部错误",
+                })
+        return results
 
     def _do_probe(self, service: ServiceDefinition) -> tuple[bool, str | None, str | None]:
         """根据 adapter_type 执行真实轻量检查。"""

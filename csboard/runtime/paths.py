@@ -25,14 +25,15 @@ class RuntimePaths:
     @classmethod
     def from_root(cls, root: Path) -> RuntimePaths:
         root = root.resolve()
-        state = root / ".webapp"
+        settings = root / "settings"
+        outputs = root / "outputs"
         return cls(
             root=root,
-            state_dir=state,
-            jobs_dir=state / "jobs",
-            config_path=state / "config.json",
-            tasks_dir=state / "tasks",
-            temp_dir=state / "tmp",
+            state_dir=settings,
+            jobs_dir=outputs,
+            config_path=settings / "config.json",
+            tasks_dir=outputs,
+            temp_dir=outputs / "temp",
         )
 
     # ── convenience ──────────────────────────────────────────────────

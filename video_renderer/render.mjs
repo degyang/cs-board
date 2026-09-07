@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import {bundle} from '@remotion/bundler';
 import {renderMedia, selectComposition} from '@remotion/renderer';
+import {resolveBrowserExecutable} from './browser-resolver.mjs';
 
 const [propsPath, outputPath, publicDir] = process.argv.slice(2);
 if (!propsPath || !outputPath || !publicDir) {
@@ -11,13 +12,7 @@ if (!propsPath || !outputPath || !publicDir) {
 
 const rendererRoot = path.dirname(new URL(import.meta.url).pathname.replace(/^\/(.:)/, '$1'));
 const inputProps = JSON.parse(fs.readFileSync(propsPath, 'utf8'));
-const browserCandidates = [
-  process.env.REMOTION_BROWSER_EXECUTABLE,
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-].filter(Boolean);
-const browserExecutable = browserCandidates.find((candidate) => fs.existsSync(candidate));
+const browserExecutable = resolveBrowserExecutable();
 
 const serveUrl = await bundle({
   entryPoint: path.join(rendererRoot, 'src', 'index.tsx'),

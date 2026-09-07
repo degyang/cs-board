@@ -26,8 +26,8 @@ from csboard.domain.enums import StageStatus
 from csboard.domain.execution_plan import ExecutionPlan
 from csboard.domain.models import StageState
 from csboard.domain.service_definition import ServiceDefinition
-from webapp.error_contract import domain_error_response
-from webapp.mountain_server import create_app
+from backend.error_contract import domain_error_response
+from backend.mountain_server import create_app
 
 
 SCRIPT_A = "这是用于执行计划验收的合成测试文案，内容足够长且不会调用任何外部能力。"

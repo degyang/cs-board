@@ -12,7 +12,7 @@ from starlette.testclient import TestClient
 
 from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.domain.errors import DomainError
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 TASK = "task-02b3a76b491445bfaf594b02c75cd70e"
@@ -88,7 +88,7 @@ def test_recovery_failure_rolls_back_package_and_locator(tmp_path: Path, monkeyp
         do_import(repo, path, size, digest)
     assert repo.list_task_ids() == []
     assert not (tmp_path / "outputs" / TASK).exists()
-    assert not (tmp_path / "outputs" / ".csboard-staging").exists()
+    assert not (tmp_path / "outputs" / "staging").exists()
 
 
 def test_recovery_cli_entrypoint(tmp_path: Path) -> None:
@@ -96,7 +96,7 @@ def test_recovery_cli_entrypoint(tmp_path: Path) -> None:
     from cli.csboard import EXIT_OK, main
     cli_task = "task-cli-recovery-002"
     cli_run = "run-cli-recovery-002"
-    output_root = Path(__file__).parents[1] / "outputs" / ".recovery-test-002"
+    output_root = tmp_path / "outputs"
     output = io.StringIO()
     try:
         with redirect_stdout(output):

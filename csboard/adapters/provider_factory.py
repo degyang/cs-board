@@ -30,7 +30,7 @@ class ProviderFactory:
         **kwargs: Any,
     ) -> None:
         self._data_dir = data_dir
-        self._profiles_dir = data_dir / ".profiles"
+        self._profiles_dir = data_dir / "settings" / "profiles"
         self._profiles_dir.mkdir(parents=True, exist_ok=True)
         if secret_store is not None:
             self._secret_store = secret_store

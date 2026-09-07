@@ -89,6 +89,9 @@ class MountainCommands:
     # P4's only allowed infographic execution seam.  Production composition
     # does not expose it through HTTP/CLI; fake E2E injects a test renderer.
     infographic_renderer_factory: Any | None = None
+    # Isolated tests may provide a real CapabilityService with controlled
+    # probes; production composition uses the default shared service.
+    capability_service_factory: Any | None = None
     pipeline: PipelineOrchestrator = field(init=False)
 
     def __post_init__(self) -> None:
@@ -134,10 +137,7 @@ class MountainCommands:
             raise ValueError("仅支持 mountain-av-v1 流水线")
         context = context or CommandContext(entrypoint=Entrypoint.CLI)
         if engine is Engine.INFOGRAPHIC_REMOTION:
-            from csboard.application.capabilities import CapabilityService
-            cap_svc = CapabilityService(
-                self.service_resolver._registry, project_root=self.root,
-            ) if self.service_resolver is not None else None
+            cap_svc = self._capability_service()
             # P4 is intentionally not a public submission switch.  A caller
             # must opt in at this non-HTTP seam *and* carry the test actor.
             if cap_svc is None:
@@ -149,11 +149,16 @@ class MountainCommands:
                  and item["visual_source"] == "preset"),
                 None,
             )
-            # P3a remains publicly unsupported.  P4 consumes bootstrap only
-            # for its controlled fake/internal route; P2 is bound by the
-            # concrete adapter selected below, never by generic rendering.
-            internal_allowed = internal_test_only and context.actor_type == "internal-test" and bool((infographic_item or {}).get("bootstrap_ready"))
-            if infographic_item is None or not internal_allowed:
+            # Public/API/CLI creation consumes precisely the same activation
+            # projection as capability and create-options.  Retain the older
+            # double-keyed P4 fake-render harness only for explicit tests;
+            # neither public route supplies this flag nor a test actor.
+            internal_harness = (
+                internal_test_only
+                and context.actor_type == "internal-test"
+                and bool((infographic_item or {}).get("bootstrap_ready"))
+            )
+            if infographic_item is None or (not bool(infographic_item.get("supported")) and not internal_harness):
                 reason = (infographic_item or {}).get("reason_code") or "CAPABILITY_NOT_AVAILABLE"
                 raise DomainError("CAPABILITY_NOT_AVAILABLE", f"引擎 infographic-remotion 当前不可用: {reason}")
         if submission_id is not None and not _is_high_entropy_token(submission_id):
@@ -246,11 +251,8 @@ class MountainCommands:
         # Infographic-remotion: dynamically check capability from the service
         # registry and remotion toolchain readiness.
         if self.service_resolver is not None:
-            from csboard.application.capabilities import CapabilityService
-            cap_svc = CapabilityService(
-                self.service_resolver._registry, project_root=self.root,
-            )
-            cap_snapshot = cap_svc.snapshot()
+            cap_svc = self._capability_service()
+            cap_snapshot = cap_svc.snapshot() if cap_svc is not None else {"items": []}
             infographic_item = next(
                 (item for item in cap_snapshot["items"]
                  if item["engine"] == "infographic-remotion"
@@ -258,12 +260,23 @@ class MountainCommands:
                 None,
             )
             if infographic_item is not None:
-                engines.append({
+                available = bool(infographic_item.get("supported"))
+                option = {
                     "id": "infographic-remotion",
                     "label": "动态信息图",
-                    "available": infographic_item["supported"],
-                    "reason": infographic_item.get("reason_code") or "能力未就绪",
-                })
+                    "available": available,
+                }
+                # A reason describes a closed gate.  Do not manufacture an
+                # unavailable-looking message when the capability projection
+                # has explicitly opened the engine.
+                if not available:
+                    reason_code = infographic_item.get("reason_code")
+                    option["reason"] = (
+                        reason_code
+                        if isinstance(reason_code, str) and reason_code
+                        else "CAPABILITY_NOT_AVAILABLE"
+                    )
+                engines.append(option)
         else:
             engines.append({
                 "id": "infographic-remotion",
@@ -285,6 +298,21 @@ class MountainCommands:
             "limits": {"script_min_chars": 10, "target_chars_min": 5, "target_chars_max": 500, "brand_text_max_chars": 12},
             "defaults": {"engine": "whiteboard", "visual_source": "preset", **STYLE_DEFAULTS},
         }
+
+    def _capability_service(self) -> Any | None:
+        """Construct the one capability projection consumed by command edges."""
+        if self.service_resolver is None:
+            return None
+        from csboard.application.activation import accepted_v3_gate
+        from csboard.application.capabilities import CapabilityService
+
+        project_root = self.repository.project_root
+        factory = self.capability_service_factory or CapabilityService
+        return factory(
+            self.service_resolver._registry,
+            project_root=project_root,
+            external_stage_gate=lambda: accepted_v3_gate(project_root),
+        )
 
     def preview_script(self, script: str, target_chars: int = STYLE_DEFAULTS["target_chars"]) -> dict[str, Any]:
         """Compute the read-only authoritative preview; no task is created."""
@@ -1679,8 +1707,17 @@ class MountainCommands:
                 if document.get("task_id") != task_id or document.get("run_id") != run_id:
                     raise DomainError("ARTIFACT_RUN_MISMATCH", f"{label} 不属于当前 run")
 
-        # Indexable renderer output must remain inside this run's artifacts.
-        output_dir = run_dir / "artifacts" / "render"
+        # A Remotion process must never write its candidate directly to the
+        # indexed destination.  It first writes below the run-private area;
+        # after the adapter has verified the candidate with ffprobe we publish
+        # it through FilesystemArtifactStore's atomic commit.
+        #
+        # Keep the established artifacts/render location for other renderer
+        # implementations, which may have their own output contracts.
+        if task.engine is Engine.INFOGRAPHIC_REMOTION:
+            output_dir = run_dir / ".remotion-private" / "candidate"
+        else:
+            output_dir = run_dir / "artifacts" / "render"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Build render request
@@ -1698,31 +1735,40 @@ class MountainCommands:
             output_path.relative_to(output_dir.resolve())
             if not output_path.is_file() or output_path.stat().st_size <= 0:
                 raise DomainError("RENDER_OUTPUT_INVALID", "renderer 未生成可索引输出")
+            # Build render manifest only after the renderer has accepted the
+            # candidate (the Remotion adapter's acceptance includes ffprobe).
+            output_ref = (
+                store.commit_file(task_id, run_id, "render.video", "render/infographic.mp4", output_path, "render-visuals")
+                if task.engine is Engine.INFOGRAPHIC_REMOTION
+                else store.commit_bytes(task_id, run_id, "render.video", "render/infographic.mp4", output_path.read_bytes(), "render-visuals")
+            )
+            probe = result.provider_metadata.get("probe", {})
+            # Persist the exact validated ffprobe summary as an indexed
+            # artifact.  The manifest binds its digest, so a later reader
+            # never has to trust an untracked provider metadata value.
+            probe_ref = store.commit_bytes(
+                task_id, run_id, "render.ffprobe", "render/ffprobe.json",
+                json_bytes(probe), "render-visuals",
+            )
+            render_manifest = {
+                **render_manifest_document(task_id, run_id, result.provider_metadata.get("clips", []), task.engine),
+                "output_relative_path": f"artifacts/{output_ref.relative_path}",
+                "output_sha256": output_ref.sha256,
+                "size_bytes": output_ref.size_bytes,
+                "duration_ms": result.duration_ms,
+                "frames": result.frames,
+                "probe_sha256": probe_ref.sha256,
+            }
+            artifact_key = store.commit_bytes(
+                task_id, run_id, "render.manifest", "render/render-manifest.json",
+                json_bytes(render_manifest), "render-visuals",
+            ).artifact_key
         except Exception:
             run = self.repository.get_run(task_id, run_id)
             run.status = RunStatus.FAILED
             run.stages["render-visuals"] = StageState(StageStatus.FAILED, run.stages["render-visuals"].attempt)
             self.repository.save_run(run)
             raise
-
-        # Build render manifest
-        output_bytes = output_path.read_bytes()
-        output_ref = store.commit_bytes(task_id, run_id, "render.video", "render/infographic.mp4", output_bytes, "render-visuals")
-        probe = result.provider_metadata.get("probe", {})
-        render_manifest = {
-            **render_manifest_document(task_id, run_id, result.provider_metadata.get("clips", []), task.engine),
-            "output_relative_path": f"artifacts/{output_ref.relative_path}",
-            "output_sha256": output_ref.sha256,
-            "size_bytes": output_ref.size_bytes,
-            "duration_ms": result.duration_ms,
-            "frames": result.frames,
-            "probe_sha256": hashlib.sha256(json.dumps(probe, sort_keys=True).encode()).hexdigest(),
-        }
-
-        artifact_key = store.commit_bytes(
-            task_id, run_id, "render.manifest", "render/render-manifest.json",
-            json_bytes(render_manifest), "render-visuals",
-        ).artifact_key
 
         run.stages["render-visuals"] = StageState(StageStatus.SUCCEEDED, 1)
         self.repository.save_run(run)

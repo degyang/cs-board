@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="python -m cli.csboard")
-    root.add_argument("--data-dir", type=Path, default=Path(os.environ.get("CSBOARD_DATA_DIR", ROOT / ".webapp")))
+    root.add_argument("--data-dir", type=Path, default=Path(os.environ.get("CSBOARD_DATA_DIR", ROOT)))
     root.add_argument("--json", action="store_true", help="以稳定 JSON 输出结果")
     resources = root.add_subparsers(dest="resource", required=True)
 
@@ -279,13 +279,17 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         args.data_dir,
         provider_factory=provider_factory,
         service_resolver=service_resolver,
-        repository=FilesystemTaskRepository(args.data_dir, project_root=ROOT),
+        repository=FilesystemTaskRepository(args.data_dir),
     )
 
     # ── capabilities ──────────────────────────────────────────────────
     if args.resource == "capabilities":
         from csboard.application.capabilities import CapabilityService
-        cap_svc = CapabilityService(registry, project_root=ROOT)
+        from csboard.application.activation import accepted_v3_gate
+        cap_svc = CapabilityService(
+            registry, project_root=ROOT,
+            external_stage_gate=lambda: accepted_v3_gate(ROOT),
+        )
         return cap_svc.snapshot()
 
     # ── task ──────────────────────────────────────────────────────

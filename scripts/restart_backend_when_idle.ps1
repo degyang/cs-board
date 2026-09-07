@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $python = (Resolve-Path -LiteralPath (Join-Path $workspace ".venv\Scripts\python.exe")).Path
-$stateDirectory = Join-Path $workspace ".webapp"
+$stateDirectory = Join-Path $workspace "outputs\logs"
 $logPath = Join-Path $stateDirectory "restart-monitor.log"
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 

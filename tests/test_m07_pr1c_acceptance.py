@@ -64,7 +64,7 @@ def commands(tmp_data_dir: Path, provider_factory: ProviderFactory) -> MountainC
 @pytest.fixture
 def api_client(tmp_data_dir: Path) -> TestClient:
     """创建 FastAPI 测试客户端。"""
-    from webapp.mountain_v1_api import mountain_v1_router
+    from backend.mountain_v1_api import mountain_v1_router
     from fastapi import FastAPI
 
     app = FastAPI()

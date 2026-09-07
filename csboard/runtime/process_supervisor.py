@@ -25,7 +25,7 @@ class ProcessHandle:
 class ProcessSupervisor:
     """Start, track, and terminate subprocesses.
 
-    Unlike the legacy ``RUNNING_PROCESSES`` dict in ``webapp/server.py``,
+    Unlike the legacy ``RUNNING_PROCESSES`` dict in ``backend/server.py``,
     this supervisor is instance-scoped and usable from any entrypoint
     (CLI, Web, Skill).
     """

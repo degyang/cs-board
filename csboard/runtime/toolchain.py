@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -90,8 +91,8 @@ def bootstrap_diagnostics(
     """Return public-safe, deterministic Remotion toolchain diagnostics.
 
     No diagnostic contains a resolved path, command line, package contents, or
-    environment value.  ``REMOTION_BROWSER_EXECUTABLE`` is the only browser
-    source accepted because it is the browser source consumed by render.mjs.
+    environment value. Browser availability is resolved through the same
+    resolver that ``render.mjs`` uses, including its installed-cache fallback.
     """
     environment = os.environ if environ is None else environ
     renderer = root / "video_renderer"
@@ -129,13 +130,35 @@ def bootstrap_diagnostics(
             locked = False
     result.append(check("locked-remotion", locked, "REMOTION_NOT_INSTALLED"))
 
-    browser = environment.get("REMOTION_BROWSER_EXECUTABLE", "")
-    # An empty or inaccessible configured executable is fail-closed.  Do not
-    # report its value: it may be an operator-specific filesystem path.
-    result.append(check("remotion-browser", bool(browser) and Path(browser).is_file() and os.access(browser, os.X_OK),
+    result.append(check("remotion-browser", _resolver_browser_available(renderer, which, environment),
                         "BROWSER_UNAVAILABLE"))
     result.extend((
         check("ffmpeg", bool(which("ffmpeg")), "FFMPEG_NOT_FOUND"),
         check("ffprobe", bool(which("ffprobe")), "FFPROBE_NOT_FOUND"),
     ))
     return result
+
+
+def _resolver_browser_available(renderer: Path, which: Callable[[str], str | None], environment: dict[str, str]) -> bool:
+    """Ask the accepted JS resolver only for a boolean; never expose its path."""
+    node = which("node")
+    resolver = renderer / "browser-resolver.mjs"
+    if not node or not resolver.is_file():
+        return False
+    program = (
+        f"import {{resolveBrowserExecutable}} from {resolver.resolve().as_uri()!r};"
+        "process.exit(resolveBrowserExecutable() ? 0 : 2);"
+    )
+    try:
+        result = subprocess.run(
+            [node, "--input-type=module", "--eval", program],
+            cwd=renderer.parent,
+            env={**os.environ, **environment},
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False

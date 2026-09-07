@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 
 from csboard.adapters.filesystem.asset_repository import FilesystemAssetRepository
 from csboard.domain.errors import NotFoundError
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 @pytest.fixture()
@@ -40,7 +40,7 @@ def test_precondition_detail_is_stable_and_persisted(client: TestClient):
     item = listed[0]
     response = client.get(f"/api/v1/assets/preconditions/{item['precondition_id']}")
     assert response.status_code == 200 and response.json() == item
-    path = client.app.state.data_dir / "assets" / "preconditions" / "preconditions.json"
+    path = client.app.state.data_dir / "settings" / "assets" / "preconditions" / "preconditions.json"
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert next(value for value in saved if value["precondition_id"] == item["precondition_id"])["revision"] == 1
 

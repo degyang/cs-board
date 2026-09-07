@@ -12,7 +12,7 @@ from csboard.domain.style_template import StyleTemplate
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 预设风格数据（从 webapp/server.py STYLE_PRESETS 提取）
+# 预设风格数据（从 backend/server.py STYLE_PRESETS 提取）
 STYLE_PRESETS = {
     "国风动态信息图": (
         "暖米白宣纸背景，深灰正文与朱红重点，低饱和靛青辅助色；"

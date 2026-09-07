@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from csboard.adapters.filesystem import FilesystemArtifactStore, FilesystemTaskRepository
 from csboard.domain.enums import Engine, Entrypoint, TaskStatus, RunStatus
 from csboard.domain.models import Task, Run
-from webapp.mountain_api import mountain_router
+from backend.mountain_api import mountain_router
 
 
 def _create_test_app(tmpdir: Path) -> tuple[FastAPI, FilesystemTaskRepository]:

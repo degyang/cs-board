@@ -27,6 +27,9 @@ def timeline_document(task_id: str, run_id: str, timings: tuple[UnitTiming, ...]
             "unit_id": item.unit_id, "duration_ms": item.duration_ms, "timing_source": item.timing_source.value,
             "alignment": item.alignment,
             "visual_timings": [{"visual_id": visual.visual_id, "start_ms": visual.start_ms, "end_ms": visual.end_ms} for visual in item.visual_timings],
+            "subtitle_timing_source": item.subtitle_timing_source.value,
+            "subtitle_alignment": item.subtitle_alignment or {"status": "failed", "reason_code": "SUBTITLE_TIMING_UNAVAILABLE"},
+            "subtitle_cues": [{"text": cue.text, "start_ms": cue.start_ms, "end_ms": cue.end_ms} for cue in item.subtitle_cues],
         } for item in timings],
     }
 

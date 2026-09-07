@@ -219,22 +219,24 @@ class TestInfographicPipelineFakeE2e:
             renderer = RemotionRendererAdapter(tmp_path / "render.mjs")
             captured_renderer["type"] = type(renderer).__name__
 
-            # Mock the actual render call to avoid Node execution
-            safe_output = repository.run_dir(tid, rid) / "artifacts" / "render" / "infographic.mp4"
-            safe_output.parent.mkdir(parents=True, exist_ok=True); safe_output.write_bytes(b"fake-mp4")
-            mock_render_result = SimpleNamespace(
-                output_path=safe_output,
-                duration_ms=5000,
-                frames=150,
-                request_id=f"{tid}:{rid}:render",
-                provider_metadata={
-                    "engine": "infographic-remotion",
-                    "page_count": 1,
-                    "render_ms": 100,
-                    "clips": [],
-                },
-            )
-            renderer.render = MagicMock(return_value=mock_render_result)
+            # Mirror the production boundary: the renderer yields a private
+            # candidate and MountainCommands atomically publishes it.
+            def render_candidate(request):
+                safe_output = request.output_dir / "infographic.mp4"
+                safe_output.parent.mkdir(parents=True, exist_ok=True); safe_output.write_bytes(b"fake-mp4")
+                return SimpleNamespace(
+                    output_path=safe_output,
+                    duration_ms=5000,
+                    frames=150,
+                    request_id=f"{tid}:{rid}:render",
+                    provider_metadata={
+                        "engine": "infographic-remotion",
+                        "page_count": 1,
+                        "render_ms": 100,
+                        "clips": [],
+                    },
+                )
+            renderer.render = MagicMock(side_effect=render_candidate)
 
             return commands.render_visuals(tid, rid, renderer, ctx)
 

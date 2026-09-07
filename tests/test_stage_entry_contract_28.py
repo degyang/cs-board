@@ -4,7 +4,7 @@ import hashlib
 import json
 import pytest
 from starlette.testclient import TestClient
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 from csboard.adapters.filesystem import FilesystemArtifactStore
 from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.domain.execution_plan import CANONICAL_STAGES

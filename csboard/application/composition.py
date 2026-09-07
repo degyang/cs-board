@@ -18,6 +18,7 @@ from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.av_artifacts import json_bytes
 from csboard.adapters.filesystem import FilesystemArtifactStore
+from csboard.domain.av_timing import subtitle_fallback_cues
 from csboard.ports.providers import MediaPort
 
 
@@ -89,16 +90,7 @@ class CompositionService:
             raise ValueError("请先运行 clone-voice 生成 timing.timeline")
         av_plan = self._read_artifact(artifacts, task_id, run_id, "planning.av-plan")
         text_by_unit = {item.get("unit_id"): item.get("text", "") for item in av_plan.get("voice_units", [])}
-        subtitle_units: list[dict[str, Any]] = []
-        cursor_ms = 0
-        for unit in units:
-            duration_ms = int(unit.get("duration_ms", 0))
-            subtitle_units.append({
-                "text": text_by_unit.get(unit.get("unit_id"), unit.get("text", "")),
-                "start_ms": cursor_ms,
-                "end_ms": cursor_ms + duration_ms,
-            })
-            cursor_ms += duration_ms
+        subtitle_units, subtitle_timing = self._subtitle_units(units, text_by_unit)
 
         # Build audio map: unit_id -> audio_path
         audio_map = {}
@@ -190,6 +182,7 @@ class CompositionService:
             total_duration_ms=total_duration_ms,
             final_path=str(final_path.relative_to(self.repository.root)),
             subtitle_path=str(subtitle_path.relative_to(self.repository.root)) if subtitle_path.exists() else None,
+            subtitle_timing=subtitle_timing,
             validation=validation,
         )
 
@@ -227,13 +220,81 @@ class CompositionService:
             if text:
                 srt_lines.append(str(index))
                 srt_lines.append(
-                    f"{self._format_srt_time(start_ms)} --> {self._format_srt_time(end_ms)}"
+                    f"{CompositionService._format_srt_time(start_ms)} --> {CompositionService._format_srt_time(end_ms)}"
                 )
                 srt_lines.append(text)
                 srt_lines.append("")
                 index += 1
 
         output_path.write_text("\n".join(srt_lines), encoding="utf-8")
+
+    @staticmethod
+    def _subtitle_units(
+        timeline_units: list[dict[str, Any]], text_by_unit: dict[object, object],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Lift Voice Unit-local subtitle cues into the final SRT timeline.
+
+        A fallback is regenerated only for older timelines that predate subtitle
+        cues or contain invalid persisted cue boundaries. It never borrows time
+        from a neighboring Voice Unit.
+        """
+        output: list[dict[str, Any]] = []
+        manifest: list[dict[str, Any]] = []
+        offset_ms = 0
+        for unit in timeline_units:
+            duration_ms = int(unit.get("duration_ms") or (
+                int(unit.get("end_ms", 0)) - int(unit.get("start_ms", 0))
+            ))
+            if duration_ms <= 0:
+                raise ValueError("timing.timeline 包含无效 Voice Unit 时长")
+            unit_id = unit.get("unit_id")
+            text = str(text_by_unit.get(unit_id, unit.get("text", "")))
+            local_cues = unit.get("subtitle_cues")
+            source = unit.get("subtitle_timing_source")
+            alignment = unit.get("subtitle_alignment")
+            cues = CompositionService._valid_local_subtitle_cues(local_cues, duration_ms)
+            if cues is None:
+                cues = [
+                    {"text": cue.text, "start_ms": cue.start_ms, "end_ms": cue.end_ms}
+                    for cue in subtitle_fallback_cues(text, duration_ms)
+                ]
+                source = "text_length_fallback"
+                alignment = {"status": "failed", "reason_code": "SUBTITLE_TIMING_UNAVAILABLE"}
+            for cue in cues:
+                output.append({
+                    "text": cue["text"],
+                    "start_ms": offset_ms + cue["start_ms"],
+                    "end_ms": offset_ms + cue["end_ms"],
+                })
+            manifest.append({
+                "unit_id": unit_id,
+                "timing_source": source or "text_length_fallback",
+                "fallback_reason": alignment.get("reason_code") if isinstance(alignment, dict) else "SUBTITLE_TIMING_UNAVAILABLE",
+                "cue_count": len(cues),
+                "start_ms": offset_ms,
+                "end_ms": offset_ms + duration_ms,
+            })
+            offset_ms += duration_ms
+        return output, manifest
+
+    @staticmethod
+    def _valid_local_subtitle_cues(value: object, duration_ms: int) -> list[dict[str, Any]] | None:
+        if not isinstance(value, list) or not value:
+            return None
+        parsed: list[dict[str, Any]] = []
+        cursor = 0
+        for cue in value:
+            if not isinstance(cue, dict) or not isinstance(cue.get("text"), str) or not cue["text"]:
+                return None
+            try:
+                start, end = int(cue["start_ms"]), int(cue["end_ms"])
+            except (KeyError, TypeError, ValueError):
+                return None
+            if start != cursor or end <= start or end > duration_ms:
+                return None
+            parsed.append({"text": cue["text"], "start_ms": start, "end_ms": end})
+            cursor = end
+        return parsed if cursor == duration_ms else None
 
     @staticmethod
     def _format_srt_time(ms: int) -> str:
@@ -253,6 +314,7 @@ class CompositionService:
         total_duration_ms: int,
         final_path: str,
         subtitle_path: str | None,
+        subtitle_timing: list[dict[str, Any]],
         validation: dict[str, Any],
     ) -> dict[str, Any]:
         """Build the final output manifest."""
@@ -275,11 +337,13 @@ class CompositionService:
                 }
                 for vu in voice_units
             ],
+            "subtitle_timing": subtitle_timing,
             "quality": {
                 "clip_count": len(clips),
                 "unit_count": len(voice_units),
                 "total_duration_ms": total_duration_ms,
                 "has_subtitles": subtitle_path is not None,
+                "subtitle_cue_count": sum(item["cue_count"] for item in subtitle_timing),
             },
             "validation": validation,
         }

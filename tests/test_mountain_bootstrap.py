@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 def test_fresh_install_has_real_service_definitions_and_preset_assets(tmp_path: Path):

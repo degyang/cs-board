@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 @pytest.fixture()

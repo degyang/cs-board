@@ -18,10 +18,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 ARCHIVE_FILES = {
-    "webapp/server.py",
-    "webapp/mountain_api.py",
-    "webapp/mountain_stages.py",
-    "webapp/mountain_v1_api.py",
+    "backend/server.py",
+    "backend/mountain_api.py",
+    "backend/mountain_stages.py",
+    "backend/mountain_v1_api.py",
     "tests/test_mountain_api.py",
 }
 
@@ -87,14 +87,14 @@ COMMITS = [
         "tests/test_whiteboard_renderer_adapter.py",
         "tests/test_dynamic_provider_factory.py",
     ]),
-    (6, "feat(backend): update active webapp API routes", [
-        "webapp/error_contract.py",
-        "webapp/mountain_server.py",
-        "webapp/mountain_task_api.py",
-        "webapp/mountain_asset_api.py",
-        "webapp/mountain_capability_api.py",
-        "webapp/mountain_service_api.py",
-        "webapp/mountain_settings_api.py",
+    (6, "feat(backend): update active backend API routes", [
+        "backend/error_contract.py",
+        "backend/mountain_server.py",
+        "backend/mountain_task_api.py",
+        "backend/mountain_asset_api.py",
+        "backend/mountain_capability_api.py",
+        "backend/mountain_service_api.py",
+        "backend/mountain_settings_api.py",
         "tests/test_mountain_server.py",
         "tests/test_mountain_bootstrap.py",
         "tests/test_mountain_contracts.py",
@@ -107,39 +107,39 @@ COMMITS = [
         "tests/test_output_directory_picker_backend_002.py",
         "tests/test_workmates_release_guard.py",
     ]),
-    (7, "feat(backend): update CLI and webapp entry points", [
+    (7, "feat(backend): update CLI and backend entry points", [
         "cli/csboard.py",
         "start-webapp.py",
         "video_renderer/align.mjs",
         "tests/test_cli_csboard.py",
     ]),
     (8, "feat(frontend): asset management, voice page, sidebar/nav, styles", [
-        "web-v2/src/app/router.tsx",
-        "web-v2/src/components/layout/Sidebar.tsx",
-        "web-v2/src/lib/api/assets.ts",
-        "web-v2/src/lib/api/client.ts",
-        "web-v2/src/lib/api/http.ts",
-        "web-v2/src/lib/api/types.ts",
-        "web-v2/src/pages/AssetManagementPage.tsx",
-        "web-v2/src/pages/VoiceManagementPage.tsx",  # NEW
-        "web-v2/src/pages/VoiceAlignmentPage.tsx",
-        "web-v2/src/styles/app.css",
-        "web-v2/src/styles/assets.css",
-        "web-v2/tests/assets-contract.test.tsx",
-        "web-v2/tests/sidebar-layout.test.tsx",
-        "web-v2/tests/preset-browser.test.tsx",
-        "web-v2/tests/http-assets.test.ts",
-        "web-v2/tests/output-directory-picker.test.tsx",
+        "frontend/src/app/router.tsx",
+        "frontend/src/components/layout/Sidebar.tsx",
+        "frontend/src/lib/api/assets.ts",
+        "frontend/src/lib/api/client.ts",
+        "frontend/src/lib/api/http.ts",
+        "frontend/src/lib/api/types.ts",
+        "frontend/src/pages/AssetManagementPage.tsx",
+        "frontend/src/pages/VoiceManagementPage.tsx",  # NEW
+        "frontend/src/pages/VoiceAlignmentPage.tsx",
+        "frontend/src/styles/app.css",
+        "frontend/src/styles/assets.css",
+        "frontend/tests/assets-contract.test.tsx",
+        "frontend/tests/sidebar-layout.test.tsx",
+        "frontend/tests/preset-browser.test.tsx",
+        "frontend/tests/http-assets.test.ts",
+        "frontend/tests/output-directory-picker.test.tsx",
     ]),
     (9, "feat(frontend): model services API key conditional display", [
-        "web-v2/src/pages/ModelServicesPage.tsx",
-        "web-v2/src/pages/ServiceFormPage.tsx",
-        "web-v2/tests/services-contract.test.tsx",
+        "frontend/src/pages/ModelServicesPage.tsx",
+        "frontend/src/pages/ServiceFormPage.tsx",
+        "frontend/tests/services-contract.test.tsx",
     ]),
     (10, "feat(frontend): create-task page updates", [
-        "web-v2/src/pages/CreateTaskPage.tsx",
-        "web-v2/tests/create-task.test.tsx",
-        "web-v2/tests/race-condition.test.tsx",
+        "frontend/src/pages/CreateTaskPage.tsx",
+        "frontend/tests/create-task.test.tsx",
+        "frontend/tests/race-condition.test.tsx",
     ]),
     (11, "docs(mountain): update delivery status, decisions, skills, workmates", [
         "docs/Mountain/04-webui-redesign.md",
@@ -205,7 +205,7 @@ def main():
                 errors.append(f"Commit #{num}: outputs/ file '{f}' must not be committed")
 
             # 3. Track test ownership
-            if f.startswith("tests/") or f.startswith("web-v2/tests/"):
+            if f.startswith("tests/") or f.startswith("frontend/tests/"):
                 test_ownership[f].append(num)
 
             # 4. Check file exists (warn if not)
@@ -257,8 +257,8 @@ def main():
     # Summary by commit
     print("\nPer-commit file count:")
     for num, msg, files in COMMITS:
-        tests = [f for f in files if f.startswith("tests/") or f.startswith("web-v2/tests/")]
-        sources = [f for f in files if not (f.startswith("tests/") or f.startswith("web-v2/tests/"))]
+        tests = [f for f in files if f.startswith("tests/") or f.startswith("frontend/tests/")]
+        sources = [f for f in files if not (f.startswith("tests/") or f.startswith("frontend/tests/"))]
         print(f"  #{num:2d}: {len(sources):2d} source + {len(tests):2d} test = {len(files):2d} files")
 
     return 1 if errors else 0

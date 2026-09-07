@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
-STATE_DIR = ROOT / ".webapp"
+STATE_DIR = ROOT / "outputs" / "logs"
 BACKEND_PORT = 8000
 FRONTEND_PORT = 5175
 BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}/api/v1/health"
@@ -83,7 +83,7 @@ def main() -> int:
     if not npm:
         print("Node.js/npm was not found. Install Node.js 22.13 or newer first.", file=sys.stderr)
         return 1
-    if not (ROOT / "web-v2" / "node_modules").is_dir() or not (ROOT / "video_renderer" / "node_modules").is_dir():
+    if not (ROOT / "frontend" / "node_modules").is_dir() or not (ROOT / "video_renderer" / "node_modules").is_dir():
         print("Frontend or renderer dependencies are missing. Run npm ci in both web and video_renderer.", file=sys.stderr)
         return 1
 
@@ -109,7 +109,7 @@ def main() -> int:
         print(f"Port {FRONTEND_PORT} is occupied by an unavailable frontend. Stop that process, then run the launcher again.", file=sys.stderr)
         return 1
     if not frontend_ready():
-        launch([npm, "run", "dev", "--", "--host", "127.0.0.1"], ROOT / "web-v2", STATE_DIR / "frontend-output.log", STATE_DIR / "frontend-error.log")
+        launch([npm, "run", "dev", "--", "--host", "127.0.0.1"], ROOT / "frontend", STATE_DIR / "frontend-output.log", STATE_DIR / "frontend-error.log")
     else:
         print("Frontend is already running.")
 
@@ -119,7 +119,7 @@ def main() -> int:
             webbrowser.open(FRONTEND_URL)
             return 0
         time.sleep(1)
-    print("Startup failed. See .webapp/backend-error.log and .webapp/frontend-error.log.", file=sys.stderr)
+    print("Startup failed. See outputs/logs/backend-error.log and outputs/logs/frontend-error.log.", file=sys.stderr)
     return 1
 
 

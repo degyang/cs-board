@@ -7,7 +7,7 @@ from starlette.testclient import TestClient
 
 from csboard.adapters.filesystem import FilesystemTaskRepository
 from csboard.domain.errors import DomainError
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 @pytest.fixture()

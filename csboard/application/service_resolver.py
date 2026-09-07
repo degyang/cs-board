@@ -6,6 +6,7 @@ from typing import Any
 from dataclasses import replace
 
 from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
+from csboard.application.service_capabilities import supports_capability
 from csboard.domain.errors import DomainError
 from csboard.domain.service_definition import ServiceDefinition
 
@@ -70,10 +71,15 @@ class ServiceResolver:
         return services[0]
 
     def _configured_services(self, capability: str) -> list[ServiceDefinition]:
-        services = self._registry.list_services(capability=capability, enabled=True)
-        if capability == "speech_synthesis":
-            services += self._registry.list_services(capability="audio_generation", enabled=True)
-            services = [replace(service, capability="speech_synthesis") for service in services]
+        # Read all enabled definitions because config.capabilities is a
+        # secondary declaration, then project a match to the requested
+        # capability.  ProviderFactory must receive that projection so an
+        # audio-primary/text-secondary service creates a text adapter.
+        services = [
+            replace(service, capability=capability)
+            for service in self._registry.list_services(enabled=True)
+            if supports_capability(service, capability)
+        ]
         # 排序：is_default 降序 → priority 升序 → service_id 升序
         services.sort(
             key=lambda s: (

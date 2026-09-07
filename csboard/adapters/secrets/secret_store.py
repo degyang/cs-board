@@ -154,7 +154,7 @@ def create_secret_store(data_dir: Path, encrypted: bool = True) -> tuple[SecretS
     Raises:
         ImportError: encrypted=True 但 cryptography 不可用（fail closed）。
     """
-    secrets_dir = data_dir / ".secrets"
+    secrets_dir = data_dir / "settings" / "secrets"
 
     if encrypted:
         store = FileSecretStore(secrets_dir / "secrets.enc")

@@ -52,8 +52,8 @@ class TestLegacyIsolation(unittest.TestCase):
         project_root = Path(__file__).parents[1]
         source = (project_root / "start-webapp.py").read_text(encoding="utf-8")
         self.assertIn("run_mountain_backend.py", source)
-        self.assertIn('ROOT / "web-v2"', source)
-        self.assertNotIn("webapp.server:app", source)
+        self.assertIn('ROOT / "frontend"', source)
+        self.assertNotIn("backend.server:app", source)
         self.assertNotIn('ROOT / "web"', source)
 
     def test_windows_restart_monitor_uses_native_backend(self):
@@ -61,15 +61,15 @@ class TestLegacyIsolation(unittest.TestCase):
         source = (project_root / "scripts" / "restart_backend_when_idle.ps1").read_text(encoding="utf-8")
         self.assertIn("run_mountain_backend.py", source)
         self.assertIn("/api/v1/health", source)
-        self.assertNotIn("webapp.server:app", source)
+        self.assertNotIn("backend.server:app", source)
 
     def test_transitive_guard_fails_on_injected_legacy_import(self):
         project_root = Path(__file__).parents[1]
         with tempfile.TemporaryDirectory() as raw:
             injected = Path(raw) / "injected.py"
-            injected.write_text("from webapp import server\n", encoding="utf-8")
+            injected.write_text("from backend import server\n", encoding="utf-8")
             findings = reachable_imports(project_root, [injected])
-        self.assertEqual(findings[0]["forbidden"], "webapp.server")
+        self.assertEqual(findings[0]["forbidden"], "backend.server")
 
     def test_clean_process_import_and_requests_never_load_legacy_modules(self):
         project_root = Path(__file__).parents[1]
@@ -77,17 +77,17 @@ class TestLegacyIsolation(unittest.TestCase):
 import json, sys, tempfile
 from pathlib import Path
 from starlette.testclient import TestClient
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 with tempfile.TemporaryDirectory() as raw:
     client = TestClient(create_app(Path(raw)))
     for path in ('/api/v1/health', '/api/v1/tasks', '/api/v1/assets/styles', '/api/v1/services', '/api/v1/settings/runtime'):
         response = client.get(path)
         assert response.status_code == 200, (path, response.status_code, response.text)
-    print(json.dumps({name: (name in sys.modules) for name in ('webapp.server', 'webapp.mountain_api', 'webapp.mountain_stages')}))
+    print(json.dumps({name: (name in sys.modules) for name in ('backend.server', 'backend.mountain_api', 'backend.mountain_stages')}))
 """
         result = subprocess.run([sys.executable, "-c", probe], cwd=project_root, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout.strip()), {"webapp.server": False, "webapp.mountain_api": False, "webapp.mountain_stages": False})
+        self.assertEqual(json.loads(result.stdout.strip()), {"backend.server": False, "backend.mountain_api": False, "backend.mountain_stages": False})
 
 
 if __name__ == "__main__":

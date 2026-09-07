@@ -114,7 +114,7 @@ def resolve_checker_path(checker_arg: str | None) -> Path:
     env_path = os.environ.get("MOUNTAIN_CONTRACT_CHECKER")
     if env_path:
         return Path(env_path)
-    return PROJECT_ROOT / "web-v2" / "scripts" / "check-api-contract.mjs"
+    return PROJECT_ROOT / "frontend" / "scripts" / "check-api-contract.mjs"
 
 
 def _atomic_write_pid_marker(marker_path: Path, pid: int) -> None:

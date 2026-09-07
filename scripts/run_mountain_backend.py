@@ -5,10 +5,10 @@
     python /absolute/path/to/run_mountain_backend.py [--host HOST] [--port PORT] [--data-dir DIR] [--log-level LEVEL]
 
 默认:
-    host=127.0.0.1, port=8000, data-dir=$CSBOARD_DATA_DIR 或 ~/.csboard, log-level=info
+    host=127.0.0.1, port=8000, data-dir=$CSBOARD_DATA_DIR 或项目根目录, log-level=info
 
 可从任意 cwd 启动：脚本自行解析仓库根目录并加入 sys.path。
-仅使用 webapp.mountain_server 组合根，默认加密 SecretStore。
+仅使用 backend.mountain_server 组合根，默认加密 SecretStore。
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def _resolve_repo_root() -> Path:
 
 
 def _ensure_importable(repo_root: Path) -> None:
-    """确保仓库根在 sys.path 中，使 webapp 可导入。"""
+    """确保仓库根在 sys.path 中，使 backend 可导入。"""
     root_str = str(repo_root)
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
@@ -85,7 +85,7 @@ def main() -> None:
     )
     parser.add_argument("--host", default="127.0.0.1", help="绑定地址 (默认 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="端口 (默认 8000)")
-    parser.add_argument("--data-dir", default=None, help="数据目录 (默认 $CSBOARD_DATA_DIR 或 ~/.csboard)")
+    parser.add_argument("--data-dir", default=None, help="数据根目录 (默认 $CSBOARD_DATA_DIR 或项目根目录)")
     parser.add_argument("--log-level", default="info", choices=["debug", "info", "warning", "error", "critical"],
                         help="日志级别 (默认 info)")
     args = parser.parse_args()
@@ -101,6 +101,9 @@ def main() -> None:
     # 2. 设置 data-dir 环境变量（必须在导入 app 之前）
     if args.data_dir:
         os.environ["CSBOARD_DATA_DIR"] = args.data_dir
+    # The launcher is the explicit production boundary for real bounded
+    # readiness probes. Tests calling create_app(tmp_path) remain offline.
+    os.environ.setdefault("CSBOARD_STARTUP_READINESS_PROBE", "1")
 
     # 3. 检查加密依赖（非明文模式）
     if os.environ.get("CSBOARD_ALLOW_PLAINTEXT_SECRETS") != "1":
@@ -108,13 +111,13 @@ def main() -> None:
 
     # 4. 验证 app 可创建（非 None）
     try:
-        from webapp.mountain_server import app  # noqa: F401
+        from backend.mountain_server import app  # noqa: F401
         if app is None:
-            print("错误: webapp.mountain_server:app 为 None", file=sys.stderr)
+            print("错误: backend.mountain_server:app 为 None", file=sys.stderr)
             print("解决: 检查依赖是否完整安装", file=sys.stderr)
             sys.exit(1)
     except Exception:
-        print("错误: 无法导入 webapp.mountain_server", file=sys.stderr)
+        print("错误: 无法导入 backend.mountain_server", file=sys.stderr)
         print("解决: 确认在仓库根目录或已正确安装依赖", file=sys.stderr)
         sys.exit(1)
 

@@ -1,5 +1,7 @@
-# Local secrets and generated jobs
-.webapp/
+# Local product configuration and generated task data
+settings/
+outputs/
+archive/legacy-runtime/
 .env
 .env.*
 !.env.example
@@ -20,13 +22,11 @@ web/dist/
 web/.wrangler/
 web/coverage/
 web/outputs/
-outputs/
-.task-packages/
 test-results/
 web/work/
 web/*.tsbuildinfo
-web-v2/vite.config.ts.timestamp-*.mjs
-web-v2/_rn.tgz
+frontend/vite.config.ts.timestamp-*.mjs
+frontend/_rn.tgz
 
 # Remotion dependencies and downloaded alignment models
 video_renderer/node_modules/

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from starlette.testclient import TestClient
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 from csboard.adapters.filesystem import FilesystemTaskRepository
 
 def test_start_has_not_found_invalid_input_and_waiting_boundaries(tmp_path: Path) -> None:

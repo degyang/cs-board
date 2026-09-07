@@ -4,7 +4,7 @@ from unittest.mock import patch
 from starlette.testclient import TestClient
 
 from csboard.domain.provider_types import TTSResult
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 def test_provider_voice_profiles_are_projected_without_secrets(tmp_path: Path):

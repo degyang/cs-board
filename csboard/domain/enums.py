@@ -45,3 +45,4 @@ class StageStatus(StrEnum):
 class TimingSource(StrEnum):
     WHISPER = "whisper"
     EQUAL_FALLBACK = "equal_fallback"
+    TEXT_LENGTH_FALLBACK = "text_length_fallback"

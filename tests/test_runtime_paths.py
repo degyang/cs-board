@@ -18,11 +18,11 @@ class RuntimePathsTest(unittest.TestCase):
     def test_from_root_resolves_all_subdirs(self) -> None:
         paths = RuntimePaths.from_root(self.root)
         self.assertEqual(paths.root, self.root.resolve())
-        self.assertEqual(paths.state_dir, self.root.resolve() / ".webapp")
-        self.assertEqual(paths.jobs_dir, self.root.resolve() / ".webapp" / "jobs")
-        self.assertEqual(paths.config_path, self.root.resolve() / ".webapp" / "config.json")
-        self.assertEqual(paths.tasks_dir, self.root.resolve() / ".webapp" / "tasks")
-        self.assertEqual(paths.temp_dir, self.root.resolve() / ".webapp" / "tmp")
+        self.assertEqual(paths.state_dir, self.root.resolve() / "settings")
+        self.assertEqual(paths.jobs_dir, self.root.resolve() / "outputs")
+        self.assertEqual(paths.config_path, self.root.resolve() / "settings" / "config.json")
+        self.assertEqual(paths.tasks_dir, self.root.resolve() / "outputs")
+        self.assertEqual(paths.temp_dir, self.root.resolve() / "outputs" / "temp")
 
     def test_from_root_resolves_relative(self) -> None:
         # from_root should resolve to absolute even with a relative path

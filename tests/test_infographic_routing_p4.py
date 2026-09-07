@@ -69,7 +69,7 @@ def test_remotion_only_render_is_indexed_and_failed_run_is_retryable(tmp_path: P
     result = commands._exec_render_visuals(task_id, run_id, _context())
     index = json.loads((commands.repository.run_dir(task_id, run_id) / "artifacts" / "index.json").read_text())
     manifest = FilesystemArtifactStore(commands.repository).get(task_id, run_id, "render.manifest")
-    assert selected == ["FakeRemotion"] and {"render.video", "render.manifest"} <= set(index["artifacts"])
+    assert selected == ["FakeRemotion"] and {"render.video", "render.ffprobe", "render.manifest"} <= set(index["artifacts"])
     assert manifest and manifest["relative_path"] == "render/render-manifest.json"
     assert result["artifacts"] == ["render.video", "render.manifest"]
 
@@ -79,6 +79,27 @@ def test_remotion_only_render_is_indexed_and_failed_run_is_retryable(tmp_path: P
     with pytest.raises(RuntimeError): commands._exec_render_visuals(task_id, run_id, _context())
     run = commands.repository.get_run(task_id, run_id)
     assert run.status is RunStatus.FAILED and run.stages["render-visuals"].status is StageStatus.FAILED
+
+
+def test_remotion_candidate_is_private_until_atomic_artifact_registration(tmp_path: Path) -> None:
+    commands, task_id, run_id = _create(tmp_path); _inputs(commands, task_id, run_id)
+    received: list[Path] = []
+
+    class FakeRemotion:
+        def render(self, request):
+            received.append(request.output_dir)
+            output = request.output_dir / "infographic.mp4"
+            output.write_bytes(b"validated-candidate")
+            return SimpleNamespace(output_path=output, duration_ms=1000, frames=30,
+                                   provider_metadata={"engine": "infographic-remotion", "clips": [], "probe": {"duration": 1}})
+
+    commands.infographic_renderer_factory = FakeRemotion
+    commands._exec_render_visuals(task_id, run_id, _context())
+
+    run_dir = commands.repository.run_dir(task_id, run_id)
+    assert received == [run_dir / ".remotion-private" / "candidate"]
+    assert (run_dir / "artifacts" / "render" / "infographic.mp4").read_bytes() == b"validated-candidate"
+    assert not (run_dir / ".remotion-private" / "candidate" / "infographic.mp4").exists()
 
 
 def test_cross_run_or_escaped_input_is_rejected(tmp_path: Path) -> None:

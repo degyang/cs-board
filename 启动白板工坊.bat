@@ -37,7 +37,7 @@ echo Starting the whiteboard video workshop...
 ".venv\Scripts\python.exe" "%~dp0start-webapp.py"
 if errorlevel 1 (
     echo.
-    echo Startup failed. See .webapp\backend-error.log or .webapp\frontend-error.log for details.
+    echo Startup failed. See outputs\logs\backend-error.log or outputs\logs\frontend-error.log for details.
     pause
     exit /b 1
 )

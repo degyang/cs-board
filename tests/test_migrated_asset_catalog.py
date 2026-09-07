@@ -8,7 +8,7 @@ from csboard.adapters.filesystem.asset_repository import FilesystemAssetReposito
 from csboard.application.migrated_asset_catalog import seed as seed_migrated_assets
 from csboard.application.preset_catalog import seed as seed_presets
 from csboard.domain.errors import DomainError
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 def test_fresh_start_installs_baseline_assets_and_playable_wav(tmp_path):

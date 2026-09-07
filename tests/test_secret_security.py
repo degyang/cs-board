@@ -29,7 +29,7 @@ def test_create_secret_store_encrypted(tmp_path: Path):
         store, is_encrypted = create_secret_store(tmp_path, encrypted=True)
         assert is_encrypted is True
         assert isinstance(store, FileSecretStore)
-        assert (tmp_path / ".secrets" / "master.key").is_file()
+        assert (tmp_path / "settings" / "secrets" / "master.key").is_file()
     except Exception:
         # 如果环境不支持加密，应抛出异常
         pytest.skip("环境不支持 Fernet 加密")
@@ -63,7 +63,7 @@ def test_plaintext_secret_store_operations(tmp_path: Path):
 
 def test_api_does_not_echo_secrets(tmp_path: Path):
     """API 不回显明文 Secret。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)
@@ -100,7 +100,7 @@ def test_api_does_not_echo_secrets(tmp_path: Path):
 
 def test_service_json_no_secrets(tmp_path: Path):
     """service JSON 文件不包含 Secret。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)
@@ -125,7 +125,7 @@ def test_service_json_no_secrets(tmp_path: Path):
 
 def test_diagnostics_no_secrets(tmp_path: Path):
     """diagnostics 不包含 Secret。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)
@@ -169,7 +169,7 @@ def test_config_sanitizes_all_sensitive_key_variants(tmp_path: Path, key_variant
 
 def test_api_config_never_leaks_camelcase_sensitive_keys(tmp_path: Path):
     """API 响应 config 中不得出现 camelCase 敏感字段。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)

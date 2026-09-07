@@ -15,7 +15,7 @@ from csboard.application.commands import MountainCommands
 from csboard.domain.errors import DomainError
 from csboard.domain.execution_plan import CANONICAL_STAGES
 from csboard.domain.work_order import STAGE_SKILLS, StageWorkOrder
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 SCRIPT = "这是用于工作单持久化和安全投影的测试文案，长度足够且不应出现在工作单响应中。"

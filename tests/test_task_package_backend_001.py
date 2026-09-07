@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 from csboard.adapters.filesystem.repository import FilesystemTaskRepository
 from csboard.application.commands import MountainCommands
 from csboard.domain.errors import DomainError
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 def _submission(label: str) -> str:
@@ -77,5 +77,5 @@ def test_package_creation_failure_rolls_back_without_legacy_fallback(tmp_path):
     with pytest.raises(OSError, match="simulated"):
         commands.create_task("broken", summary="b", submission_id=_submission("broken"))
     assert not list((project / "outputs").glob("task-*"))
-    assert not list((state / ".task-packages").glob("*.json"))
+    assert not list((project / "outputs" / "indexes" / "tasks").glob("*.json"))
     assert not list((state / "tasks").glob("*/task.json")) if (state / "tasks").exists() else True

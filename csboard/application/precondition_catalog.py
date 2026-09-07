@@ -24,7 +24,7 @@ def _preview_asset_id(repository: FilesystemAssetRepository, relative_path: str)
 def seed(data_dir: Path) -> dict[str, int]:
     """Persist the safe legacy-inventory catalog without reading legacy runtime state."""
     repository = FilesystemAssetRepository(data_dir)
-    catalog_path = data_dir / "assets" / "preconditions" / "preconditions.json"
+    catalog_path = data_dir / "settings" / "assets" / "preconditions" / "preconditions.json"
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         existing = json.loads(catalog_path.read_text(encoding="utf-8")) if catalog_path.exists() else []

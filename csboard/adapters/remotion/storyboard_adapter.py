@@ -2,7 +2,7 @@
 
 Converts an ``InfographicStoryboard`` (pure domain) into the
 ``InfographicVideoProps`` dict that ``video_renderer/render.mjs`` consumes.
-No Remotion import, no subprocess, no network, no legacy webapp coupling.
+No Remotion import, no subprocess, no network, no legacy backend coupling.
 
 The adapter is a pure function: given the same inputs it always produces the
 same output.  All I/O (reading illustrations, audio) is the caller's job;

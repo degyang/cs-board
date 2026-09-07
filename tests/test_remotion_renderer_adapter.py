@@ -557,9 +557,9 @@ class TestSuccessPath:
 
 
 class TestNoLegacyImports:
-    """The adapter module must not import webapp or webapp.server."""
+    """The adapter module must not import backend or backend.server."""
 
-    def test_no_webapp_imports(self) -> None:
+    def test_no_backend_imports(self) -> None:
         import ast
         from pathlib import Path
 
@@ -569,9 +569,9 @@ class TestNoLegacyImports:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    assert "webapp" not in alias.name, f"Forbidden import: {alias.name}"
+                    assert "backend" not in alias.name, f"Forbidden import: {alias.name}"
             elif isinstance(node, ast.ImportFrom):
-                if node.module and "webapp" in node.module:
+                if node.module and "backend" in node.module:
                     assert False, f"Forbidden import from: {node.module}"
 
 

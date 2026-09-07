@@ -128,7 +128,7 @@ class CheckpointFaultRepository(FilesystemTaskRepository):
 
 def _create_app_with_checkpoint_fault(tmp_path: Path):
     """创建带 checkpoint 故障注入能力的 app。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
     repo = CheckpointFaultRepository(tmp_path)
     app = create_app(tmp_path, repository=repo)
     return app, repo
@@ -139,7 +139,7 @@ def _create_app_with_checkpoint_fault(tmp_path: Path):
 
 def test_nonexistent_task_upload_returns_404(tmp_path: Path):
     """不存在 Task 上传：404，磁盘无该 task 目录。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)
@@ -533,7 +533,7 @@ def test_same_task_lock_serializes(tmp_path: Path):
     注意：upload_inputs 是 async def，Starlette TestClient 在 asyncio portal 线程中执行，
     因此用 contextvars.ContextVar 而非 threading.current_thread().name 来区分逻辑线程。
     """
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     # Context variable for logical thread identification
     logical_thread = contextvars.ContextVar("logical_thread", default="unknown")
@@ -628,7 +628,7 @@ def test_concurrent_ref_preservation(tmp_path: Path):
 
     释放后两者都成功：最终 script 是 B 的，reference 是 A 上传的文件。
     """
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     # Context variable for logical thread identification
     logical_thread = contextvars.ContextVar("logical_thread", default="unknown")
@@ -753,7 +753,7 @@ def test_concurrent_ref_preservation(tmp_path: Path):
 
 def test_different_tasks_can_parallel(tmp_path: Path):
     """不同 Task 可并行，不退化为全局锁。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)
@@ -813,7 +813,7 @@ def test_different_tasks_can_parallel(tmp_path: Path):
 
 def test_upload_limit_injection(tmp_path: Path):
     """注入 max_bytes=8, chunk_size=4，验证 8 字节成功、9 字节失败。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path, max_upload_bytes=8, chunk_size=4)
     client = TestClient(app)
@@ -843,7 +843,7 @@ def test_upload_limit_injection(tmp_path: Path):
 
 def test_chunk_size_injection(tmp_path: Path):
     """注入 chunk_size=4，验证文件大小正确。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path, max_upload_bytes=100, chunk_size=4)
     client = TestClient(app)
@@ -874,7 +874,7 @@ def test_real_http_upload_mnt_d():
         pytest.skip("/mnt/d 不存在")
 
     with tempfile.TemporaryDirectory(dir=mnt_d) as tmp_dir:
-        from webapp.mountain_server import create_app
+        from backend.mountain_server import create_app
 
         data_dir = Path(tmp_dir)
         app = create_app(data_dir)
@@ -930,7 +930,7 @@ def test_internal_error_no_path_leak(tmp_path: Path):
 
 def test_success_cleanup_no_artifacts(tmp_path: Path):
     """成功后所有 staging、backup、tmp、partial 清零。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)
@@ -970,7 +970,7 @@ def test_success_cleanup_no_artifacts(tmp_path: Path):
 
 def test_all_saves_use_transaction(tmp_path: Path):
     """所有保存（有无 reference）都走同一事务。"""
-    from webapp.mountain_server import create_app
+    from backend.mountain_server import create_app
 
     app = create_app(tmp_path)
     client = TestClient(app)

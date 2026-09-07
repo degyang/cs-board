@@ -1,10 +1,12 @@
 ---
 status: active
-updated: 2026-09-05
-mode: recover-evolve
+updated: 2026-09-06
+mode: operate
 ---
 
 # CS Board WebUI → Dynamic Infographic Team Contract
+
+> 2026-09-06 团队重配置：当前编制、模型、权限边界和工作区以 [team-setup.md](team-setup.md) 为准，覆盖下文历史 Team/Workflow 中的角色与 bypass 描述。PM 为当前主会话；前端和后端各用独立 worktree，Codex `gpt-5.6-terra / medium`；独立测试改为 Claude Code `mimo-v2.5-pro / medium`。以下产品标准和历史验收记录保留；不能据其 active 字样认定 Agent 在线。
 
 ## Stage goal
 
@@ -42,7 +44,7 @@ mode: recover-evolve
 
 ## Definition of done for WebUI stage
 
-- 5182 serves the current `web-v2` workspace from exactly one Vite process; 8000 uses the project `.venv` and exactly one backend process.
+- 5182 serves the current `frontend` workspace from exactly one Vite process; 8000 uses the project `.venv` and exactly one backend process.
 - The local-services page visibly provides list/detail preview, add, edit and real probe; Whisper is absent there and remains in toolchain.
 - Frontend focused tests, full frontend tests and build exit 0 without skip.
 - A Codex tester writes an independent PASS / FAIL / BLOCKED receipt.

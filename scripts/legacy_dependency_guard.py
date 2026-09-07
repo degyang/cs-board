@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 FORBIDDEN_MODULES = frozenset(
-    {"webapp.server", "webapp.mountain_api", "webapp.mountain_stages"}
+    {"backend.server", "backend.mountain_api", "backend.mountain_stages"}
 )
 
 
@@ -38,7 +38,7 @@ def reachable_imports(project_root: Path, entrypoints: list[Path]) -> list[dict[
                 modules = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom) and node.module:
                 modules = [
-                    f"{node.module}.{alias.name}" if node.module == "webapp" else node.module
+                    f"{node.module}.{alias.name}" if node.module == "backend" else node.module
                     for alias in node.names
                 ]
             else:
@@ -60,12 +60,12 @@ def active_entrypoints(project_root: Path) -> list[Path]:
     return [
         project_root / "start-webapp.py",
         project_root / "scripts/run_mountain_backend.py",
-        project_root / "webapp/mountain_server.py",
+        project_root / "backend/mountain_server.py",
         project_root / "cli/csboard.py",
-        project_root / "webapp/mountain_task_api.py",
-        project_root / "webapp/mountain_asset_api.py",
-        project_root / "webapp/mountain_service_api.py",
-        project_root / "webapp/mountain_settings_api.py",
+        project_root / "backend/mountain_task_api.py",
+        project_root / "backend/mountain_asset_api.py",
+        project_root / "backend/mountain_service_api.py",
+        project_root / "backend/mountain_settings_api.py",
     ]
 
 

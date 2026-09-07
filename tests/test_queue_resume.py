@@ -13,7 +13,7 @@ from starlette.requests import Request
 
 RELEASE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RELEASE_ROOT))
-SPEC = importlib.util.spec_from_file_location("whiteboard_release_server", RELEASE_ROOT / "webapp" / "server.py")
+SPEC = importlib.util.spec_from_file_location("whiteboard_release_server", RELEASE_ROOT / "backend" / "server.py")
 assert SPEC and SPEC.loader
 SERVER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SERVER)

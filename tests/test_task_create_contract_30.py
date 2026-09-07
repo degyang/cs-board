@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 from csboard.adapters.filesystem.repository import FilesystemTaskRepository
 from csboard.application.commands import MountainCommands
 from csboard.domain.models import Task
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 def _submission(label="same"):
@@ -112,7 +112,7 @@ def test_submission_is_thread_safe_and_creates_one_task(tmp_path):
     threads = [threading.Thread(target=submit) for _ in range(2)]
     [thread.start() for thread in threads]; barrier.wait(); [thread.join() for thread in threads]
     assert len({item["task_id"] for item in responses}) == 1
-    assert len(list((tmp_path / ".task-packages").glob("*.json"))) == len(list((tmp_path / ".submissions").glob("*.json"))) == 1
+    assert len(list((tmp_path / "outputs" / "indexes" / "tasks").glob("*.json"))) == len(list((tmp_path / "outputs" / "indexes" / "submissions").glob("*.json"))) == 1
 
 
 class _SubmissionFaultRepository(FilesystemTaskRepository):
@@ -125,7 +125,7 @@ class _SubmissionFaultRepository(FilesystemTaskRepository):
 def test_submission_failures_leave_no_partial_task_run_or_index(tmp_path, checkpoint):
     repo = _SubmissionFaultRepository(tmp_path, checkpoint)
     with pytest.raises(OSError): MountainCommands(tmp_path, repository=repo).create_task("x", summary="y", submission_id=_submission(checkpoint))
-    assert not list((tmp_path / "tasks").glob("*/task.json")) and not list((tmp_path / ".submissions").glob("*.json"))
+    assert not list((tmp_path / "outputs").glob("task-*/task.json")) and not list((tmp_path / "outputs" / "indexes" / "submissions").glob("*.json"))
 
 
 def test_uploaded_reference_preset_six_tab_round_trip_and_compatibility_mapping(client):

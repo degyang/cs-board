@@ -8,11 +8,13 @@ from csboard.domain.provider_types import AlignmentResult
 __all__ = [
     "AlignmentResult",
     "TextRange",
+    "SubtitleCue",
     "UnitTiming",
     "VisualItem",
     "VisualTiming",
     "VoiceUnit",
     "segment_script",
+    "subtitle_fallback_cues",
     "time_voice_unit",
 ]
 
@@ -48,12 +50,24 @@ class VisualTiming:
 
 
 @dataclass(frozen=True, slots=True)
+class SubtitleCue:
+    """A subtitle interval local to one Voice Unit."""
+
+    text: str
+    start_ms: int
+    end_ms: int
+
+
+@dataclass(frozen=True, slots=True)
 class UnitTiming:
     unit_id: str
     duration_ms: int
     timing_source: TimingSource
     visual_timings: tuple[VisualTiming, ...]
     alignment: dict[str, object]
+    subtitle_cues: tuple[SubtitleCue, ...] = ()
+    subtitle_timing_source: TimingSource = TimingSource.TEXT_LENGTH_FALLBACK
+    subtitle_alignment: dict[str, object] | None = None
 
 
 def segment_script(text: str, target_sentences: int = 2, max_unit_chars: int = 260) -> tuple[VoiceUnit, ...]:
@@ -101,17 +115,66 @@ def time_voice_unit(
 ) -> UnitTiming:
     if duration_ms <= 0:
         raise ValueError("语音时长必须大于 0")
+    subtitle_cues: tuple[SubtitleCue, ...] | None = None
+    subtitle_reason = "ALIGNMENT_UNAVAILABLE"
     if alignment is not None:
         timings = _whisper_timings(unit, duration_ms, alignment, minimum_coverage, minimum_confidence)
+        subtitle_cues = _whisper_subtitle_cues(
+            unit, duration_ms, alignment, minimum_coverage, minimum_confidence,
+        )
+        subtitle_reason = _subtitle_fallback_reason(
+            unit, duration_ms, alignment, minimum_coverage, minimum_confidence,
+        )
         if timings is not None:
+            subtitle_source = TimingSource.WHISPER if subtitle_cues is not None else TimingSource.TEXT_LENGTH_FALLBACK
             return UnitTiming(unit.unit_id, duration_ms, TimingSource.WHISPER, timings, {
                 "status": "succeeded", "engine": alignment.engine,
                 "coverage": alignment.coverage, "confidence": alignment.confidence,
+            }, subtitle_cues or subtitle_fallback_cues(unit.text, duration_ms), subtitle_source, {
+                "status": "succeeded" if subtitle_cues is not None else "failed",
+                "engine": alignment.engine,
+                "coverage": alignment.coverage,
+                "confidence": alignment.confidence,
+                **({"reason_code": subtitle_reason} if subtitle_cues is None else {}),
             })
     reason = alignment.reason_code if alignment and alignment.reason_code else "ALIGNMENT_UNAVAILABLE"
     return UnitTiming(unit.unit_id, duration_ms, TimingSource.EQUAL_FALLBACK, _equal_timings(unit, duration_ms), {
         "status": "failed", "reason_code": reason,
+    }, subtitle_fallback_cues(unit.text, duration_ms), TimingSource.TEXT_LENGTH_FALLBACK, {
+        "status": "failed", "reason_code": subtitle_reason,
     })
+
+
+def subtitle_fallback_cues(text: str, duration_ms: int, max_chars: int = 22) -> tuple[SubtitleCue, ...]:
+    """Split text deterministically and allocate one Voice Unit's actual duration.
+
+    Whitespace is not weighted, but remains in the emitted text so subtitle
+    content is lossless. Integer boundaries make the final cue end exactly at
+    ``duration_ms`` without accumulating rounding error.
+    """
+    if duration_ms <= 0:
+        raise ValueError("语音时长必须大于 0")
+    chunks = _subtitle_chunks(text, max_chars)
+    # A positive-duration SRT cue needs at least one millisecond. Preserve all
+    # text by merging the final chunks if an unusually short voice cannot show
+    # every readable split independently.
+    while len(chunks) > duration_ms:
+        left, right = chunks[-2:]
+        chunks[-2:] = [(left[0] + right[0], left[1], right[2])]
+    if not chunks:
+        return ()
+    weights = [max(1, _visible_length(chunk[0])) for chunk in chunks]
+    total = sum(weights)
+    distributable_ms = duration_ms - len(chunks)
+    cursor = 0
+    cues: list[SubtitleCue] = []
+    for index, (chunk, _start, _end) in enumerate(chunks):
+        end = duration_ms if index == len(chunks) - 1 else (
+            index + 1 + (distributable_ms * sum(weights[:index + 1])) // total
+        )
+        cues.append(SubtitleCue(chunk, cursor, end))
+        cursor = end
+    return tuple(cues)
 
 
 def _sentence_ranges(text: str) -> list[TextRange]:
@@ -166,3 +229,88 @@ def _whisper_timings(unit: VoiceUnit, duration_ms: int, result: AlignmentResult,
 def _equal_timings(unit: VoiceUnit, duration_ms: int) -> tuple[VisualTiming, ...]:
     count = len(unit.visual_items)
     return tuple(VisualTiming(item.visual_id, (index * duration_ms) // count, ((index + 1) * duration_ms) // count) for index, item in enumerate(unit.visual_items))
+
+
+def _whisper_subtitle_cues(
+    unit: VoiceUnit, duration_ms: int, result: AlignmentResult,
+    min_coverage: float, min_confidence: float,
+) -> tuple[SubtitleCue, ...] | None:
+    if result.coverage < min_coverage or result.confidence < min_confidence:
+        return None
+    chunks = _subtitle_chunks(unit.text)
+    if not chunks:
+        return ()
+    starts: list[int] = []
+    for _text, start, end in chunks:
+        value = _cue_start(result, unit.text, start, end)
+        if value is None:
+            return None
+        starts.append(int(value))
+    # A cue includes leading silence, just as a Visual Item does.
+    starts[0] = 0
+    if any(value < 0 or value >= duration_ms for value in starts):
+        return None
+    if any(starts[index] >= starts[index + 1] for index in range(len(starts) - 1)):
+        return None
+    return tuple(
+        SubtitleCue(text, starts[index], starts[index + 1] if index + 1 < len(starts) else duration_ms)
+        for index, (text, _start, _end) in enumerate(chunks)
+    )
+
+
+def _subtitle_fallback_reason(
+    unit: VoiceUnit, duration_ms: int, result: AlignmentResult,
+    min_coverage: float, min_confidence: float,
+) -> str:
+    if result.coverage < min_coverage:
+        return result.reason_code or "ALIGNMENT_LOW_COVERAGE"
+    if result.confidence < min_confidence:
+        return result.reason_code or "ALIGNMENT_LOW_CONFIDENCE"
+    chunks = _subtitle_chunks(unit.text)
+    starts = [
+        _cue_start(result, unit.text, start, end)
+        for _text, start, end in chunks
+    ]
+    if any(value is None for value in starts):
+        return result.reason_code or "SUBTITLE_ALIGNMENT_INCOMPLETE"
+    numeric = [int(value) for value in starts if value is not None]
+    if any(value < 0 or value >= duration_ms for value in numeric):
+        return result.reason_code or "SUBTITLE_ALIGNMENT_OUT_OF_RANGE"
+    return result.reason_code or "SUBTITLE_ALIGNMENT_NON_MONOTONIC"
+
+
+def _subtitle_chunks(text: str, max_chars: int = 22) -> list[tuple[str, int, int]]:
+    """Return lossless, punctuation-aware readable chunks with source ranges."""
+    if not text:
+        return []
+    chunks: list[tuple[str, int, int]] = []
+    start = 0
+    visible = 0
+    punctuation = "。！？!?；;，,"
+    for index, char in enumerate(text):
+        if not char.isspace():
+            visible += 1
+        boundary = char in punctuation or visible >= max_chars
+        if boundary:
+            end = index + 1
+            if text[start:end].strip():
+                chunks.append((text[start:end], start, end))
+            start = end
+            visible = 0
+    if start < len(text):
+        if text[start:].strip():
+            chunks.append((text[start:], start, len(text)))
+        elif chunks:
+            previous = chunks[-1]
+            chunks[-1] = (previous[0] + text[start:], previous[1], len(text))
+    return chunks
+
+
+def _cue_start(result: AlignmentResult, text: str, start: int, end: int) -> int | None:
+    """Use the first spoken character of each cue as its real Whisper boundary."""
+    index = next((index for index in range(start, end) if not text[index].isspace()), None)
+    return result.starts_ms.get(f"char:{index}") if index is not None else None
+
+
+def _visible_length(text: str) -> int:
+    return sum(1 for char in text if not char.isspace())

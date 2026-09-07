@@ -68,6 +68,58 @@ class FilesystemArtifactStore:
             self._write_index(run_dir, index)
         return reference
 
+    def commit_file(
+        self,
+        task_id: str,
+        run_id: str,
+        artifact_key: str,
+        relative_path: str,
+        source: Path,
+        producer_stage: str,
+    ) -> ArtifactRef:
+        """Atomically publish a verified run-private file into the index.
+
+        The source is moved rather than copied, so a renderer candidate cannot
+        remain as a second MP4 after publication.  If index persistence fails,
+        move it back to its private source location and leave the caller to
+        report the stage failure.
+        """
+        validate_relative_path(relative_path)
+        run_dir = self.repository.run_dir(task_id, run_id)
+        self.repository.get_run(task_id, run_id)
+        source = source.resolve()
+        try:
+            source.relative_to(run_dir.resolve())
+        except ValueError as error:
+            raise ValueError("artifact source must remain within its run") from error
+        if not source.is_file() or source.stat().st_size <= 0:
+            raise FileNotFoundError("artifact source is missing or empty")
+        digest = hashlib.sha256()
+        with source.open("rb") as input_file:
+            for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        size = source.stat().st_size
+        target = run_dir / "artifacts" / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        reference = ArtifactRef(
+            artifact_key=artifact_key,
+            relative_path=relative_path,
+            sha256=digest.hexdigest(),
+            size_bytes=size,
+            producer_stage=producer_stage,
+        )
+        with self.repository.task_lock(task_id):
+            os.replace(source, target)
+            try:
+                index = self._read_index(run_dir)
+                index["artifacts"][artifact_key] = reference.to_dict()
+                self._write_index(run_dir, index)
+            except Exception:
+                if target.exists():
+                    os.replace(target, source)
+                raise
+        return reference
+
     def get(self, task_id: str, run_id: str, artifact_key: str) -> dict[str, Any] | None:
         index = self._read_index(self.repository.run_dir(task_id, run_id))
         return index["artifacts"].get(artifact_key)

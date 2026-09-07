@@ -69,6 +69,7 @@ Mountain 的目标覆盖：
 | [23-current-delivery-status.md](23-current-delivery-status.md) | 当前代码/前后端/Skills/验收状态与下一轮次 |
 | [24-codex-six-stage-execution-contract.md](24-codex-six-stage-execution-contract.md) | 六阶段工作单、输入、指令、输出、回存和验收契约 |
 | [28-domain-extraction-and-character-assets-roadmap.md](28-domain-extraction-and-character-assets-roadmap.md) | 后续脱离旧 `webapp/server.py`、自定义人物资产与项目内统一任务包输出规划 |
+| [30-artifact-provenance-and-regeneration.md](30-artifact-provenance-and-regeneration.md) | 关键音频、图片、视频的一一绑定生成 JSON、预览、参数编辑与局部再生成契约 |
 
 历史架构快照、原始PR路线、已完成执行计划和过程报告统一位于 [archive/README.md](archive/README.md)，不参与当前需求解释。
 

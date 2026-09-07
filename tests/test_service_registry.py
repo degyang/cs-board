@@ -18,10 +18,13 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
+import httpx
 import pytest
 
+from csboard.adapters.filesystem import service_registry
 from csboard.adapters.filesystem.service_registry import FilesystemServiceRegistry
 from csboard.adapters.secrets.secret_store import PlaintextSecretStore
 from csboard.domain.errors import DomainError, NotFoundError
@@ -208,6 +211,60 @@ def test_disable_default_service(registry: FilesystemServiceRegistry):
     svc = registry.get_service("svc-1")
     assert svc.enabled is False
     assert svc.is_default is False
+
+
+def test_probe_timeout_is_complete_and_bounded(monkeypatch: pytest.MonkeyPatch):
+    """httpx requires all four values when no default timeout is supplied."""
+    monkeypatch.setattr(service_registry, "_PROBE_HTTP_TIMEOUT", None)
+
+    timeout = service_registry._get_probe_timeout()
+
+    assert timeout.connect == 2.0
+    assert timeout.read == 5.0
+    assert timeout.write == 5.0
+    assert timeout.pool == 2.0
+    assert all(
+        value is not None and math.isfinite(value) and value > 0
+        for value in (timeout.connect, timeout.read, timeout.write, timeout.pool)
+    )
+
+
+def test_tts_probe_with_mock_client_is_not_generic_probe_error(
+    registry: FilesystemServiceRegistry, monkeypatch: pytest.MonkeyPatch
+):
+    """A healthy mocked HTTP response reaches the TTS probe instead of failing at timeout setup."""
+    monkeypatch.setattr(service_registry, "_PROBE_HTTP_TIMEOUT", None)
+
+    class MockClient:
+        def __init__(self, *, timeout: httpx.Timeout) -> None:
+            assert timeout.connect == 2.0
+            assert timeout.read == 5.0
+            assert timeout.write == 5.0
+            assert timeout.pool == 2.0
+
+        def __enter__(self) -> "MockClient":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def get(self, url: str) -> httpx.Response:
+            assert url == "http://probe.invalid/health"
+            return httpx.Response(200)
+
+    monkeypatch.setattr(httpx, "Client", MockClient)
+    registry.create_service(_make_service(
+        "mock-indextts",
+        adapter_type="indextts",
+        required_secrets=[],
+        config={"url": "http://probe.invalid", "mode": "fastapi"},
+    ))
+
+    result = registry.probe_service("mock-indextts", force=True)
+
+    assert result["available"] is True
+    assert result["error_code"] is None
+    assert result["error_code"] != "PROBE_ERROR"
 
 
 # ── MODEL-SERVICE-API-KEY-REWORK-018: API Key 白名单修复 ─────────────

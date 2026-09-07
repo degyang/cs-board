@@ -12,7 +12,7 @@ from csboard.adapters.filesystem.service_registry import FilesystemServiceRegist
 from csboard.adapters.secrets.secret_store import PlaintextSecretStore
 from csboard.application.capabilities import CapabilityService
 from csboard.domain.service_definition import ServiceDefinition
-from webapp.mountain_server import create_app
+from backend.mountain_server import create_app
 
 
 def _client(tmp_path: Path) -> TestClient:

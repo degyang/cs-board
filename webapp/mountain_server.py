@@ -197,7 +197,7 @@ def create_app(
         effective_data_dir,
         repository=asset_repository,
     ))
-    app.include_router(mountain_capability_router(service_registry))
+    app.include_router(mountain_capability_router(service_registry, project_root=project_root))
     app.include_router(mountain_service_router(
         effective_data_dir, registry=service_registry, secret_store=secret_store,
     ))

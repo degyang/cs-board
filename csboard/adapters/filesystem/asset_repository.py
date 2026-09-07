@@ -55,7 +55,7 @@ class FilesystemAssetRepository:
     def __init__(self, data_dir: Path) -> None:
         self._data_dir = data_dir
         self._lock = _repository_lock(data_dir)
-        self._assets_dir = data_dir / "assets"
+        self._assets_dir = data_dir / "settings" / "assets"
         self._styles_dir = self._assets_dir / "styles"
         self._preconditions_dir = self._assets_dir / "preconditions"
         self._blobs_dir = self._assets_dir / "blobs"

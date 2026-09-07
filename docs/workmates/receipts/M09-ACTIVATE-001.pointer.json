@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-09-07T04:58:05Z",
+  "task_id": "task-m09-v2-9de80fa524f54c748fea1a84d89bfa6f",
+  "run_id": "run-m09-v2-retry-dd3aeea12b1447cc84462aec253c7c63",
+  "run_relative_path": "outputs/task-m09-v2-9de80fa524f54c748fea1a84d89bfa6f/runs/run-m09-v2-retry-dd3aeea12b1447cc84462aec253c7c63",
+  "task_sha256": "f02c10de8ca62ae458ec2f754fd5c4969264e515243c0ff85dc03465d32ba044",
+  "run_sha256": "952437ed60d68c6eba23cd9b5c32ed5b6d4b4a7ff89d373de65b1940f04ae91e",
+  "mp4_sha256": "18e95359ac600ebdf746b20702e42af5e0c5b88eea66a5e5b763591ac35d641a",
+  "artifact_index_sha256": "47872bed9097e32271cd3a8ca6bd253e157f3bdc49b9c948b06513a39e60d188",
+  "render_manifest_sha256": "75e30cccc87b8b802710d238e28d56f4430e28a12ca8bcf0d7edbeca66c37f15",
+  "v3_receipt": "docs/workmates/receipts/M09-V3-CORRIDOR-VERIFY-001.md",
+  "v3_receipt_sha256": "1ad260eaa6fe62c096270aa4144ee9513222416c2651cc73fe0ccf047e46dcb9",
+  "service_fingerprint": "41a79c9570f1243eb7baf1f62f70ebb89fec15ef566b928d3689c9b831e705f7",
+  "toolchain": {
+    "renderer_sha256": "07e92a176a5d00ae09dcc95e6faf0592e2ff9df25106b15832a1d13e2445b593",
+    "browser_resolver_sha256": "ef33bd05111b0e9cf87666250fefc81558d0f493cb113e68c83ff598c5adbeec",
+    "lockfile_sha256": "b85a51f84e1b50c7aeb7668c32f315214eeda39764994256a7fb2963a5cf24fa",
+    "node": "v24.20.0",
+    "remotion": "4.0.515",
+    "browser": "Google Chrome for Testing 152.0.7977.75",
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+    "ffprobe": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+  }
+}
