@@ -13,6 +13,8 @@ description: Render video clips for each Visual Item using the whiteboard render
 - `engine=whiteboard` 使用白板 renderer，`engine=infographic-remotion` 使用 Remotion adapter；
 - 每个 clip 的目标时长只取 Timeline，不重复运行 Whisper 或计算 fallback；
 - 校验开场无提前露图、最终帧完整、尺寸/fps 和时长容差；
+- 对含语义分区的白板 annotation，后续区域和 `protectedRegions` 在各自开始前不得泄露；
+- 人工 annotation 只能来自 Work Order 暴露的 revision，不得直接修改 Artifact index；
 - annotation 修改只重绘受影响 Visual；
 - 不执行最终音画合成。
 
@@ -56,3 +58,4 @@ python -m cli.csboard artifact show --task <id> --run <run-id> --key render.mani
 - timeline 缺失 → 先运行 clone-voice
 - renderer 不可用 → `RENDERER_UNAVAILABLE`（可重试）
 - 单个 Visual 渲染失败 → 可独立重试
+- Work Order 未暴露 annotation revision 写入能力 → 明确报告能力缺口，不得绕过 Artifact Store

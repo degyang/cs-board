@@ -283,7 +283,7 @@ flowchart LR
 
 ## 13. 与旧根 Skill 的关系
 
-现有根 `SKILL.md` 后续迁移为明确命名的 `manual-srt-whiteboard`：继续支持 SRT + 人工标注精修，使用新 Artifact Store，并复用 renderer/compositor；它不宣称与自动 pipeline 等价。
+旧根 `SKILL.md` 已迁移为 `skills/manual-srt-whiteboard/`：继续支持 SRT 驱动的人工插画与标注精修，但只消费既有 Task/Run、Stage Work Order 和 Artifact；图片候选沿用 import/validate/accept，渲染与合成复用 `visual-renderer`/`av-compositor`。当前 Work Order 未暴露 annotation revision 写入能力时，该 Skill 必须明确停止并报告能力缺口，不能直接修改 Artifact index。它不属于标准白板的七个自动流水线 Skills，也不宣称与自动 pipeline 等价。
 
 ## 14. Skills 验收
 

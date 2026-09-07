@@ -1,9 +1,23 @@
 ---
 status: active
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # Workmates Board
+
+## 2026-09-08 技能入口迁移
+
+- 用户确认将旧根 `srt-whiteboard-animation` 按 Mountain 设计迁移为
+  `skills/manual-srt-whiteboard/`。新入口只用于现有 Task/Run 的人工插画、语义分区
+  与渲染精修；候选图片必须经过 Work Order import/validate/accept，渲染与合成复用
+  标准能力 Skill，不直接修改 Artifact index。
+- 旧流程中可复用的视觉语言、语义标注、遮罩防泄露和可观察帧检查已下沉为按需参考；
+  `visual-renderer` 同步吸收后续区域/`protectedRegions` 不得提前泄露的通用门禁。
+- 当前 Work Order 尚未提供 annotation revision 写入能力时，人工 Skill 会明确报告能力
+  缺口并停止，不以直接调用旧脚本伪装完整闭环。
+- 8 个项目 Skill 均通过结构校验，Stage Work Order/外部候选契约测试 8/8 PASS。
+  Workmates 代表性证据入口因配置仍引用已退役 frontend worktree 而未生成证据；这是
+  当前协作配置缺口，不影响上述已执行测试，也不记为 Workmates verify PASS。
 
 ## 2026-09-07 当前状态与下一步
 
@@ -17,8 +31,8 @@ updated: 2026-09-07
   WebUI PID `124360` 已正常终止，两个端口均已释放。两个 worker worktree 的
   独有已验收切片已补入 `main@81fbb90` 并推送；本机状态经校验归档后，worktree、
   `workmates/backend`、`workmates/frontend` 分支及 backend `%21` 客户端均已退役。
-- 主集成区只保留未跟踪的本地 `.workmates-evidence/`；没有提交秘密、真实素材或
-  产品运行数据。verification `%20` 继续按 idle grace 保留。
+- 主集成区的本地 `.workmates-evidence/`、`.workmates-runtime/` 与旧运行归档已在后续
+  清理中移至仓库外受限归档；没有提交秘密、真实素材或产品运行数据。
 - 已完成：`M09-ACTIVATE-006` 修正 create-options 中 `available=true` 却仍返回
   “能力未就绪”原因的矛盾投影；主区 69 项测试与独立复验 PASS，真实 8000/5182
   均返回 `available=true` 且省略 `reason`，未创建真实 Task。

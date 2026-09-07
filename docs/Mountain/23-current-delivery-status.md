@@ -119,6 +119,7 @@ Trace: trace-58b8988a0f844e92a60bfebd31e4ece9
 ## 7. Skills现状
 
 - 目录已统一为`skills/visual-anchor-generator/`；
+- 旧根 `srt-whiteboard-animation` 已迁移为独立的 `skills/manual-srt-whiteboard/` 人工精修入口；它不计入标准流水线七个 Skills，也不绕过 Work Order/Artifact Store；
 - 已删除废弃`--script`、`--reference`和`--tts-url`运行参数；
 - 六个能力Skill统一先读取Stage Work Order；
 - illustration Skill按Codex人工候选闭环执行；

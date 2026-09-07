@@ -5,7 +5,7 @@ SRT 解析 + 分镜建议
 把 .srt 字幕解析成结构化字幕条，并按「每幕 25-35 秒口播」的建议把字幕
 分组成场景，给出每个场景的起止时间、总时长（→ sceneDurationMs）和文本。
 
-用途：作为 srt-whiteboard-animation 工作流第 1 步的输入依据——
+用途：作为 manual-srt-whiteboard 人工精修工作流的 SRT 输入分析工具——
 读出叙事事件、规划配图策略、并为每张图片的标注确定 sceneDurationMs。
 
 用法：
