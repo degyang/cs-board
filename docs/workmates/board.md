@@ -14,10 +14,11 @@ updated: 2026-09-07
 - 原计划已恢复并完成：`M09-ACTIVATE-005`、pointer service fingerprint、
   真实 8000/5182 capability/create-options 及浏览器入口均已独立验证并由 PM 接受。
 - 用户要求清除建立在本轮集成状态上的服务后，8000 后端 PID `292980` 与 5182
-  WebUI PID `124360` 已正常终止，两个端口均已释放；产品数据和工作树未删除。
-  固定 backend `%21` 与 verification `%20` 客户端按 30 分钟 idle grace 保留。
-- 主集成区保留大量跨批次 dirty/untracked 状态；本轮没有清理、回滚、提交、
-  merge 或 push。前后端仍使用各自独立 worktree。
+  WebUI PID `124360` 已正常终止，两个端口均已释放。两个 worker worktree 的
+  独有已验收切片已补入 `main@81fbb90` 并推送；本机状态经校验归档后，worktree、
+  `workmates/backend`、`workmates/frontend` 分支及 backend `%21` 客户端均已退役。
+- 主集成区只保留未跟踪的本地 `.workmates-evidence/`；没有提交秘密、真实素材或
+  产品运行数据。verification `%20` 继续按 idle grace 保留。
 - 已完成：`M09-ACTIVATE-006` 修正 create-options 中 `available=true` 却仍返回
   “能力未就绪”原因的矛盾投影；主区 69 项测试与独立复验 PASS，真实 8000/5182
   均返回 `available=true` 且省略 `reason`，未创建真实 Task。
@@ -144,7 +145,7 @@ updated: 2026-09-07
 | --- | --- | --- | --- | --- | --- |
 | supervisor | tmux control shell | active | observes board/service health | 17:00 | never blocks |
 | pm | current session | active | live health, dispatch and integration | 2026-09-07 | consumes independent evidence; no visual acceptance without it |
-| backend | tmux `%21` | idle | M09-RUNTIME-007 accepted | 2026-09-07 | fixed client; retain idle for 30 minutes |
+| backend | former tmux `%21` | retired | accepted slices integrated; worktree archived and removed | 2026-09-08 | no live client |
 | verification | tmux `%20` | idle | M09-RUNTIME-007-V PASS; receipt consumed | 2026-09-07 | fixed client; retain idle for 30 minutes |
 | integration-backend | tmux `%26`, former PID `292980` | stopped | 8000 released at user request | 2026-09-07 | no live service |
 | integration-frontend | former PID `124360` | stopped | 5182 released at user request | 2026-09-07 | no live service |
