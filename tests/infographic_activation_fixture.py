@@ -18,7 +18,12 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def create_root(tmp_path: Path, *, service_fingerprint: str = "fixture-service") -> Path:
+def create_root(
+    tmp_path: Path,
+    *,
+    service_fingerprint: str = "fixture-service",
+    verified_at: datetime | None = None,
+) -> Path:
     """Build one complete, isolated accepted-run shape under ``tmp_path``.
 
     The only media operation is a controlled local ffmpeg color source.  The
@@ -77,11 +82,16 @@ def create_root(tmp_path: Path, *, service_fingerprint: str = "fixture-service")
         "render.ffprobe": _entry("render.ffprobe", "render/ffprobe.json", probe_path),
         "render.manifest": _entry("render.manifest", "render/render-manifest.json", manifest_path),
     }}))
-    write_pointer(root, service_fingerprint=service_fingerprint)
+    write_pointer(root, service_fingerprint=service_fingerprint, verified_at=verified_at)
     return root
 
 
-def write_pointer(root: Path, *, service_fingerprint: str) -> None:
+def write_pointer(
+    root: Path,
+    *,
+    service_fingerprint: str,
+    verified_at: datetime | None = None,
+) -> None:
     run = root / "outputs" / TASK / "runs" / RUN
     artifacts = run / "artifacts"
     paths = {
@@ -90,7 +100,8 @@ def write_pointer(root: Path, *, service_fingerprint: str) -> None:
         "manifest": artifacts / "render/render-manifest.json",
     }
     pointer = {
-        "schema_version": 1, "verified_at": datetime.now(UTC).isoformat(),
+        "schema_version": 1,
+        "verified_at": (verified_at or datetime.now(UTC)).isoformat(),
         "task_id": TASK, "run_id": RUN, "run_relative_path": f"outputs/{TASK}/runs/{RUN}",
         "task_sha256": sha(paths["task"]), "run_sha256": sha(paths["run"]),
         "mp4_sha256": sha(paths["mp4"]), "artifact_index_sha256": sha(paths["index"]),

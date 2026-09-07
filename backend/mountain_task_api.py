@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
-from csboard.adapters.filesystem import FilesystemTaskRepository
+from csboard.adapters.filesystem import FilesystemGenerationRecordStore, FilesystemTaskRepository
 from csboard.adapters.observability import JsonlTelemetry
 from csboard.application.commands import MountainCommands
 from csboard.application.context import CommandContext
@@ -53,6 +53,7 @@ def mountain_task_router(
             telemetry=telemetry,
         )
     router = APIRouter(prefix="/api/v1", tags=["mountain-tasks"])
+    generation_records = FilesystemGenerationRecordStore(repository)
 
     def _context() -> CommandContext:
         """创建 Web 入口的 CommandContext。"""
@@ -484,6 +485,48 @@ def mountain_task_router(
             return domain_error_response(error, status_code=404)
 
     # ── Artifacts ──────────────────────────────────────────────────────
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/assets")
+    async def list_current_assets(task_id: str, run_id: str):
+        """Discover current task-local generated assets without client path logic."""
+        try:
+            records = generation_records.list_current(task_id, run_id)
+            return {
+                "items": [
+                    {
+                        "asset_id": record["asset_id"],
+                        "asset_kind": record["asset_kind"],
+                        "generation_record": record,
+                        "media_url": f"/api/v1/tasks/{task_id}/runs/{run_id}/assets/{record['asset_id']}/media",
+                    }
+                    for record in records
+                ]
+            }
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/assets/{asset_id}/generation")
+    async def get_asset_generation(task_id: str, run_id: str, asset_id: str):
+        """Return the persisted current generation document without rebuilding it."""
+        try:
+            return generation_records.read_current(task_id, run_id, asset_id)
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
+
+    @router.get("/tasks/{task_id}/runs/{run_id}/assets/{asset_id}/media")
+    async def get_asset_media(task_id: str, run_id: str, asset_id: str):
+        """Serve only the current, schema-validated task-local media file."""
+        try:
+            path, mime_type = generation_records.media_path(task_id, run_id, asset_id)
+            return FileResponse(path, media_type=mime_type, filename=path.name)
+        except NotFoundError as error:
+            return domain_error_response(error, status_code=404)
+        except DomainError as error:
+            return domain_error_response(error, status_code=400)
 
     @router.get("/tasks/{task_id}/runs/{run_id}/artifacts")
     def list_artifacts(task_id: str, run_id: str):

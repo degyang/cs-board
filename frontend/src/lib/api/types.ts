@@ -241,10 +241,28 @@ export interface Artifact {
   size_bytes: number
   producer_stage: string
   status: string
+  /** Optional future provenance fields; no client request is added in the UI slice. */
+  asset_id?: string
+  asset_kind?: 'image' | 'audio' | 'video'
+  media_url?: string | null
+  generation_record?: Record<string, unknown> | null
 }
 
 export interface ArtifactListResponse {
   items: Artifact[]
+}
+
+/** Current, backend-validated asset discovery result. */
+export interface CurrentAsset {
+  asset_id: string
+  asset_kind: 'image' | 'audio' | 'video'
+  generation_record: Record<string, unknown>
+  /** Backend-owned relative media route, never an outputs/ filesystem path. */
+  media_url: string
+}
+
+export interface CurrentAssetListResponse {
+  items: CurrentAsset[]
 }
 
 // ── Events & Logs ───────────────────────────────────────────────────────

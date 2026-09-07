@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csboard.local/schemas/artifacts/generation-record.schema.json",
+  "title": "CS Board asset generation record",
+  "description": "Non-secret provenance for one current asset revision or one historical generation attempt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "record_scope",
+    "asset_id",
+    "asset_kind",
+    "identity",
+    "revision",
+    "parent_revision",
+    "is_current",
+    "attempt",
+    "input_assets",
+    "prompts",
+    "provider",
+    "generation_parameters",
+    "random_seed",
+    "output",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "record_type": {"const": "asset-generation-record"},
+    "record_scope": {"enum": ["current", "attempt"]},
+    "asset_id": {"$ref": "#/$defs/id"},
+    "asset_kind": {"enum": ["image", "audio", "video"]},
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "run_id", "stage_id", "unit_id", "visual_id"],
+      "properties": {
+        "task_id": {"$ref": "#/$defs/id"},
+        "run_id": {"$ref": "#/$defs/id"},
+        "stage_id": {"$ref": "#/$defs/id"},
+        "unit_id": {"anyOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+        "visual_id": {"anyOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}
+      }
+    },
+    "revision": {"type": "integer", "minimum": 1},
+    "parent_revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+    "is_current": {"type": "boolean"},
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "status", "started_at", "finished_at", "error_summary"],
+      "properties": {
+        "attempt_id": {"$ref": "#/$defs/id"},
+        "status": {"enum": ["pending", "running", "succeeded", "failed", "cancelled"]},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "finished_at": {"anyOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+        "error_summary": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "message"],
+              "properties": {
+                "code": {"type": "string", "minLength": 1},
+                "message": {"type": "string", "minLength": 1, "maxLength": 1000}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "input_assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asset_id", "revision", "sha256", "relative_path"],
+        "properties": {
+          "asset_id": {"$ref": "#/$defs/id"},
+          "revision": {"type": "integer", "minimum": 1},
+          "sha256": {"$ref": "#/$defs/sha256"},
+          "relative_path": {"$ref": "#/$defs/output_path"}
+        }
+      }
+    },
+    "prompts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positive", "negative"],
+      "properties": {
+        "positive": {"type": "string"},
+        "negative": {"anyOf": [{"type": "string"}, {"type": "null"}]}
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service_id", "provider_id", "model_id", "public_parameters"],
+      "properties": {
+        "service_id": {"$ref": "#/$defs/id"},
+        "provider_id": {"$ref": "#/$defs/id"},
+        "model_id": {"type": "string", "minLength": 1},
+        "public_parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "quality": {"type": "string", "minLength": 1},
+            "style": {"type": "string", "minLength": 1},
+            "voice": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "generation_parameters": {"$ref": "#/$defs/generation_parameters"},
+    "random_seed": {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
+    "output": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relative_path", "mime_type", "sha256", "size_bytes"],
+          "properties": {
+            "relative_path": {"$ref": "#/$defs/output_path"},
+            "mime_type": {"type": "string", "pattern": "^[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+$"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "size_bytes": {"type": "integer", "minimum": 1}
+          }
+        }
+      ]
+    },
+    "created_at": {"$ref": "#/$defs/timestamp"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"record_scope": {"const": "current"}}},
+      "then": {
+        "properties": {
+          "is_current": {"const": true},
+          "attempt": {"properties": {"status": {"const": "succeeded"}}},
+          "output": {"type": "object"}
+        }
+      },
+      "else": {
+        "properties": {"is_current": {"const": false}}
+      }
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "sha256": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{8,}$"},
+    "output_path": {
+      "type": "string",
+      "pattern": "^outputs/[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9_][A-Za-z0-9._-]*)+$"
+    },
+    "generation_parameters": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "width", "height", "format"],
+          "properties": {
+            "kind": {"const": "image"},
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1},
+            "format": {"type": "string", "minLength": 1},
+            "steps": {"type": "integer", "minimum": 1},
+            "guidance_scale": {"type": "number", "minimum": 0}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "sample_rate", "channels", "format"],
+          "properties": {
+            "kind": {"const": "audio"},
+            "sample_rate": {"type": "integer", "minimum": 1},
+            "channels": {"type": "integer", "minimum": 1},
+            "format": {"type": "string", "minLength": 1},
+            "speed": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "width", "height", "fps", "container", "codec"],
+          "properties": {
+            "kind": {"const": "video"},
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1},
+            "fps": {"type": "number", "exclusiveMinimum": 0},
+            "container": {"type": "string", "minLength": 1},
+            "codec": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
+  }
+}

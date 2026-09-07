@@ -4,12 +4,13 @@ import { useAsync } from '../lib/api/queries'
 import {
   fetchTask, fetchCapabilities, fetchUnits, fetchEvents, fetchLogs,
   cancelRun,
-  uploadInputs, fetchInputs, getFinalUrl,
+  uploadInputs, fetchInputs, getFinalUrl, fetchCurrentAssets, getAssetMediaUrl,
 } from '../lib/api/client'
 import { formatTime, shortId, formatBytes, formatMs } from '../lib/formatting'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { CopyButton } from '../components/ui/CopyButton'
 import { BackButton } from '../components/ui/BackButton'
+import { ArtifactPreviewCard } from '../components/tasks/ArtifactPreviewCard'
 import { STAGE_KEYS, STAGE_NAMES } from '../lib/api/types'
 import type { StageKey } from '../lib/api/types'
 
@@ -112,6 +113,15 @@ export function TaskWorkbenchPage() {
   }, [taskId, runId])
   const { data: unitsData } = useAsync(unitsLoader, [taskId, runId], pollMs)
   const units = unitsData?.items ?? []
+
+  // Current assets have their own accepted discovery API. Do not derive them
+  // from legacy artifact paths; a missing stable run identity is an explicit UI state.
+  const currentAssetsLoader = useCallback(() => {
+    if (!taskId || !runId) return Promise.resolve({ items: [] })
+    return fetchCurrentAssets(taskId, runId)
+  }, [taskId, runId])
+  const { data: currentAssetsData, loading: currentAssetsLoading, error: currentAssetsError } = useAsync(currentAssetsLoader, [taskId, runId])
+  const currentAssets = taskId && runId ? currentAssetsData?.items ?? [] : []
 
   // ── Events (cursor pagination) ───────────────────────────────────────
   const [eventCursor, setEventCursor] = useState(0)
@@ -565,6 +575,16 @@ export function TaskWorkbenchPage() {
               </tbody>
             </table>
           )}
+          <section className="artifact-current-assets" aria-label="当前资产预览">
+            <h3 className="artifact-current-assets-title">当前资产预览</h3>
+            {!runId ? <p className="hint">当前任务没有稳定的 Run identity，暂不能读取当前资产。</p>
+              : currentAssetsLoading ? <p className="hint" role="status">正在读取当前资产…</p>
+                : currentAssetsError ? <div className="error-card" role="alert">当前资产暂不可读取。请检查任务或运行状态后重试。</div>
+                  : currentAssets.length === 0 ? <p className="hint">当前 Run 暂无可预览资产。</p>
+                    : <div className="artifact-preview-grid">{currentAssets.map((asset) => (
+                      <ArtifactPreviewCard key={asset.asset_id} assetId={asset.asset_id} label={asset.asset_id} kind={asset.asset_kind} mediaUrl={getAssetMediaUrl(asset.media_url)} generationRecord={asset.generation_record} />
+                    ))}</div>}
+          </section>
         </div>
       </div>
 

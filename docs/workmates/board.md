@@ -13,7 +13,8 @@ updated: 2026-09-07
   最终视频中的字幕视觉观感仍由用户验收。
 - 原计划已恢复并完成：`M09-ACTIVATE-005`、pointer service fingerprint、
   真实 8000/5182 capability/create-options 及浏览器入口均已独立验证并由 PM 接受。
-- 当前集成服务健康：8000 PID `292980`、5182 PID `124360`；服务目录 10 条，
+- 用户要求清除建立在本轮集成状态上的服务后，8000 后端 PID `292980` 与 5182
+  WebUI PID `124360` 已正常终止，两个端口均已释放；产品数据和工作树未删除。
   固定 backend `%21` 与 verification `%20` 客户端按 30 分钟 idle grace 保留。
 - 主集成区保留大量跨批次 dirty/untracked 状态；本轮没有清理、回滚、提交、
   merge 或 push。前后端仍使用各自独立 worktree。
@@ -145,8 +146,8 @@ updated: 2026-09-07
 | pm | current session | active | live health, dispatch and integration | 2026-09-07 | consumes independent evidence; no visual acceptance without it |
 | backend | tmux `%21` | idle | M09-RUNTIME-007 accepted | 2026-09-07 | fixed client; retain idle for 30 minutes |
 | verification | tmux `%20` | idle | M09-RUNTIME-007-V PASS; receipt consumed | 2026-09-07 | fixed client; retain idle for 30 minutes |
-| integration-backend | tmux `%26`, PID `292980` | runtime | healthy 8000; automatic startup readiness 4/4 | 2026-09-07 | service pane owns exact PID only |
-| integration-frontend | PID `124360` | runtime | healthy 5182 | 2026-09-07 | preserve live preview; exact PID only |
+| integration-backend | tmux `%26`, former PID `292980` | stopped | 8000 released at user request | 2026-09-07 | no live service |
+| integration-frontend | former PID `124360` | stopped | 5182 released at user request | 2026-09-07 | no live service |
 
 ## Decisions needed
 

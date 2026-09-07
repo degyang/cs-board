@@ -16,7 +16,7 @@ NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
 
 
 def _root(tmp_path: Path) -> Path:
-    return create_root(tmp_path)
+    return create_root(tmp_path, verified_at=NOW)
 
 
 def _runner(command, **_kwargs):

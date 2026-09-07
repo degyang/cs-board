@@ -13,6 +13,7 @@ import type {
   RunDetail,
   UnitListResponse,
   ArtifactListResponse,
+  CurrentAssetListResponse,
   EventsResponse,
   LogsResponse,
   PipelineRunResponse,
@@ -232,6 +233,17 @@ export function fetchUnits(taskId: string, runId: string): Promise<UnitListRespo
 
 export function fetchArtifacts(taskId: string, runId: string): Promise<ArtifactListResponse> {
   return get<ArtifactListResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/artifacts`)
+}
+
+/** Read the backend-validated current assets for one stable task/run identity. */
+export function fetchCurrentAssets(taskId: string, runId: string): Promise<CurrentAssetListResponse> {
+  return get<CurrentAssetListResponse>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}/assets`)
+}
+
+/** Resolve an API-owned relative media URL without deriving a filesystem path. */
+export function getAssetMediaUrl(mediaUrl: string): string {
+  if (BASE.startsWith('http://') || BASE.startsWith('https://')) return new URL(mediaUrl, BASE).toString()
+  return mediaUrl
 }
 
 // ── Events ──────────────────────────────────────────────────────────────

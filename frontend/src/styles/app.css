@@ -157,6 +157,33 @@ a { color: var(--nt-primary-700); }
 .task-meta .m { display: inline-flex; align-items: center; gap: 5px; }
 .task-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
+/* ---------------- 任务资产预览与生成配置（API 未接线骨架） ---------------- */
+.artifact-preview-grid { display: grid; gap: 10px; margin-top: 12px; }
+.artifact-current-assets { margin-top: 14px; border-top: 1px solid var(--nt-border); padding-top: 12px; }
+.artifact-current-assets-title { margin: 0; font-size: 13px; }
+.artifact-preview-card { position: relative; border: 1px solid var(--nt-border); border-radius: var(--nt-radius-md); background: var(--nt-surface); padding: 10px; }
+.artifact-preview-open { display: grid; gap: 3px; width: 100%; border: 0; padding: 4px 72px 4px 2px; background: transparent; color: var(--nt-text); cursor: pointer; text-align: left; }
+.artifact-preview-open:focus-visible { outline: 2px solid var(--nt-accent-400); outline-offset: 3px; border-radius: var(--nt-radius-sm); }
+.artifact-preview-kind { color: var(--nt-text-muted); font-size: 11px; }
+.artifact-preview-open > span:last-child { color: var(--nt-text-secondary); font-size: 12px; }
+.artifact-config-trigger { position: absolute; top: 10px; right: 10px; opacity: 0; pointer-events: none; }
+.artifact-preview-card:hover .artifact-config-trigger, .artifact-preview-card:focus-within .artifact-config-trigger { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .artifact-config-trigger { opacity: 1; pointer-events: auto; } }
+.artifact-preview-modal { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / .45); }
+.artifact-preview-modal-body, .artifact-config-drawer { max-width: min(720px, 100%); max-height: calc(100vh - 40px); overflow: auto; border-radius: var(--nt-radius-lg); background: var(--nt-surface); box-shadow: var(--nt-shadow-lg); }
+.artifact-preview-modal-body { width: 100%; padding: 18px; }
+.artifact-preview-modal-title, .artifact-config-drawer-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.artifact-preview-image, .artifact-preview-video { display: block; width: 100%; max-height: 70vh; object-fit: contain; }
+.artifact-preview-audio { width: 100%; }
+.artifact-preview-unavailable { color: var(--nt-text-muted); }
+.artifact-config-drawer { position: fixed; z-index: 21; top: 0; right: 0; width: min(500px, 100vw); height: 100vh; padding: 20px; border-radius: 0; }
+.artifact-config-drawer h3, .artifact-config-drawer p { margin-top: 0; }
+.artifact-config-drawer-head p { color: var(--nt-text-muted); font-size: 12px; }
+.artifact-config-fields { display: grid; gap: 10px; margin: 16px 0; }
+.artifact-config-fields label { color: var(--nt-text-secondary); font-size: 12px; font-weight: 600; }
+.artifact-config-fields .input { margin-top: 4px; }
+.artifact-config-json { max-height: 280px; overflow: auto; padding: 12px; background: var(--nt-bg-sunken); border: 1px solid var(--nt-border); border-radius: var(--nt-radius-md); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+
 /* ---------------- 模型服务卡片 (.mp-*) ---------------- */
 .mp-card {
   background: var(--nt-surface); border: 1px solid var(--nt-border);
